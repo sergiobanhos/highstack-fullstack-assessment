@@ -10,6 +10,9 @@ Use `$sdd-*` skills for the corresponding SDD stages. Keep feature status in `.s
 
 ## Operator Boundaries
 
+- Organize operator business capabilities as modules under `operator/src/modules/<module>`. Each module owns its domain, ports, use cases, controllers, adapters, and composition function.
+- Keep `operator/src/server.ts` as the application composition root. Modules may depend on another module only through an explicitly exported contract; do not reach into its private folders.
+- Add only the `game` module in the current feature. Future auth and financial specs add `auth` and `financial` as peer modules; do not create empty module scaffolds.
 - Keep controllers thin: validate transport input, call a use case, and map its result to the transport response.
 - Put application workflows in use cases. Keep provider-specific HTTP, WebSocket, authentication, and event-shape details inside a game adapter.
 - Define a small game-provider port for capabilities the operator uses. Start with Crashsim; do not build a dynamic plugin registry before a second provider exists.

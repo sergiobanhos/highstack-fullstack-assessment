@@ -40,14 +40,14 @@ Build a server-side operator that safely proxies player actions to game engines,
 
 | ID | Feature | Module | Description |
 |----|---------|--------|-------------|
-| F01 | Crashsim adapter, live state relay, and debug client | Operator / game integration | Establish controller/use-case/adapter boundaries, consume and resynchronize the engine stream, fan out state, and inspect it in a minimal React debug client. |
+| F01 | Crashsim adapter, live state relay, and debug client | Operator / game | Establish the `game` module boundaries, consume and resynchronize the engine stream, fan out state, and inspect it in a minimal React debug client. |
 
 ### Later phases
 
 | ID | Feature | Module | Description |
 |----|---------|--------|-------------|
-| F02 | Player identity and game sessions | Operator / auth | Authenticate players and create provider sessions. |
-| F03 | Wallet ledger and webhooks | Operator / wallet | Process signed, retried debit and credit webhooks idempotently and safely under concurrency. |
+| F02 | Player identity and game sessions | Operator / auth | Add the `auth` module for player identity and provider sessions. |
+| F03 | Wallet ledger and webhooks | Operator / financial | Add the `financial` module for signed, retried debit and credit webhooks processed idempotently and safely under concurrency. |
 | F04 | Player game client | Client | Display current state, balance, bet form, and cashout flow after identity and wallet flows exist. |
 
 ## Open Questions
@@ -58,4 +58,6 @@ Build a server-side operator that safely proxies player actions to game engines,
 
 - [x] Approve `.ai/sdd/specs/001-crashsim-realtime-proxy/requirements.md`
 - [x] Approve the design for `.ai/sdd/specs/001-crashsim-realtime-proxy/`
-- [ ] Create implementation tasks for feature F01
+- [x] Draft implementation tasks for feature F01
+- [x] Review and approve tasks for feature F01
+- [ ] Implement feature F01 in task order (`T1` → `T2` → `T3` → `T4` → `T5`)

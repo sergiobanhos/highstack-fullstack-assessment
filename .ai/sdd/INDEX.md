@@ -26,14 +26,15 @@
 
 | ID | Feature | Status | Requirements | Design | Tasks | Review |
 |----|---------|--------|--------------|--------|-------|--------|
-| 001 | Crashsim real-time operator proxy | design:approved | `.ai/sdd/specs/001-crashsim-realtime-proxy/requirements.md` (approved) | `.ai/sdd/specs/001-crashsim-realtime-proxy/design.md` (approved) | — | — |
+| 001 | Crashsim real-time operator proxy | tasks:approved | `.ai/sdd/specs/001-crashsim-realtime-proxy/requirements.md` (approved) | `.ai/sdd/specs/001-crashsim-realtime-proxy/design.md` (approved) | `.ai/sdd/specs/001-crashsim-realtime-proxy/tasks.md` (approved) | — |
 
 ## Handoff
 
-- `.ai/sdd/handoff/sdd-brief.md`: generated after approved tasks or completed review
+- `.ai/sdd/handoff/sdd-brief.md`: available (spec 001, ready for implementation)
 
 ## Next Actions
 
 - [x] Approve requirements and outage behavior in spec 001
 - [x] Approve design for spec 001
-- [ ] Create implementation tasks for spec 001
+- [x] Review and approve tasks for spec 001
+- [ ] Implement spec 001 in task order (`T1` → `T2` → `T3` → `T4` → `T5`)

@@ -8,8 +8,11 @@
 
 ## Architecture Patterns
 
+- Organize business code as modules under `operator/src/modules/<module>`; each module owns its domain, ports, use cases, controllers, adapters, and module composition.
+- Keep `operator/src/server.ts` as the composition root. Cross-module dependencies use explicitly exported contracts; module internals stay private.
+- The initial real-time feature implements `modules/game`; future auth and wallet work belong in sibling `modules/auth` and `modules/financial` added by their specs.
 - Keep transport controllers thin and move workflows to use cases.
-- Keep provider-specific APIs and event translation in `adapters/games/<provider>/` behind application ports.
+- Keep provider-specific APIs and event translation in `modules/game/adapters/<provider>/` behind the game module's provider port.
 - Shared use cases and client contracts must not branch on provider names when a provider adapter can own the difference.
 - Maintain one upstream engine stream connection per operator process, not one per browser.
 

@@ -5,7 +5,7 @@
 
 ## 1. Summary
 
-Structure the operator around thin transport controllers, application use cases, and a provider adapter behind a small game port. One Crashsim stream client feeds operator-owned round state and an in-process event hub. Browser clients connect only to the operator and receive a snapshot followed by live events. A minimal React debug client displays connection health, the current snapshot, and a bounded log of received events; it has no betting controls or styling scope.
+Structure the operator as a modular monolith. This feature implements the `game` module, which owns its domain, provider port, use cases, controllers, and Crashsim/realtime adapters. The application composition root wires that module into the operator server. Future specs can add sibling `auth` and `financial` modules with the same boundaries. One Crashsim stream client feeds operator-owned round state and an in-process event hub. Browser clients connect only to the operator and receive a snapshot followed by live events. A minimal React debug client displays connection health, the current snapshot, and a bounded log of received events; it has no betting controls or styling scope.
 
 ## 2. Requirements Mapping
 
@@ -32,6 +32,8 @@ Use React 19 and TypeScript with Vite for the debug client, as agreed by the use
 
 Use Valibot to validate provider event payloads at the adapter boundary. This feature does not need persistent operator data, so Drizzle is deferred to wallet persistence; keep the existing PostgreSQL compose service available for those later features.
 
+Organize business code by module under `operator/src/modules/`. The `game` module owns all game-stream behavior in this feature. Keep `server.ts` and shared runtime configuration at the application root; the root composes modules but does not own their workflows. A module may use another module only through an explicitly exported contract. Do not create empty `auth` or `financial` scaffolds before their specs.
+
 The provider port should expose only capabilities required by the current feature, such as `getCurrentRound()` and `subscribeToRoundEvents()`. Add session, bet, and cashout capabilities when their features are specified. Do not create a generic plugin loader or provider registry for a single implementation.
 
 ## 4. Component / Module Structure
@@ -40,27 +42,30 @@ The provider port should expose only capabilities required by the current featur
 operator/
   src/
     server.ts
-    domain/
-      game-event.ts
-      round-state.ts
-    ports/
-      game-provider.port.ts
-    usecases/
-      start-game-stream.usecase.ts
-      get-current-round.usecase.ts
-      subscribe-to-game-events.usecase.ts
-    controllers/
-      game-events.controller.ts       # downstream SSE
-      game-api.resolver.ts            # GraphQL operations as added
-    adapters/
-      games/
-        crashsim/
-          crashsim-game.adapter.ts
-          crashsim-http.client.ts
-          crashsim-stream.client.ts
-          crashsim-event.mapper.ts
-      realtime/
-        in-memory-event-hub.ts
+    config.ts
+    modules/
+      game/
+        game.module.ts
+        domain/
+          game-event.ts
+          round-state.ts
+        ports/
+          game-provider.port.ts
+        usecases/
+          start-game-stream.usecase.ts
+          get-current-round.usecase.ts
+          subscribe-to-game-events.usecase.ts
+        controllers/
+          game-events.controller.ts   # downstream SSE
+        adapters/
+          crashsim/
+            crashsim-game.adapter.ts
+            crashsim-http.client.ts
+            crashsim-stream.client.ts
+            crashsim-event.mapper.ts
+          realtime/
+            in-memory-event-hub.ts
+      # Later specs add auth/ and financial/ as peer modules.
 client/
   Dockerfile
   package.json
@@ -71,7 +76,7 @@ client/
     operator-events.client.ts
 ```
 
-Dependency direction: `controllers -> usecases -> ports`; `adapters` implement ports and are wired at startup. Controllers do not call Crashsim directly or own round-transition rules.
+Within `game`, dependency direction is `controllers -> usecases -> ports`; adapters implement ports and are wired by `game.module.ts`. The root `server.ts` calls module composition functions. Modules do not reach into another module's private folders. Controllers do not call Crashsim directly or own round-transition rules.
 
 ## 5. Data Model / State
 
@@ -96,6 +101,8 @@ Do not persist stream ticks or claim durable event history. Wallet and bet state
 
 - `GET /game/events` over SSE for one-way game updates and connection state. The debug client consumes this endpoint and prints event type, sequence, round ID, and relevant snapshot fields.
 - On every new SSE connection, send an operator snapshot first, then live normalized events. Resubscription gets a new current snapshot; do not depend on historical SSE replay.
+- The controller must call a synchronous `subscribeWithSnapshot()` operation before its first `await`. That operation registers the subscriber and captures the current snapshot plus its `seq` as one event-loop operation. The controller writes that snapshot first, then drains queued events with a greater `seq` in order before forwarding live events; it discards queued events at or below the snapshot sequence.
+- Unsubscribe the client when its HTTP connection closes so disconnected clients do not remain in the fan-out hub.
 - Serve the initial Vite client locally and proxy its `/game/events` request to the operator; do not enable public access without player authentication.
 - Authenticate the stream with the operator's player session before public exposure.
 - Keep the initial debug client development-only; it is not a public player surface and exposes no bet/cashout controls.
@@ -154,6 +161,7 @@ sequenceDiagram
 | Operator restarts | Reconnect and fetch current snapshot; prior event history is unavailable. |
 | Multiple operator replicas | Not supported by the in-memory hub in this feature; add cross-instance pub/sub in a later scale spec. |
 | Debug client reloads during an outage | Reconnect to the operator; display the latest operator state and connection status, without claiming missed event history. |
+| An engine event arrives as a downstream client subscribes | Register the client and capture the snapshot synchronously; send the snapshot first, then any queued event newer than its `seq`. |
 
 ## 11. Observability / Operations
 
@@ -192,6 +200,20 @@ No database migration is required. Replace the current smoke container entrypoin
 - **Why:** The assessment specifies React 19 and TypeScript, and the browser page makes the end-to-end integration observable. React's web renderer targets a browser DOM; QuickJS is an embeddable JavaScript runtime and is not needed here.
 - **Trade-off:** Adds a small client package and local Compose service; the page remains diagnostic rather than a gameplay UI.
 - **Alternatives considered:** Rely only on operator console output; use QuickJS as the client runtime.
+
+### TD-005: Atomic downstream snapshot subscription
+
+- **Decision:** Register each SSE subscriber and capture the current snapshot sequence synchronously through `subscribeWithSnapshot()`, then emit the snapshot before queued events with a greater sequence.
+- **Why:** Reading the snapshot before subscribing can lose an event that arrives between those operations.
+- **Trade-off:** The event hub must hold pending messages for each new subscriber until its initial snapshot is written.
+- **Alternatives considered:** Snapshot-then-subscribe with a possible race; client-side recovery without a new authoritative snapshot.
+
+### TD-006: Module-oriented operator architecture
+
+- **Decision:** Organize operator business capabilities as sibling modules under `operator/src/modules/`; implement only `game` in this feature and add `auth` and `financial` through later specs.
+- **Why:** Game streaming, player identity, and financial ledger behavior have distinct responsibilities and failure cases; module boundaries keep their rules cohesive as the operator grows.
+- **Trade-off:** Module composition and explicit contracts add a small amount of structure before multiple modules exist.
+- **Alternatives considered:** A single global set of controllers/use cases/adapters; creating empty auth and financial modules now.
 
 ## 14. Risks
 
