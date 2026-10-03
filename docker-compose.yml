@@ -9,16 +9,36 @@ services:
       OPERATOR_KEY: dev-operator-key
       WEBHOOK_SECRET: dev-webhook-secret
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      DROP_WS_EVERY: ${DROP_WS_EVERY:-0}
+      REORDER: ${REORDER:-0}
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
   operator:
     build: ./operator
+    ports:
+      # Loopback-only: the debug/operator surface is not public until player auth exists.
+      - "127.0.0.1:3000:3000"
     environment:
+      PORT: "3000"
+      HOST: "0.0.0.0"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      ENGINE_HTTP_URL: http://engine:4000
       ENGINE_STREAM_URL: ws://engine:4000/stream
       ENGINE_OPERATOR_KEY: dev-operator-key
     depends_on:
       - engine
+
+  # Local-only diagnostic page for the Crashsim operator stream. No player
+  # auth exists yet, so the host binding stays on loopback.
+  client:
+    build: ./client
+    ports:
+      - "127.0.0.1:5173:5173"
+    environment:
+      OPERATOR_URL: http://operator:3000
+    depends_on:
+      - operator
 
   postgres:
     image: postgres:16

@@ -1,56 +1,47 @@
 # SDD Handoff Brief: Crashsim real-time operator proxy
 
-> Status: Aprovado
-> Readiness: Pronto para implementação
+> Status: Approved — implementação concluída
+> Readiness: Pronto para revisão
 > Updated: 2026-10-03
 
 ## Metadata
 
 - **Spec ID:** `001-crashsim-realtime-proxy`
 - **Spec Path:** `.ai/sdd/specs/001-crashsim-realtime-proxy/`
-- **Current `.status`:** `tasks:approved`
-- **Source Inputs:** `.ai/sdd/PLAN.md`; upstream strategy handoff ausente
+- **Current `.status`:** `implementation:done`
 - **Requirements:** `.ai/sdd/specs/001-crashsim-realtime-proxy/requirements.md`
 - **Design:** `.ai/sdd/specs/001-crashsim-realtime-proxy/design.md`
 - **Tasks:** `.ai/sdd/specs/001-crashsim-realtime-proxy/tasks.md`
-- **Status:** `.ai/sdd/specs/001-crashsim-realtime-proxy/.status`
-- **Decisions:** `.ai/sdd/specs/001-crashsim-realtime-proxy/decisions.md`
+- **Source Inputs:** `.ai/sdd/PLAN.md`; upstream strategy handoff ausente
 
 ## Resumo
 
-- **Público:** desenvolvedores e clientes locais de diagnóstico do operador.
-- **Problema:** encaminhar o estado realtime do Crashsim aos clientes sem expor credenciais nem abrir uma conexão com a engine por cliente.
-- **Resultado esperado:** o operador mantém uma stream upstream, sincroniza o estado por snapshot e publica snapshot mais eventos ordenados por SSE.
-- **Escopo:** serviço Bun/TypeScript com Fastify; módulo `game`; adaptador Crashsim; fan-out SSE; cliente diagnóstico local React 19/Vite; execução pelo Docker Compose root.
-- **Fora de escopo:** autenticação de jogadores, apostas, cashout, liquidação financeira e UI completa do jogo.
-
-## Requisitos
-
-- **User stories:** `US-001` a `US-004`
-- **Must Have:** `FR-001` a `FR-008`
-- **NFRs relevantes:** `NFR-001` a `NFR-004`
-- **Critérios críticos:** estado monotônico por `seq`; ignorar `tick` atrasado após crash; sincronizar via `GET /rounds/current`; não alegar replay de histórico; manter a chave da engine no servidor; congelar o último estado e exibir reconexão até sincronizar.
+- **Problema:** encaminhar o estado realtime do Crashsim aos clientes sem expor credenciais ou abrir uma conexão com a engine por cliente.
+- **Resultado esperado:** o operador mantém uma stream upstream, sincroniza o estado via snapshot e publica snapshot mais eventos ordenados por SSE.
+- **Escopo:** Bun/TypeScript com Fastify; um módulo `game` direto e específico do Crashsim; clientes HTTP/WebSocket, serviço de stream, reducer, hub SSE e cliente diagnóstico local React 19/Vite no Docker Compose root.
+- **Fora de escopo:** segundo jogo/engine ou abstrações para suportá-los, autenticação de jogadores, apostas, cashout, liquidação financeira e UI completa.
+- **Invariantes:** estado monotônico por `seq`; ignorar `tick` atrasado após crash; ressincronizar por `GET /rounds/current`; não alegar replay; manter credencial da engine no servidor; congelar último estado durante reconexão.
 
 ## Design
 
-- **Abordagem:** monólito modular. Esta entrega implementa `modules/game`; `auth` e `financial` serão módulos irmãos em specs futuras.
-- **Componentes:** composition root em `operator/src/server.ts`; adaptador Crashsim e hub realtime dentro do módulo `game`; controller SSE downstream; cliente React diagnóstico local.
-- **Estado:** snapshot e fan-out em memória, sem persistência de ticks ou histórico durável nesta entrega.
-- **Integrações:** WebSocket upstream da engine; `GET /rounds/current`; `GET /game/events` em SSE; proxy Vite para o operador.
-- **Decisões técnicas:** `TD-001` a `TD-006`, incluindo porta de provider, SSE, snapshot sem replay, cliente mínimo, inscrição atômica snapshot/stream e limites modulares.
-- **Riscos / limites:** hub em memória suporta uma instância do operador; eventos perdidos não podem ser reproduzidos pelo engine; a tela diagnóstica deve continuar local até existir autenticação.
+- `game.module.ts` instancia e conecta as peças concretas do fluxo Crashsim.
+- `crashsim-http.client.ts` busca o snapshot; `crashsim-stream.client.ts` mantém uma única WebSocket upstream.
+- `game-stream.service.ts` orquestra conexão, sincronização, reconexão, redução e publicação.
+- `round-state.ts` implementa tipos internos e reducer puro; `game-event-hub.ts` faz fan-out e captura snapshot/inscrição atomicamente.
+- `game-events.controller.ts` é um controller SSE fino em `GET /game/events`.
+- O cliente React local mostra status, snapshot e eventos recebidos.
+- Não há porta genérica, `GameTypeModule`, catálogo, registry, plugin ou pastas por jogo. Um segundo jogo exige uma decisão arquitetural futura baseada nas necessidades reais.
 
-## Plano de implementação
+## Implementação concluída
 
-- **Ordem recomendada:** `T1` → `T2` → `T3` → `T4` → `T5`.
-- **T1:** inicializar o serviço Bun/Fastify, configuração, Docker e Compose.
-- **T2:** contratos provider-neutral, reducer monotônico e hub com inscrição atômica.
-- **T3:** adaptador Crashsim, snapshot/resync e reconexão com backoff.
-- **T4:** endpoint SSE com snapshot inicial, fila sem corrida e limpeza de inscrições.
-- **T5:** cliente React de diagnóstico, proxy Vite, Docker Compose e instruções locais.
-- **Arquivos principais:** `operator/`, `client/`, `docker-compose.yml`, `.ai/steering/tech-stack.md` e instruções locais em `README.md`.
+- T1 bootstrap Bun/Fastify, configuração, Docker e Compose concluído.
+- T2 reducer e hub consolidados em `modules/game/`; scaffolding genérico de game types removido.
+- T3 integração direta Crashsim, snapshot, reconexão, ressincronização e proteção contra eventos fora de ordem concluídos.
+- T4 rota `GET /game/events` em SSE e limpeza independente de assinantes concluídas.
+- T5 cliente React diagnóstico, Compose e instruções locais concluídos.
+- README inclui diagrama da comunicação entre browser, operador e engine.
 
-## Verificação
+## Verificação planejada
 
 ```text
 cd operator && bun run typecheck
@@ -61,12 +52,10 @@ cd client && bun run build
 docker compose config
 ```
 
-Verificações manuais incluem disponibilidade da engine durante startup, resync após `DROP_WS_EVERY=8`, ordenação com `REORDER=1`, snapshot antes dos eventos SSE e ausência da chave da engine no browser e nos logs.
+Verificações executadas: os comandos acima passaram. Também foi validado o fluxo SSE através do proxy Vite em execução, o cliente no browser, assinantes independentes com limpeza, e o cenário `DROP_WS_EVERY=8 REORDER=1` com estados `reconnecting → synchronizing → connected` e snapshot ressincronizado. Os testes cobrem tick tardio após crash, sequência duplicada/antiga e ausência de credenciais nos logs/payloads.
 
 ## Prontidão
 
-- **Pronto para implementação:** sim
-- **Pronto para QA:** não; depende da implementação
-- **Pronto para release:** não; depende da implementação e revisão
-- **Bloqueios:** nenhum requisito crítico em aberto; implementação ainda não iniciada.
-- **Próxima ação:** executar as tasks aprovadas em ordem.
+- **Pronto para implementação:** sim; implementação concluída.
+- **Pronto para QA/release:** pendente de revisão.
+- **Próxima ação:** revisar as alterações e então decidir sobre o commit.

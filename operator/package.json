@@ -1,0 +1,21 @@
+{
+  "name": "@highstack/operator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Server-side operator that proxies the Crashsim game engine",
+  "scripts": {
+    "dev": "bun run --watch src/server.ts",
+    "start": "bun run src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "fastify": "^5.12.5",
+    "valibot": "^1.5.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.19",
+    "typescript": "^5.9.2"
+  }
+}

@@ -26,15 +26,17 @@
 
 | ID | Feature | Status | Requirements | Design | Tasks | Review |
 |----|---------|--------|--------------|--------|-------|--------|
-| 001 | Crashsim real-time operator proxy | tasks:approved | `.ai/sdd/specs/001-crashsim-realtime-proxy/requirements.md` (approved) | `.ai/sdd/specs/001-crashsim-realtime-proxy/design.md` (approved) | `.ai/sdd/specs/001-crashsim-realtime-proxy/tasks.md` (approved) | — |
+| 001 | Crashsim real-time operator proxy | implementation:done | `.ai/sdd/specs/001-crashsim-realtime-proxy/requirements.md` (approved: single Crashsim scope) | `.ai/sdd/specs/001-crashsim-realtime-proxy/design.md` (approved: direct Crashsim integration) | `.ai/sdd/specs/001-crashsim-realtime-proxy/tasks.md` (approved; implementation complete) | pending |
 
 ## Handoff
 
-- `.ai/sdd/handoff/sdd-brief.md`: available (spec 001, ready for implementation)
+- `.ai/sdd/handoff/sdd-brief.md`: available (spec 001, implementation complete; ready for review)
 
 ## Next Actions
 
-- [x] Approve requirements and outage behavior in spec 001
-- [x] Approve design for spec 001
-- [x] Review and approve tasks for spec 001
-- [ ] Implement spec 001 in task order (`T1` → `T2` → `T3` → `T4` → `T5`)
+- [x] Approve narrowed requirements and outage behavior in spec 001
+- [x] Approve initial design for spec 001
+- [x] Approve initial tasks for spec 001
+- [x] Approve the simplified Crashsim-only design and tasks
+- [x] Implement feature 001: align T2, then continue T3–T5
+- [ ] Review implementation and decide whether to commit

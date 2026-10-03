@@ -1,0 +1,26 @@
+{
+  "name": "@highstack/debug-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local-only React diagnostic client for the Crashsim operator stream",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 5173",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.19",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.7.0",
+    "typescript": "^5.9.2",
+    "vite": "^6.3.5"
+  }
+}

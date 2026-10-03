@@ -25,8 +25,11 @@
 | Action | Command |
 |--------|---------|
 | Compose configuration check | `docker compose config` |
-| Start engine and operator smoke client | `docker compose up --build operator` |
-| Follow smoke client events | `docker compose logs -f operator` |
+| Start engine, operator, and debug client | `docker compose up --build` |
+| Follow operator events | `docker compose logs -f operator` |
+| Fault run (forced drops + reorder) | `DROP_WS_EVERY=8 REORDER=1 docker compose up --build` |
+| Operator checks | `cd operator && bun run typecheck && bun test` |
+| Debug client checks | `cd client && bun run typecheck && bun test && bun run build` |
 
 ## Open Questions
 

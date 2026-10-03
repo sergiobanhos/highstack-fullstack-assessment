@@ -8,13 +8,13 @@
 
 ## Architecture Patterns
 
-- Organize business code as modules under `operator/src/modules/<module>`; each module owns its domain, ports, use cases, controllers, adapters, and module composition.
+- Organize business capabilities as modules under `operator/src/modules/<module>`. In the initial feature, `game` supports Crashsim only and contains the engine clients, stream coordination, round reducer, event hub, and SSE controller.
 - Keep `operator/src/server.ts` as the composition root. Cross-module dependencies use explicitly exported contracts; module internals stay private.
-- The initial real-time feature implements `modules/game`; future auth and wallet work belong in sibling `modules/auth` and `modules/financial` added by their specs.
-- Keep transport controllers thin and move workflows to use cases.
-- Keep provider-specific APIs and event translation in `modules/game/adapters/<provider>/` behind the game module's provider port.
-- Shared use cases and client contracts must not branch on provider names when a provider adapter can own the difference.
-- Maintain one upstream engine stream connection per operator process, not one per browser.
+- Keep `game.module.ts` as direct wiring for the Crashsim stream service and SSE route. Do not create generic game/provider ports, type folders, catalogs, registries, plugins, or use-case layers for hypothetical games.
+- Keep transport controllers thin. The game stream service owns the concrete Crashsim connection, synchronization, reconnect, and event publication workflow.
+- Keep Crashsim HTTP/WebSocket details and validation at the concrete client boundary. Keep internal event/state types specific to the current Crashsim flow.
+- Maintain one upstream Crashsim stream per operator process, not one per browser.
+- Future auth and financial work belong in sibling top-level modules `modules/auth` and `modules/financial`, added by their own specs. Supporting a second game requires an explicit future design based on its actual needs.
 
 ## Testing Rules
 

@@ -10,12 +10,12 @@ Use `$sdd-*` skills for the corresponding SDD stages. Keep feature status in `.s
 
 ## Operator Boundaries
 
-- Organize operator business capabilities as modules under `operator/src/modules/<module>`. Each module owns its domain, ports, use cases, controllers, adapters, and composition function.
+- Organize operator business capabilities as modules under `operator/src/modules/<module>`. The initial `game` module supports Crashsim only and should stay direct: concrete Crashsim clients, stream coordination, round state, event fan-out, and SSE controller.
 - Keep `operator/src/server.ts` as the application composition root. Modules may depend on another module only through an explicitly exported contract; do not reach into its private folders.
-- Add only the `game` module in the current feature. Future auth and financial specs add `auth` and `financial` as peer modules; do not create empty module scaffolds.
-- Keep controllers thin: validate transport input, call a use case, and map its result to the transport response.
-- Put application workflows in use cases. Keep provider-specific HTTP, WebSocket, authentication, and event-shape details inside a game adapter.
-- Define a small game-provider port for capabilities the operator uses. Start with Crashsim; do not build a dynamic plugin registry before a second provider exists.
+- Add only the `game` top-level module in the current feature. Do not create generic game/provider ports, type registries, catalogs, plugin contracts, or folders for hypothetical games. Future auth and financial specs add `auth` and `financial` as peer modules; do not create empty module scaffolds. Supporting another game later requires an explicit design based on its real protocol and needs.
+- Keep controllers thin: validate transport input, call the game stream service, and map its result to the transport response.
+- Keep the Crashsim SSE controller thin. The game stream service may own the small connection, snapshot synchronization, reconnect, reduction, and publish workflow; avoid extra use-case layers unless a concrete need appears.
+- Keep Crashsim HTTP, WebSocket, authentication, and event-shape details in the concrete Crashsim clients. Do not add a generic provider adapter or port.
 - The browser talks to the operator. The engine operator key and webhook secret stay server-side and must never appear in browser payloads or logs.
 - Use Bun and TypeScript for the operator unless the user changes that choice. Preserve the project direction toward Fastify, PostgreSQL, Drizzle, Valibot, and React from the assessment and README.
 

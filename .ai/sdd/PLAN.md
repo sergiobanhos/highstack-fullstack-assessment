@@ -40,7 +40,7 @@ Build a server-side operator that safely proxies player actions to game engines,
 
 | ID | Feature | Module | Description |
 |----|---------|--------|-------------|
-| F01 | Crashsim adapter, live state relay, and debug client | Operator / game | Establish the `game` module boundaries, consume and resynchronize the engine stream, fan out state, and inspect it in a minimal React debug client. |
+| F01 | Crashsim live state relay and debug client | Operator / game | Keep one direct Crashsim integration in a small `game` module, resynchronize the engine stream, fan out state over SSE, and inspect it in a minimal React debug client. |
 
 ### Later phases
 
@@ -56,8 +56,9 @@ Build a server-side operator that safely proxies player actions to game engines,
 
 ## Next Actions
 
-- [x] Approve `.ai/sdd/specs/001-crashsim-realtime-proxy/requirements.md`
-- [x] Approve the design for `.ai/sdd/specs/001-crashsim-realtime-proxy/`
+- [x] Approve narrowed requirements for `.ai/sdd/specs/001-crashsim-realtime-proxy/`
+- [x] Approve the initial design for `.ai/sdd/specs/001-crashsim-realtime-proxy/`
 - [x] Draft implementation tasks for feature F01
 - [x] Review and approve tasks for feature F01
-- [ ] Implement feature F01 in task order (`T1` → `T2` → `T3` → `T4` → `T5`)
+- [x] Approve the simplified Crashsim-only design and task plan
+- [x] Implement feature F01, aligning existing code with the direct Crashsim structure
