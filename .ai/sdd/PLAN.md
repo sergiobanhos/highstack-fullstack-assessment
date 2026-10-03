@@ -56,4 +56,6 @@ Build a server-side operator that safely proxies player actions to game engines,
 
 ## Next Actions
 
-- [ ] Create the initial requirements and design artifacts for feature F01
+- [x] Approve `.ai/sdd/specs/001-crashsim-realtime-proxy/requirements.md`
+- [x] Approve the design for `.ai/sdd/specs/001-crashsim-realtime-proxy/`
+- [ ] Create implementation tasks for feature F01

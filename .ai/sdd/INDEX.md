@@ -19,13 +19,14 @@
 
 | Field | Value | Notes |
 |-------|-------|-------|
-| Next Feature ID | 001 | Recompute from filesystem before creating a new spec |
+| Next Feature ID | 002 | Recompute from filesystem before creating a new spec |
 | Numbering Issues | none | duplicate prefix / invalid status / non-canonical directory |
 
 ## Specs
 
 | ID | Feature | Status | Requirements | Design | Tasks | Review |
 |----|---------|--------|--------------|--------|-------|--------|
+| 001 | Crashsim real-time operator proxy | design:approved | `.ai/sdd/specs/001-crashsim-realtime-proxy/requirements.md` (approved) | `.ai/sdd/specs/001-crashsim-realtime-proxy/design.md` (approved) | — | — |
 
 ## Handoff
 
@@ -33,4 +34,6 @@
 
 ## Next Actions
 
-- [ ] Create or capture the first feature using the SDD workflow
+- [x] Approve requirements and outage behavior in spec 001
+- [x] Approve design for spec 001
+- [ ] Create implementation tasks for spec 001
