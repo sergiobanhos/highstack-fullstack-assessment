@@ -16,14 +16,14 @@ Pipeline: `IDEA → PLAN → REQUIREMENTS → DESIGN → TASKS → IMPLEMENTATIO
 
 | Etapa | Comando |
 |-------|---------|
-| Ideação | `/sdd-idea` |
-| Planejamento | `/sdd-plan` |
-| Requisitos | `/sdd-prd` |
-| Design | `/sdd-spec` |
-| Tasks | `/sdd-tasks` |
-| Implementação | Execução manual ou `/sdd-exec` |
-| Review | `/sdd-review` |
+| Ideação | `$sdd-idea` |
+| Planejamento | `$sdd-plan` |
+| Requisitos | `$sdd-prd` |
+| Design | `$sdd-spec` |
+| Tasks | `$sdd-tasks` |
+| Implementação | Execução manual ou `$sdd-exec` |
+| Review | `$sdd-review` |
 
 ## Handoff
 
-Após `tasks:approved`, rodar `/sdd-ai-integration-phase` para gerar sdd-brief.md.
+Após `tasks:approved`, `$sdd-tasks` registra o handoff de implementação em `.ai/sdd/handoff/sdd-brief.md`.

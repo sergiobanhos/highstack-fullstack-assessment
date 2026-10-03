@@ -6,7 +6,7 @@
 
 ## Plan
 
-- `.ai/sdd/PLAN.md`: missing
+- `.ai/sdd/PLAN.md`: available (draft)
 
 ## Ideas
 
@@ -33,6 +33,4 @@
 
 ## Next Actions
 
-- [ ] Capture first idea with `/sdd-idea`
-- [ ] Or create a plan with `/sdd-plan`
-- [ ] Or create requirements for a known feature with `/sdd-prd`
+- [ ] Create or capture the first feature using the SDD workflow
