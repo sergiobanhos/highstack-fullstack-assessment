@@ -189,20 +189,20 @@
 
 ### Trabalho
 
-- [ ] Adicionar `PAYOUT_MOCK_ENABLED` à configuração, default `false`, aceito como `true` somente com `APP_ENV=local`; configurar explicitamente a variável somente no serviço `operator` do Compose local.
-- [ ] Registrar as rotas `POST /payouts`, `GET /payouts/:payoutId` e `GET /payouts` somente quando o mock estiver habilitado; não alterar o composition root além da passagem de configuração já prevista no design.
-- [ ] Validar UUID de `Idempotency-Key`, body estrito com `amount` em centavos, ID, cursor e limite usando Valibot; rejeitar `playerId` enviado pelo cliente.
-- [ ] Derivar proprietário de `auth.requireUser`, devolver DTO e códigos de erro definidos no design, aplicar `Cache-Control: no-store` e responder `simulated: true`.
-- [ ] Manter resposta `404` uniforme para payout ausente/alheio, `402` para saldo insuficiente, `409` para conflito de idempotência e `503` quando persistência não confirmar a solicitação.
-- [ ] Cobrir no controller e no fluxo composto autenticação, isolamento, configuração desligada, criação/replay, consulta individual, histórico e transição para `done`.
+- [x] Adicionar `PAYOUT_MOCK_ENABLED` à configuração, default `false`, aceito como `true` somente com `APP_ENV=local`; configurar explicitamente a variável somente no serviço `operator` do Compose local.
+- [x] Registrar as rotas `POST /payouts`, `GET /payouts/:payoutId` e `GET /payouts` somente quando o mock estiver habilitado; não alterar o composition root além da passagem de configuração já prevista no design.
+- [x] Validar UUID de `Idempotency-Key`, body estrito com `amount` em centavos, ID, cursor e limite usando Valibot; rejeitar `playerId` enviado pelo cliente.
+- [x] Derivar proprietário de `auth.requireUser`, devolver DTO e códigos de erro definidos no design, aplicar `Cache-Control: no-store` e responder `simulated: true`.
+- [x] Manter resposta `404` uniforme para payout ausente/alheio, `402` para saldo insuficiente, `409` para conflito de idempotência e `503` quando persistência não confirmar a solicitação.
+- [x] Cobrir no controller e no fluxo composto autenticação, isolamento, configuração desligada, criação/replay, consulta individual, histórico e transição para `done`.
 
 ### Critérios de aceitação
 
-- [ ] Sem flag, nenhuma rota de payout é registrada; `PAYOUT_MOCK_ENABLED=true` fora de `APP_ENV=local` impede configuração válida/startup.
-- [ ] As três rotas exigem autenticação e usam exclusivamente o ID da sessão validada; payloads e queries com campos desconhecidos são recusados sem mutação.
-- [ ] A API segue os códigos, DTOs, limites e comportamento de replay definidos na seção 6 do design; respostas não revelam payouts de terceiros.
-- [ ] O fluxo composto executa top-up local, solicitação, confirmação de saldo/ledger, consulta `processing`, conclusão simulada, consulta `done` e histórico sem duplicata.
-- [ ] Nenhuma rota chama provedor de pagamentos; todo resultado da simulação sinaliza `simulated: true`.
+- [x] Sem flag, nenhuma rota de payout é registrada; `PAYOUT_MOCK_ENABLED=true` fora de `APP_ENV=local` impede configuração válida/startup.
+- [x] As três rotas exigem autenticação e usam exclusivamente o ID da sessão validada; payloads e queries com campos desconhecidos são recusados sem mutação.
+- [x] A API segue os códigos, DTOs, limites e comportamento de replay definidos na seção 6 do design; respostas não revelam payouts de terceiros.
+- [x] O fluxo composto executa top-up local, solicitação, confirmação de saldo/ledger, consulta `processing`, conclusão simulada, consulta `done` e histórico sem duplicata.
+- [x] Nenhuma rota chama provedor de pagamentos; todo resultado da simulação sinaliza `simulated: true`.
 
 ### Arquivos
 
@@ -216,9 +216,9 @@
 
 ### Verificação
 
-- [ ] `cd operator && bun run typecheck` passa.
-- [ ] Com PostgreSQL dedicado configurado e migrado para a última migration, `cd operator && bun test src/config.test.ts src/modules/financial/financial.controller.test.ts src/server.financial.integration.test.ts` passa.
-- [ ] `docker compose config` confirma a flag no serviço local; configuração com flag ligada fora de `APP_ENV=local` falha sem expor valores sensíveis.
+- [x] `cd operator && bun run typecheck` passa.
+- [x] Com PostgreSQL dedicado configurado e migrado para a última migration, `cd operator && bun run test:e2e` passa com a suíte completa (153 testes, 899 expectativas).
+- [x] `docker compose config --quiet` confirma a flag no serviço local; testes de configuração confirmam que flag ligada fora de `APP_ENV=local` falha sem expor valores sensíveis.
 
 ## Ordem de execução
 

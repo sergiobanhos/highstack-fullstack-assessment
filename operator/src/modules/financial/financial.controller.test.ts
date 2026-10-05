@@ -1,12 +1,12 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { createHmac, randomUUID } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, type Logger } from '../../config';
 import { createDatabase } from '../../db';
-import { financialOperations, walletLedgerEntries, wallets } from './financial.schema';
+import { financialOperations, payouts, walletLedgerEntries, wallets } from './financial.schema';
 import { createFinancialModule } from './financial.module';
 import { FinancialServiceError, type FinancialService } from './financial.service';
 import { registerFinancialController } from './financial.controller';
@@ -55,6 +55,7 @@ if (!testDatabaseUrl) {
     APP_ENV: 'local',
     ENGINE_WEBHOOK_SECRET: webhookSecret,
     WALLET_TEST_TOPUP_ENABLED: 'true',
+    PAYOUT_MOCK_ENABLED: 'true',
   });
   const identitiesByToken = new Map<string, AuthenticatedPlayer>();
   const testAuth: Pick<AuthModule, 'requireUser'> = {
@@ -77,6 +78,11 @@ if (!testDatabaseUrl) {
   };
 
   async function cleanWallet(playerId: string): Promise<void> {
+    const operations = await connection.db.select({ id: financialOperations.id })
+      .from(financialOperations).where(eq(financialOperations.playerId, playerId));
+    if (operations.length > 0) {
+      await connection.db.delete(payouts).where(inArray(payouts.id, operations.map(({ id }) => id)));
+    }
     await connection.db.delete(walletLedgerEntries).where(eq(walletLedgerEntries.playerId, playerId));
     await connection.db.delete(financialOperations).where(eq(financialOperations.playerId, playerId));
     await connection.db.delete(wallets).where(eq(wallets.playerId, playerId));
@@ -88,7 +94,7 @@ if (!testDatabaseUrl) {
     return { authorization: `Bearer ${token}` };
   }
 
-  describe('financial webhook REST controller', () => {
+  describe('financial REST controller', () => {
     let app: FastifyInstance;
     let localApp: FastifyInstance;
     let service: FinancialService;
@@ -159,6 +165,123 @@ if (!testDatabaseUrl) {
         payload: { amount: 100 },
       });
       expect(disabledRoute.statusCode).toBe(404);
+    });
+
+    test('registers payout routes only when enabled and requires authentication', async () => {
+      expect(app.hasRoute({ method: 'POST', url: '/payouts' })).toBe(false);
+      expect(app.hasRoute({ method: 'GET', url: '/payouts' })).toBe(false);
+      expect(localApp.hasRoute({ method: 'POST', url: '/payouts' })).toBe(true);
+      expect(localApp.hasRoute({ method: 'GET', url: '/payouts' })).toBe(true);
+      expect((await localApp.inject({ method: 'POST', url: '/payouts', payload: { amount: 100 } })).statusCode).toBe(401);
+      expect((await localApp.inject({ method: 'GET', url: '/payouts' })).statusCode).toBe(401);
+      expect((await localApp.inject({ method: 'GET', url: `/payouts/${randomUUID()}` })).statusCode).toBe(401);
+      expect((await app.inject({
+        method: 'GET', url: '/payouts', headers: authenticatedAs(randomUUID()),
+      })).statusCode).toBe(404);
+    });
+
+    test('requests an idempotent payout, exposes owned status/history, and rejects invalid input', async () => {
+      const playerId = randomUUID();
+      const otherPlayerId = randomUUID();
+      const idempotencyKey = randomUUID();
+      try {
+        await localService.ensureWallet(playerId);
+        await localService.ensureWallet(otherPlayerId);
+        await localService.topUp({ playerId, amount: 1_000, idempotencyKey: randomUUID() });
+        await localService.topUp({ playerId: otherPlayerId, amount: 500, idempotencyKey: randomUUID() });
+        const authorization = authenticatedAs(playerId);
+        const headers = { ...authorization, 'idempotency-key': idempotencyKey };
+
+        const missingKey = await localApp.inject({ method: 'POST', url: '/payouts', headers: authorization, payload: { amount: 300 } });
+        const malformedKey = await localApp.inject({
+          method: 'POST', url: '/payouts', headers: { ...authorization, 'idempotency-key': 'bad-key' }, payload: { amount: 300 },
+        });
+        const invalidAmount = await localApp.inject({ method: 'POST', url: '/payouts', headers, payload: { amount: 0 } });
+        const unsafeAmount = await localApp.inject({
+          method: 'POST', url: '/payouts', headers, payload: { amount: Number.MAX_SAFE_INTEGER + 1 },
+        });
+        const forgedPlayer = await localApp.inject({
+          method: 'POST', url: '/payouts', headers, payload: { amount: 300, playerId: otherPlayerId },
+        });
+        expect([missingKey, malformedKey, invalidAmount, unsafeAmount, forgedPlayer].map(({ statusCode }) => statusCode))
+          .toEqual([400, 400, 400, 400, 400]);
+
+        const first = await localApp.inject({ method: 'POST', url: '/payouts', headers, payload: { amount: 300 } });
+        const replay = await localApp.inject({ method: 'POST', url: '/payouts', headers, payload: { amount: 300 } });
+        const conflict = await localApp.inject({ method: 'POST', url: '/payouts', headers, payload: { amount: 301 } });
+        expect(first.statusCode).toBe(201);
+        expect(first.headers['cache-control']).toBe('no-store');
+        expect(responseJson(first)).toMatchObject({
+          id: expect.any(String), amountCents: 300, currency: 'USD', status: 'processing',
+          requestedAt: expect.any(String), completedAt: null, simulated: true,
+        });
+        expect(replay.statusCode).toBe(201);
+        expect(responseJson(replay).id).toBe(responseJson(first).id);
+        expect(conflict.statusCode).toBe(409);
+        expect(responseJson(conflict)).toMatchObject({ error: { code: 'IDEMPOTENCY_CONFLICT' } });
+        expect(await localService.getBalance(playerId)).toEqual({ playerId, balanceCents: 700n });
+
+        const secondPayout = await localApp.inject({
+          method: 'POST', url: '/payouts',
+          headers: { ...authorization, 'idempotency-key': randomUUID() }, payload: { amount: 100 },
+        });
+        const thirdPayout = await localApp.inject({
+          method: 'POST', url: '/payouts',
+          headers: { ...authorization, 'idempotency-key': randomUUID() }, payload: { amount: 100 },
+        });
+        expect(secondPayout.statusCode).toBe(201);
+        expect(thirdPayout.statusCode).toBe(201);
+
+        const payoutId = responseJson(first).id as string;
+        const ownStatus = await localApp.inject({ method: 'GET', url: `/payouts/${payoutId}`, headers: authorization });
+        const foreignStatus = await localApp.inject({
+          method: 'GET', url: `/payouts/${payoutId}`, headers: authenticatedAs(otherPlayerId),
+        });
+        const absentStatus = await localApp.inject({
+          method: 'GET', url: `/payouts/${randomUUID()}`, headers: authorization,
+        });
+        expect(ownStatus.statusCode).toBe(200);
+        expect(ownStatus.headers['cache-control']).toBe('no-store');
+        expect(responseJson(ownStatus)).toMatchObject({ id: payoutId, amountCents: 300, simulated: true });
+        expect(foreignStatus.statusCode).toBe(404);
+        expect(responseJson(foreignStatus)).toEqual(responseJson(absentStatus));
+
+        const history = await localApp.inject({ method: 'GET', url: '/payouts?limit=1', headers: authorization });
+        expect(history.statusCode).toBe(200);
+        expect(history.headers['cache-control']).toBe('no-store');
+        expect(responseJson(history).items).toHaveLength(1);
+        expect(responseJson(history).items[0]).toMatchObject({ id: responseJson(thirdPayout).id, simulated: true });
+        expect(responseJson(history).nextCursor).toEqual(expect.any(String));
+        const nextPage = await localApp.inject({
+          method: 'GET',
+          url: `/payouts?limit=1&cursor=${encodeURIComponent(responseJson(history).nextCursor)}`,
+          headers: authorization,
+        });
+        expect(responseJson(nextPage).items).toHaveLength(1);
+        expect(responseJson(nextPage).items[0].id).toBe(responseJson(secondPayout).id);
+        expect(responseJson(nextPage).items[0].id).not.toBe(responseJson(history).items[0].id);
+        for (const url of ['/payouts?limit=0', '/payouts?limit=101', '/payouts?cursor=AAAA', `/payouts?playerId=${otherPlayerId}`]) {
+          expect((await localApp.inject({ method: 'GET', url, headers: authorization })).statusCode).toBe(400);
+        }
+        expect((await localApp.inject({ method: 'GET', url: '/payouts/not-a-uuid', headers: authorization })).statusCode).toBe(400);
+
+        const insufficient = await localApp.inject({
+          method: 'POST', url: '/payouts',
+          headers: { ...authorization, 'idempotency-key': randomUUID() }, payload: { amount: 701 },
+        });
+        expect(insufficient.statusCode).toBe(402);
+        expect(responseJson(insufficient)).toMatchObject({ error: { code: 'INSUFFICIENT_FUNDS' } });
+        const logs = capturedLogs.join('\n');
+        expect(logs).toContain('financial.payout.requested');
+        expect(logs).toContain('financial.payout.replayed');
+        expect(logs).toContain('financial.payout.conflict');
+        for (const sensitive of [idempotencyKey, playerId, otherPlayerId, '"amount"']) {
+          expect(logs).not.toContain(sensitive);
+        }
+      } finally {
+        await cleanWallet(playerId);
+        await cleanWallet(otherPlayerId);
+      }
     });
 
     test('top-ups use only the authenticated player and replay or conflict by Idempotency-Key', async () => {
@@ -456,6 +579,7 @@ describe('financial webhook controller error mapping', () => {
       service: failingService,
       webhookSecret,
       walletTestTopupEnabled: false,
+      payoutMockEnabled: false,
       requireUser: async () => { throw new UnauthenticatedError(); },
       logger,
     });
@@ -465,6 +589,36 @@ describe('financial webhook controller error mapping', () => {
       const rawBody = JSON.stringify(request);
       const response = await app.inject({ method: 'POST', url: '/wallet/debit', headers: signedHeaders(rawBody), payload: rawBody });
       expect(response.statusCode).toBe(503);
+    } finally {
+      await app.close();
+    }
+  });
+
+  test('returns a generic 503 when an authenticated payout request cannot confirm storage', async () => {
+    const app = Fastify({ logger: false });
+    const logger: Logger = { debug() {}, info() {}, warn() {}, error() {} };
+    const unavailableService = {
+      ensureWallet: async () => { throw new FinancialServiceError('STORAGE_UNAVAILABLE'); },
+    } as unknown as FinancialService;
+    registerFinancialController({
+      app,
+      service: unavailableService,
+      webhookSecret,
+      walletTestTopupEnabled: false,
+      payoutMockEnabled: true,
+      requireUser: async () => ({ id: randomUUID(), name: 'Test', email: 'test@test.invalid' }),
+      logger,
+    });
+    await app.ready();
+    try {
+      const response = await app.inject({
+        method: 'POST', url: '/payouts',
+        headers: { 'idempotency-key': randomUUID() }, payload: { amount: 100 },
+      });
+      expect(response.statusCode).toBe(503);
+      expect(responseJson(response)).toEqual({
+        error: { code: 'SERVICE_UNAVAILABLE', message: 'Financial service is unavailable' },
+      });
     } finally {
       await app.close();
     }

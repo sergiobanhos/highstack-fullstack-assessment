@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { createHmac, randomUUID } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from './config';
 import { createDatabase } from './db';
 import { authSessions, players } from './modules/auth/auth.schema';
-import { financialOperations, walletLedgerEntries, wallets } from './modules/financial/financial.schema';
+import { financialOperations, payouts, walletLedgerEntries, wallets } from './modules/financial/financial.schema';
 import { buildOperatorApp, checkOperatorReadiness, type OperatorApp } from './server';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
@@ -47,6 +47,7 @@ if (!testDatabaseUrl) {
     DATABASE_URL: testDatabaseUrl,
     APP_ENV: 'local',
     WALLET_TEST_TOPUP_ENABLED: 'true',
+    PAYOUT_MOCK_ENABLED: 'true',
     ENGINE_WEBHOOK_SECRET: webhookSecret,
     LOG_LEVEL: 'error',
     AUTH_SESSION_TTL_SECONDS: '3600',
@@ -95,6 +96,7 @@ if (!testDatabaseUrl) {
         expect(ready.statusCode).toBe(200);
         expect(operator.app.hasRoute({ method: 'GET', url: '/game/events' })).toBe(true);
         expect(operator.app.hasRoute({ method: 'POST', url: '/wallet/top-ups' })).toBe(true);
+        expect(operator.app.hasRoute({ method: 'POST', url: '/payouts' })).toBe(true);
 
         const initialWallet = await operator.app.inject({ method: 'GET', url: '/wallet', headers: authorization });
         expect(initialWallet.statusCode).toBe(200);
@@ -131,28 +133,61 @@ if (!testDatabaseUrl) {
         expect(responseJson(credit)).toEqual({ balance: 4_500 });
         expect(responseJson(duplicateCredit)).toEqual(responseJson(credit));
 
+        const payoutKey = randomUUID();
+        const payoutRequest = await operator.app.inject({
+          method: 'POST', url: '/payouts',
+          headers: { ...authorization, 'idempotency-key': payoutKey }, payload: { amount: 1_000 },
+        });
+        const payoutReplay = await operator.app.inject({
+          method: 'POST', url: '/payouts',
+          headers: { ...authorization, 'idempotency-key': payoutKey }, payload: { amount: 1_000 },
+        });
+        expect(payoutRequest.statusCode).toBe(201);
+        expect(responseJson(payoutRequest)).toMatchObject({ status: 'processing', amountCents: 1_000, simulated: true });
+        expect(responseJson(payoutReplay).id).toBe(responseJson(payoutRequest).id);
+        expect(await operator.financial.getBalance(playerId)).toEqual({ playerId, balanceCents: 3_500n });
+
+        const payoutId = responseJson(payoutRequest).id as string;
+        const processing = await operator.app.inject({ method: 'GET', url: `/payouts/${payoutId}`, headers: authorization });
+        expect(processing.statusCode).toBe(200);
+        expect(responseJson(processing)).toMatchObject({ status: 'processing', completedAt: null, simulated: true });
+        await new Promise((resolve) => setTimeout(resolve, 5_600));
+        const done = await operator.app.inject({ method: 'GET', url: `/payouts/${payoutId}`, headers: authorization });
+        expect(done.statusCode).toBe(200);
+        expect(responseJson(done)).toMatchObject({ status: 'done', completedAt: expect.any(String), simulated: true });
+        const payoutHistory = await operator.app.inject({ method: 'GET', url: '/payouts', headers: authorization });
+        expect(responseJson(payoutHistory).items).toHaveLength(1);
+        expect(responseJson(payoutHistory).items[0]).toMatchObject({ id: payoutId, status: 'done' });
+
         const balance = await operator.app.inject({ method: 'GET', url: '/wallet', headers: authorization });
         const history = await operator.app.inject({ method: 'GET', url: '/wallet/transactions', headers: authorization });
         const historyItems = responseJson(history).items as Array<{
           direction: 'credit' | 'debit';
           amountCents: number;
           betId: string | null;
+          source: string;
         }>;
         expect(balance.statusCode).toBe(200);
-        expect(responseJson(balance)).toEqual({ balance: 4_500, currency: 'USD' });
+        expect(responseJson(balance)).toEqual({ balance: 3_500, currency: 'USD' });
         expect(history.statusCode).toBe(200);
-        expect(historyItems).toHaveLength(3);
+        expect(historyItems).toHaveLength(4);
         expect(historyItems.filter((entry) => entry.betId === betId)).toHaveLength(2);
+        expect(historyItems.filter((entry) => entry.source === 'payout')).toHaveLength(1);
         const ledgerNet = historyItems.reduce(
           (amount, entry) => amount + (entry.direction === 'credit' ? entry.amountCents : -entry.amountCents),
           0,
         );
-        expect(ledgerNet).toBe(4_500);
+        expect(ledgerNet).toBe(3_500);
         expect(login.body).not.toContain(webhookSecret);
         expect(history.body).not.toContain(token);
       } finally {
         if (playerId) {
           await connection.db.delete(walletLedgerEntries).where(eq(walletLedgerEntries.playerId, playerId));
+          const operations = await connection.db.select({ id: financialOperations.id })
+            .from(financialOperations).where(eq(financialOperations.playerId, playerId));
+          if (operations.length > 0) {
+            await connection.db.delete(payouts).where(inArray(payouts.id, operations.map(({ id }) => id)));
+          }
           await connection.db.delete(financialOperations).where(eq(financialOperations.playerId, playerId));
           await connection.db.delete(wallets).where(eq(wallets.playerId, playerId));
           await connection.db.delete(authSessions).where(eq(authSessions.playerId, playerId));
@@ -160,6 +195,6 @@ if (!testDatabaseUrl) {
         }
         await operator?.app.close();
       }
-    });
+    }, 10_000);
   });
 }

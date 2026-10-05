@@ -40,6 +40,7 @@ export function createFinancialModule({
     service,
     webhookSecret: config.engine.webhookSecret,
     walletTestTopupEnabled: config.walletTestTopupEnabled,
+    payoutMockEnabled,
     requireUser: auth.requireUser,
     logger,
   });

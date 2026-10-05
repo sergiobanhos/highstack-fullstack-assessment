@@ -255,9 +255,9 @@ curl -i -X POST http://127.0.0.1:3000/auth/logout -H "Authorization: Bearer ${AU
 
 Tentativas de cadastro e login são limitadas separadamente por endereço IP: 5 cadastros e 10 logins por minuto. O limite é local ao processo, conta também payload inválido e não usa `X-Forwarded-For`. Hashes Argon2id simultâneos também têm um teto de duas operações.
 
-## Carteira, ledger e webhooks financeiros (spec 003)
+## Carteira, ledger e payouts locais (specs 003 e 005)
 
-O saldo é USD e todas as quantias da API são inteiros em centavos. A carteira começa em zero e é criada no primeiro `GET /wallet` autenticado. O top-up é uma ferramenta local de desenvolvimento, sem integração com pagamento: o Compose define `APP_ENV=local` e `WALLET_TEST_TOPUP_ENABLED=true`. Em outras configurações, a flag fica desligada e a rota não é registrada; a configuração também rejeita habilitá-la fora do ambiente local.
+O saldo é USD e todas as quantias da API são inteiros em centavos. A carteira começa em zero e é criada no primeiro `GET /wallet` autenticado. O top-up e o payout são ferramentas locais de desenvolvimento, sem integração com pagamento: o Compose define `APP_ENV=local`, `WALLET_TEST_TOPUP_ENABLED=true` e `PAYOUT_MOCK_ENABLED=true`. Em outras configurações, as flags ficam desligadas e as rotas correspondentes não são registradas; a configuração também rejeita habilitá-las fora do ambiente local.
 
 ### Rotas do jogador
 
@@ -268,6 +268,9 @@ Todas as rotas exigem `Authorization: Bearer <token>` emitido por `/auth/login`.
 | `GET /wallet` | `200 { balance, currency: "USD" }` | Cria a carteira zero na primeira consulta. `balance` está em centavos. |
 | `GET /wallet/transactions?limit=&cursor=` | `200 { items, nextCursor }` | Histórico próprio, mais novo primeiro; `limit` default 50, máximo 100. Cursor opaco e estável. |
 | `POST /wallet/top-ups` | `201 { transactionId, balance, currency: "USD" }` | Apenas no Compose local. Body `{ "amount": 1000 }` adiciona USD 10,00. |
+| `POST /payouts` | `201 { id, amountCents, currency, status, requestedAt, completedAt, simulated }` | Saque parcial em centavos; exige `Idempotency-Key` UUID. Apenas com `PAYOUT_MOCK_ENABLED=true` em local. |
+| `GET /payouts/:payoutId` | `200` com o DTO acima | Consulta apenas payout do jogador autenticado; ausente ou de terceiro retorna `404`. |
+| `GET /payouts?limit=&cursor=` | `200 { items, nextCursor }` | Histórico próprio, mais novo primeiro; limite default 50, máximo 100 e cursor estável. |
 
 Exemplo de top-up local (use uma chave UUID nova por ação e mantenha o token no terminal):
 
@@ -284,6 +287,19 @@ curl -i 'http://127.0.0.1:3000/wallet/transactions?limit=50' \
 ```
 
 O mesmo `Idempotency-Key` com o mesmo valor devolve o resultado persistido sem novo crédito; reutilizá-lo com conteúdo diferente retorna `409`. Top-ups também respeitam o saldo máximo seguro e retornam `422` sem ultrapassá-lo.
+
+O payout simulado debita a carteira no commit do pedido e começa como `processing`. O worker local o muda para `done` cerca de cinco segundos depois, retomando itens vencidos após reinício; essa conclusão não altera saldo ou ledger e não representa transferência real. Repita a mesma chave UUID se a resposta do POST se perder. Exemplo:
+
+```bash
+curl -i -X POST http://127.0.0.1:3000/payouts \
+  -H "Authorization: Bearer ${AUTH_TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: 2ac9d3f8-1ba5-4f1f-9a72-6f9242b2a018' \
+  -d '{"amount":250}'
+
+curl -i 'http://127.0.0.1:3000/payouts?limit=50' \
+  -H "Authorization: Bearer ${AUTH_TOKEN}"
+```
 
 ### Webhooks privados da engine
 
