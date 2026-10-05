@@ -224,20 +224,20 @@ T1 completa as duas consultas financeiras específicas que o design F04 precisa.
 
 ### Trabalho
 
-- [ ] Implementar consulta de bets/comandos próprios ordenados do mais recente, com `limit` padrão 10 e máximo 20, combinando comandos sem duplicar bets aceitos.
-- [ ] Incluir comandos `pending`, `unknown` e `rejected` sem `betId` na lista; retornar `commandId`, `roundId`, valor, status do comando e dados de bet/settlement quando conhecidos.
-- [ ] Implementar leitura de comando por `commandId`, filtrada por jogador autenticado; para `unknown`, tentar somente reconciliação por financial e GET da engine, sem nova mutação.
-- [ ] Implementar leitura de bet por `betId` após confirmar ownership persistido; atualizar status atual da engine e consultar estado de liquidação financeira.
-- [ ] Retornar `404` uniforme para bet/comando inexistente ou pertencente a outro jogador, sem chamar a engine para dados sem ownership confirmado.
-- [ ] Cobrir reload após reinício do processo, isolamento entre jogadores, limite/paginação, estado unknown e settlement pending/confirmed.
+- [x] Implementar consulta de bets/comandos próprios ordenados do mais recente, com `limit` padrão 10 e máximo 20, combinando comandos sem duplicar bets aceitos.
+- [x] Incluir comandos `pending`, `unknown` e `rejected` sem `betId` na lista; retornar `commandId`, `roundId`, valor, status do comando e dados de bet/settlement quando conhecidos.
+- [x] Implementar leitura de comando por `commandId`, filtrada por jogador autenticado; para `unknown`, tentar somente reconciliação por financial e GET da engine, sem nova mutação.
+- [x] Implementar leitura de bet por `betId` após confirmar ownership persistido; atualizar status atual da engine e consultar estado de liquidação financeira.
+- [x] Retornar `404` uniforme para bet/comando inexistente ou pertencente a outro jogador, sem chamar a engine para dados sem ownership confirmado.
+- [x] Cobrir reload após reinício do processo, isolamento entre jogadores, limite/paginação, estado unknown e settlement pending/confirmed.
 
 ### Critérios de aceite
 
-- [ ] Jogador autenticado recupera bets/comandos persistidos após recarregar página ou recriar serviço, sem depender de memória do browser.
-- [ ] Lista e consultas nunca retornam registro de outro jogador nem revelam sua existência por status/campos distintos.
-- [ ] A reconciliação de um comando desconhecido usa leituras; ela não cria aposta nem repete chamada de cashout.
-- [ ] Um bet com cashout confirmado pode retornar `engineStatus=cashed_out` e `settlementStatus=pending` até financial confirmar o crédito.
-- [ ] Estado ainda desconhecido permanece persistido e consultável; timeout local não o remove.
+- [x] Jogador autenticado recupera bets/comandos persistidos após recarregar página ou recriar serviço, sem depender de memória do browser.
+- [x] Lista e consultas nunca retornam registro de outro jogador nem revelam sua existência por status/campos distintos.
+- [x] A reconciliação de um comando desconhecido usa leituras; ela não cria aposta nem repete chamada de cashout.
+- [x] Um bet com cashout confirmado pode retornar `engineStatus=cashed_out` e `settlementStatus=pending` até financial confirmar o crédito.
+- [x] Estado ainda desconhecido permanece persistido e consultável; timeout local não o remove.
 
 ### Arquivos
 
@@ -247,10 +247,10 @@ T1 completa as duas consultas financeiras específicas que o design F04 precisa.
 
 ### Verificação
 
-- [ ] `cd operator && bun run typecheck && bun test`.
-- [ ] Criar bet/comando, reiniciar API e recuperar pela lista com mesma identidade; validar lista vazia/limite e isolamento de duas contas.
-- [ ] Para item `unknown`, confirmar lookup financeiro/GET da engine sem `POST /bets` nem mutação de saldo.
-- [ ] Validar resposta uniforme `404` para IDs inexistentes e de terceiro.
+- [x] `cd operator && bun run typecheck && bun run test:e2e` (suíte completa com PostgreSQL temporário dedicado).
+- [x] Criar bet/comando, recriar serviço e recuperar pela lista com mesma identidade; validar lista vazia/limite e isolamento de duas contas.
+- [x] Para item `unknown`, confirmar lookup financeiro/GET da engine sem `POST /bets` nem mutação de saldo durante a leitura.
+- [x] Validar retorno uniforme de ausência para IDs inexistentes e de terceiro, sem consulta à engine antes da verificação de ownership.
 
 ## Task T6: Implementar cashout, reconciliação e estado de liquidação
 

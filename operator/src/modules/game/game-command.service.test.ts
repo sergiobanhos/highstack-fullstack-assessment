@@ -126,6 +126,22 @@ if (!testDatabaseUrl) {
     await financial.topUp({ playerId, amount, idempotencyKey: randomUUID() });
   }
 
+  async function seedRejectedCommands(playerId: string, count: number): Promise<void> {
+    const start = Date.now() - count * 1_000;
+    await connection.db.insert(gameCommands).values(Array.from({ length: count }, (_, index) => ({
+      playerId,
+      commandType: 'bet' as const,
+      idempotencyKey: randomUUID(),
+      requestHash: 'a'.repeat(64),
+      roundId: 'history-round-' + String(index),
+      amountCents: 100n,
+      status: 'rejected' as const,
+      resultCode: 'insufficient_funds',
+      createdAt: new Date(start + index * 1_000),
+      resolvedAt: new Date(start + index * 1_000),
+    })));
+  }
+
   function activeBet(input: PlaceBetInput, betId: string, status: CrashsimBet['status'] = 'active'): CrashsimBet {
     return {
       betId,
@@ -437,6 +453,190 @@ if (!testDatabaseUrl) {
         expect(result).toMatchObject({ betCommandStatus: 'rejected', resultCode: 'debit_applied_engine_rejected' });
         expect(after.balanceCents).toBe(before.balanceCents - 100n);
         expect(harness.engineStats()).toMatchObject({ placeBetCalls: 1, getBetCalls: 1 });
+      });
+    });
+
+    test('restores accepted bets after a service restart and lists only the player’s latest commands', async () => {
+      await withPlayer(async (playerId) => {
+        const original = createHarness();
+        const accepted = await original.service.placeBet({
+          playerId,
+          idempotencyKey: randomUUID(),
+          roundId: 'round-current',
+          amount: 250,
+        });
+        await seedRejectedCommands(playerId, 22);
+
+        const restarted = createHarness();
+        const defaults = await restarted.service.listBets({ playerId });
+        const maxPage = await restarted.service.listBets({ playerId, limit: 20 });
+        expect(defaults).toHaveLength(10);
+        expect(defaults[0]).toMatchObject({ commandId: accepted.commandId, betCommandStatus: 'accepted' });
+        expect(maxPage).toHaveLength(20);
+        expect(maxPage[0]).toMatchObject({ commandId: accepted.commandId, betId: accepted.betId });
+        expect(maxPage.filter((item) => item.commandId === accepted.commandId)).toHaveLength(1);
+        await expect(restarted.service.listBets({ playerId, limit: 21 }))
+          .rejects.toMatchObject({ code: 'INVALID_QUERY' });
+
+        const otherPlayerId = randomUUID();
+        try {
+          expect(await restarted.service.listBets({ playerId: otherPlayerId })).toEqual([]);
+        } finally {
+          await cleanPlayer(otherPlayerId);
+        }
+      });
+    });
+
+    test('recovers an unknown command by read-only reconciliation after restart', async () => {
+      await withPlayer(async (playerId) => {
+        await fund(playerId);
+        const firstProcess = createHarness({
+          async placeBet() { throw new CrashsimHttpError('unknown'); },
+        });
+        const unknown = await firstProcess.service.placeBet({
+          playerId,
+          idempotencyKey: randomUUID(),
+          roundId: 'round-current',
+          amount: 300,
+        });
+        expect(unknown.betCommandStatus).toBe('unknown');
+        const balanceBeforeReconciliation = await financial.getBalance(playerId);
+        const betId = 'late-financial-debit';
+        await financial.debit({
+          txId: randomUUID(),
+          playerId,
+          amount: 300,
+          betId,
+          roundId: 'round-current',
+        });
+        const balanceAfterDebit = await financial.getBalance(playerId);
+        expect(balanceAfterDebit.balanceCents).toBe(balanceBeforeReconciliation.balanceCents - 300n);
+
+        const restarted = createHarness({
+          async getBet() {
+            return {
+              betId,
+              playerId,
+              roundId: 'round-current',
+              amount: 300,
+              status: 'active',
+              multiplierHundredths: null,
+              payoutCents: null,
+              payoutPrecision: 'not_provided',
+            };
+          },
+        });
+        const fromList = await restarted.service.listBets({ playerId });
+        expect(fromList[0]?.betCommandStatus).toBe('unknown');
+        expect(restarted.engineStats().getBetCalls).toBe(0);
+
+        const reconciled = await restarted.service.getCommand({ playerId, commandId: unknown.commandId });
+        expect(reconciled).toMatchObject({ betCommandStatus: 'accepted', betId });
+        expect(restarted.engineStats()).toMatchObject({ placeBetCalls: 0, getBetCalls: 1 });
+        expect(await financial.getBalance(playerId)).toEqual(balanceAfterDebit);
+
+        const otherPlayerId = randomUUID();
+        try {
+          expect(await restarted.service.getCommand({ playerId: otherPlayerId, commandId: unknown.commandId }))
+            .toBeNull();
+          expect(restarted.engineStats().getBetCalls).toBe(1);
+        } finally {
+          await cleanPlayer(otherPlayerId);
+        }
+      });
+    });
+
+    test('checks bet ownership before engine reads and refreshes game and settlement state separately', async () => {
+      await withPlayer(async (playerId) => {
+        await fund(playerId);
+        const created = createHarness();
+        const accepted = await created.service.placeBet({
+          playerId,
+          idempotencyKey: randomUUID(),
+          roundId: 'round-current',
+          amount: 400,
+        });
+        const betId = accepted.betId!;
+        let currentBet: CrashsimBet = {
+          betId,
+          playerId,
+          roundId: 'round-current',
+          amount: 400,
+          status: 'cashed_out',
+          multiplierHundredths: 180,
+          payoutCents: 720,
+          payoutPrecision: 'safe',
+        };
+        const reader = createHarness({ getBet: async () => currentBet });
+
+        const otherPlayerId = randomUUID();
+        try {
+          expect(await reader.service.getBet({ playerId: otherPlayerId, betId })).toBeNull();
+          expect(reader.engineStats().getBetCalls).toBe(0);
+        } finally {
+          await cleanPlayer(otherPlayerId);
+        }
+
+        const pending = await reader.service.getBet({ playerId, betId });
+        expect(pending).toMatchObject({
+          betCommandStatus: 'accepted',
+          bet: { engineStatus: 'cashed_out', payoutCents: 720, settlementStatus: 'pending' },
+        });
+
+        await financial.creditCashoutOnce({
+          txId: randomUUID(),
+          playerId,
+          amount: 720,
+          betId,
+          roundId: 'round-current',
+          source: 'engine',
+        });
+        const confirmed = await reader.service.getBet({ playerId, betId });
+        expect(confirmed?.bet).toMatchObject({ engineStatus: 'cashed_out', payoutCents: 720, settlementStatus: 'confirmed' });
+        expect(reader.engineStats().getBetCalls).toBe(2);
+
+        currentBet = { ...currentBet, status: 'active', multiplierHundredths: null, payoutCents: null };
+        const staleRead = await reader.service.getBet({ playerId, betId });
+        expect(staleRead?.bet).toMatchObject({
+          engineStatus: 'cashed_out',
+          payoutCents: 720,
+          settlementStatus: 'confirmed',
+        });
+      });
+    });
+
+    test('returns the same not-found result for an absent bet or command without contacting Crashsim', async () => {
+      await withPlayer(async (playerId) => {
+        const harness = createHarness();
+        expect(await harness.service.getBet({ playerId, betId: 'missing-bet' })).toBeNull();
+        expect(await harness.service.getCommand({ playerId, commandId: randomUUID() })).toBeNull();
+        expect(harness.engineStats()).toMatchObject({ placeBetCalls: 0, getBetCalls: 0 });
+      });
+    });
+
+    test('returns the last persisted bet state when Crashsim restarted and lost its in-memory bet', async () => {
+      await withPlayer(async (playerId) => {
+        const created = createHarness();
+        const accepted = await created.service.placeBet({
+          playerId,
+          idempotencyKey: randomUUID(),
+          roundId: 'round-current',
+          amount: 100,
+        });
+        const afterEngineRestart = createHarness({
+          async getBet() { throw new CrashsimHttpError('not_found', 404, 'bet_not_found'); },
+        });
+        const recovered = await afterEngineRestart.service.getBet({
+          playerId,
+          betId: accepted.betId!,
+        });
+        expect(recovered).toMatchObject({
+          commandId: accepted.commandId,
+          betId: accepted.betId,
+          betCommandStatus: 'accepted',
+          bet: { engineStatus: 'active', settlementStatus: 'not_applicable' },
+        });
+        expect(afterEngineRestart.engineStats()).toMatchObject({ placeBetCalls: 0, getBetCalls: 1 });
       });
     });
   });

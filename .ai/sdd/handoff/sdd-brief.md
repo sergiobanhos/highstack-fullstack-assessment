@@ -1,12 +1,12 @@
 # SDD Handoff Brief: Implementação em ordem de dependências — F02 → F03 → F04
 
-> Status: F02 e F03 implementation done; F04 implementation in progress (T4)
-> Readiness: F03 passou por testes PostgreSQL dedicados e fluxo Compose isolado com Crashsim. F04 T1–T4 estão concluídas e verificadas.
+> Status: F02 e F03 implementation done; F04 implementation in progress (T5)
+> Readiness: F03 passou por testes PostgreSQL dedicados e fluxo Compose isolado com Crashsim. F04 T1–T5 estão concluídas e verificadas.
 > Updated: 2026-10-05
 
 ## Metadata
 
-- **Feature atual:** F04 — `.ai/sdd/specs/004-crashsim-bet-cashout/` (T4)
+- **Feature atual:** F04 — `.ai/sdd/specs/004-crashsim-bet-cashout/` (T5)
 - **F02 aprovado:** `.ai/sdd/specs/002-database-auth/`
 - **F03 requirements:** `.ai/sdd/specs/003-financial-wallet-ledger/requirements.md` (approved)
 - **F03 design:** `.ai/sdd/specs/003-financial-wallet-ledger/design.md` (approved)
@@ -63,7 +63,9 @@
 - **Verificação F04 T3:** `bun run typecheck` e `bun run test:e2e` passaram; PostgreSQL temporário isolado executou 111 testes/582 expectativas. Testes simulados cobrem os quatro endpoints, identidade divergente, sessão inválida, 402, conflitos, bet ausente, timeout, 5xx, JSON inválido, limites e ausência de valores sensíveis em erros.
 - **F04 T4 concluída:** `game-command.service.ts` provisiona a carteira antes da sessão, guarda `sessionId` somente em memória, exige stream sincronizado e rodada em betting, e reserva o comando antes da chamada externa. Idempotência e slot da rodada são protegidos pelo banco; 402 libera o slot. Somente `session_not_found` permite um retry. Resultados ambíguos são reconciliados por débito exato e `GET /bets/:id`, sem um segundo `POST /bets`. Débito aplicado seguido de bet rejeitado permanece sem compensação automática.
 - **Verificação F04 T4:** `bun run typecheck` passou; `bun run test:e2e` passou em PostgreSQL Compose isolado com 121 testes/630 expectativas. Cobertos ordem carteira/sessão, conexão e rodada, limites, fingerprints e tipo da chave, concorrência, 402 após top-up, renovação de sessão, timeout sem retry, candidato financeiro único/múltiplo e ausência de estorno. O serviço usou contrato Crashsim simulado; o fluxo com engine real será exercitado em T7 após a composição da API.
-- **Próximo passo:** T5 (consultas autenticadas e recuperação de bets/comandos após reload), depois do commit focado de T4.
+- **F04 T5 concluída:** `game-command.service.ts` agora lista as últimas 10 tentativas próprias (máximo 20), consulta comando e bet por identidade do jogador, reconcilia `unknown` com leituras financeiras/Crashsim e atualiza engine/settlement. Quando a engine reinicia e perdeu um bet já persistido, consulta retorna o estado local conhecido. Respostas atrasadas não regridem um bet terminal.
+- **Verificação F04 T5:** `bun run typecheck && bun run test:e2e` passou em PostgreSQL Compose isolado com 126 testes/657 expectativas. Cobertos serviço recriado, ordenação/limites, isolamento de jogador, unknown sem novo POST ou alteração de saldo pela leitura, settlement pending/confirmed, ownership antes de chamar Crashsim e fallback para estado persistido quando o Crashsim não encontra o bet.
+- **Próximo passo:** T6 (cashout, reconciliação e estado de liquidação), depois do commit focado de T5.
 
 ## Dependências de roadmap ainda não especificadas
 
@@ -74,4 +76,4 @@
 
 - F02 requirements, design e tasks estão aprovados; implementação T1–T4 concluída e verificada.
 - F03 requirements, design e tasks estão aprovados; implementação e verificação PostgreSQL/Crashsim foram concluídas.
-- F04 requirements, design e tasks estão aprovados; T1–T4 concluídas, próximo T5.
+- F04 requirements, design e tasks estão aprovados; T1–T5 concluídas, próximo T6.

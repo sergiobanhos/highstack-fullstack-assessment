@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Logger } from '../../config';
 import type { OperatorDatabase } from '../../db';
 import type { FinancialModule } from '../financial/financial.module';
@@ -21,6 +21,7 @@ export type GameCommandErrorCode =
   | 'ROUND_NOT_ACCEPTING_BETS'
   | 'BET_ALREADY_EXISTS'
   | 'BET_OUTCOME_UNKNOWN'
+  | 'INVALID_QUERY'
   | 'SERVICE_UNAVAILABLE';
 
 const ERROR_MESSAGES: Record<GameCommandErrorCode, string> = {
@@ -31,6 +32,7 @@ const ERROR_MESSAGES: Record<GameCommandErrorCode, string> = {
   ROUND_NOT_ACCEPTING_BETS: 'The current round is not accepting bets',
   BET_ALREADY_EXISTS: 'A bet already exists for this player and round',
   BET_OUTCOME_UNKNOWN: 'A previous bet for this player and round is still being resolved',
+  INVALID_QUERY: 'Game query is invalid',
   SERVICE_UNAVAILABLE: 'Game service is unavailable',
 };
 
@@ -68,9 +70,27 @@ export interface BetCommandResult {
   bet: GameBetView | null;
 }
 
+export interface ListBetsInput {
+  playerId: string;
+  limit?: number;
+}
+
+export interface GetGameCommandInput {
+  playerId: string;
+  commandId: string;
+}
+
+export interface GetGameBetInput {
+  playerId: string;
+  betId: string;
+}
+
 export interface GameCommandService {
   createSession(playerId: string): Promise<{ status: 'ready' }>;
   placeBet(input: PlaceBetCommandInput): Promise<BetCommandResult>;
+  listBets(input: ListBetsInput): Promise<BetCommandResult[]>;
+  getCommand(input: GetGameCommandInput): Promise<BetCommandResult | null>;
+  getBet(input: GetGameBetInput): Promise<BetCommandResult | null>;
 }
 
 export interface GameCommandServiceDeps {
@@ -342,15 +362,142 @@ export function createGameCommandService({ db, financial, engine, stream, logger
     }
   }
 
-  async function currentCommand(commandId: string): Promise<StoredCommand | undefined> {
+  async function currentCommand(playerId: string, commandId: string): Promise<StoredCommand | undefined> {
     return withStorageErrors(async () => {
       const [command] = await db
         .select(commandProjection)
         .from(gameCommands)
-        .where(eq(gameCommands.id, commandId))
+        .where(and(
+          eq(gameCommands.id, commandId),
+          eq(gameCommands.playerId, playerId),
+        ))
         .limit(1);
       return command;
     });
+  }
+
+  async function listBets(input: ListBetsInput): Promise<BetCommandResult[]> {
+    const limit = input.limit ?? 10;
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 20) {
+      throw new GameCommandError('INVALID_QUERY');
+    }
+    const commands = await withStorageErrors(() => db
+      .select(commandProjection)
+      .from(gameCommands)
+      .where(and(
+        eq(gameCommands.playerId, input.playerId),
+        eq(gameCommands.commandType, 'bet'),
+      ))
+      .orderBy(desc(gameCommands.createdAt), desc(gameCommands.id))
+      .limit(limit));
+    return Promise.all(commands.map((command) => resultForCommand(command)));
+  }
+
+  async function getCommand(input: GetGameCommandInput): Promise<BetCommandResult | null> {
+    const command = await currentCommand(input.playerId, input.commandId);
+    if (!command || command.commandType !== 'bet') return null;
+    if (command.status === 'pending' || command.status === 'unknown') {
+      return reconcileUnknown(command);
+    }
+    return resultForCommand(command);
+  }
+
+  async function getBet(input: GetGameBetInput): Promise<BetCommandResult | null> {
+    const bet = await withStorageErrors(async () => {
+      const [ownedBet] = await db
+        .select()
+        .from(gameBets)
+        .where(and(
+          eq(gameBets.betId, input.betId),
+          eq(gameBets.playerId, input.playerId),
+        ))
+        .limit(1);
+      return ownedBet;
+    });
+    if (!bet) return null;
+
+    const command = await currentCommand(input.playerId, bet.commandId);
+    if (!command || command.status !== 'accepted' || command.commandType !== 'bet') {
+      throw new GameCommandError('SERVICE_UNAVAILABLE');
+    }
+
+    let current: CrashsimBet;
+    try {
+      current = await engine.getBet({
+        betId: bet.betId,
+        playerId: input.playerId,
+        roundId: bet.roundId,
+      });
+    } catch (error) {
+      if (error instanceof CrashsimHttpError && error.kind === 'not_found') {
+        if (bet.engineStatus === 'cashed_out') {
+          const fallbackSettlement = await settlementFor(input.playerId, {
+            betId: bet.betId,
+            status: bet.engineStatus,
+            multiplierHundredths: safeNumber(bet.multiplierHundredths),
+            payoutCents: safeNumber(bet.payoutCents),
+            payoutPrecision: bet.settlementStatus === 'precision_incident'
+              ? 'unsafe'
+              : bet.payoutCents === null ? 'not_provided' : 'safe',
+          });
+          try {
+            await db
+              .update(gameBets)
+              .set({ settlementStatus: fallbackSettlement, updatedAt: new Date() })
+              .where(and(
+                eq(gameBets.betId, bet.betId),
+                eq(gameBets.playerId, input.playerId),
+              ));
+          } catch {
+            throw new GameCommandError('SERVICE_UNAVAILABLE');
+          }
+        }
+        return resultForCommand(command);
+      }
+      throw new GameCommandError('SERVICE_UNAVAILABLE');
+    }
+
+    if (current.betId !== bet.betId || current.playerId !== input.playerId ||
+        current.roundId !== bet.roundId || current.amount !== safeNumber(bet.amountCents) ||
+        current.status === 'rejected') {
+      throw new GameCommandError('SERVICE_UNAVAILABLE');
+    }
+
+    const settlementStatus = await settlementFor(input.playerId, {
+      betId: current.betId,
+      status: current.status,
+      multiplierHundredths: current.multiplierHundredths,
+      payoutCents: current.payoutCents,
+      payoutPrecision: current.payoutPrecision,
+    });
+    const payoutCents = current.status === 'cashed_out' ? current.payoutCents : null;
+    const multiplierHundredths = current.status === 'cashed_out' ? current.multiplierHundredths : null;
+    const refreshableStatuses: GameEngineBetStatus[] = current.status === 'active'
+      ? ['active']
+      : current.status === 'lost'
+        ? ['active', 'lost']
+        : ['active', 'cashed_out'];
+
+    try {
+      await db
+        .update(gameBets)
+        .set({
+          engineStatus: current.status,
+          multiplierHundredths: multiplierHundredths === null ? null : BigInt(multiplierHundredths),
+          payoutCents: payoutCents === null ? null : BigInt(payoutCents),
+          settlementStatus,
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(gameBets.betId, bet.betId),
+          eq(gameBets.playerId, input.playerId),
+          inArray(gameBets.engineStatus, refreshableStatuses),
+        ));
+    } catch {
+      throw new GameCommandError('SERVICE_UNAVAILABLE');
+    }
+
+    return resultForCommand(command);
   }
 
   async function persistUnknown(
@@ -528,6 +675,9 @@ export function createGameCommandService({ db, financial, engine, stream, logger
     }
 
     const candidate = candidates[0]!;
+    if (command.betId !== null && command.betId !== candidate.betId) {
+      return persistUnknown(command, command.betId, 'bet_identity_mismatch');
+    }
     let engineBet: CrashsimBet;
     try {
       engineBet = await engine.getBet({
@@ -663,5 +813,8 @@ export function createGameCommandService({ db, financial, engine, stream, logger
       if (!reservation.created) return replayOrReconcile(reservation.command, bet.requestHash);
       return postBet(reservation.command, sessionId, bet);
     },
+    listBets,
+    getCommand,
+    getBet,
   };
 }
