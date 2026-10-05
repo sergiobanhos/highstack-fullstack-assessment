@@ -78,6 +78,89 @@ describe('parseOperatorFrame', () => {
 });
 
 describe('streamReducer', () => {
+  test('updates the displayed snapshot as the round lifecycle events arrive', () => {
+    const snapshotAction = parseOperatorFrame(JSON.stringify({
+      kind: 'snapshot',
+      seq: 5,
+      connection: 'connected',
+      state: {
+        roundId: 'r1',
+        state: 'betting',
+        seq: 5,
+        multiplier: null,
+        crashPoint: null,
+        serverSeed: null,
+        serverSeedHash: 'h1',
+        bettingEndsAt: 200,
+        startedAt: null,
+      },
+    }));
+    const startedAction = parseOperatorFrame(JSON.stringify({
+      kind: 'game-event',
+      seq: 6,
+      event: { type: 'round.started', seq: 6, roundId: 'r1', startedAt: 200 },
+    }));
+    const tickAction = parseOperatorFrame(JSON.stringify({
+      kind: 'game-event',
+      seq: 7,
+      event: { type: 'tick', seq: 7, roundId: 'r1', multiplier: 1.75, t: 300 },
+    }));
+    const crashedAction = parseOperatorFrame(JSON.stringify({
+      kind: 'game-event',
+      seq: 8,
+      event: { type: 'round.crashed', seq: 8, roundId: 'r1', crashPoint: 1.82, serverSeed: 'seed-1' },
+    }));
+    const lateTickAction = parseOperatorFrame(JSON.stringify({
+      kind: 'game-event',
+      seq: 9,
+      event: { type: 'tick', seq: 9, roundId: 'r1', multiplier: 1.9, t: 400 },
+    }));
+    const nextBettingAction = parseOperatorFrame(JSON.stringify({
+      kind: 'game-event',
+      seq: 10,
+      event: {
+        type: 'round.betting',
+        seq: 10,
+        roundId: 'r2',
+        serverSeedHash: 'h2',
+        bettingEndsAt: 500,
+      },
+    }));
+    expect(snapshotAction?.type).toBe('snapshot');
+    expect(startedAction?.type).toBe('game-event');
+    expect(tickAction?.type).toBe('game-event');
+    expect(crashedAction?.type).toBe('game-event');
+    expect(lateTickAction?.type).toBe('game-event');
+    expect(nextBettingAction?.type).toBe('game-event');
+    if (!snapshotAction || snapshotAction.type !== 'snapshot' ||
+        !startedAction || startedAction.type !== 'game-event' ||
+        !tickAction || tickAction.type !== 'game-event' ||
+        !crashedAction || crashedAction.type !== 'game-event' ||
+        !lateTickAction || lateTickAction.type !== 'game-event' ||
+        !nextBettingAction || nextBettingAction.type !== 'game-event') throw new Error('invalid fixture');
+
+    const initial = streamReducer(initialStreamState, snapshotAction);
+    const started = streamReducer(initial, startedAction);
+    expect(started.snapshot?.state).toBe('running');
+
+    const ticked = streamReducer(started, tickAction);
+    expect(ticked.snapshot?.multiplier).toBe(1.75);
+
+    const crashed = streamReducer(ticked, crashedAction);
+    expect(crashed.snapshot?.state).toBe('crashed');
+    expect(crashed.snapshot?.crashPoint).toBe(1.82);
+    expect(crashed.snapshot?.seq).toBe(8);
+
+    const afterLateTick = streamReducer(crashed, lateTickAction);
+    expect(afterLateTick.snapshot?.state).toBe('crashed');
+    expect(afterLateTick.snapshot?.seq).toBe(8);
+
+    const nextRound = streamReducer(afterLateTick, nextBettingAction);
+    expect(nextRound.snapshot?.roundId).toBe('r2');
+    expect(nextRound.snapshot?.state).toBe('betting');
+    expect(nextRound.snapshot?.crashPoint).toBeNull();
+  });
+
   test('a snapshot replaces state and drops log entries at or below its seq', () => {
     let state = withSnapshot(5);
     state = streamReducer(state, { type: 'game-event', event: event(6) });

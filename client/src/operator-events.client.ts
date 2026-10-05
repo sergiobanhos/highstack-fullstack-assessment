@@ -1,10 +1,9 @@
 /**
  * Client-side state for the Crashsim operator SSE stream.
  *
- * The operator owns all sequencing rules; this reducer only mirrors what the
- * server sends: a snapshot replaces the displayed state, newer events are
- * appended to a bounded log, and upstream health is tracked separately from
- * the browser's own EventSource connection.
+ * The operator owns event ordering. This reducer mirrors its snapshot and
+ * accepted round transitions, keeps a bounded event log, and tracks upstream
+ * health separately from the browser's own EventSource connection.
  */
 
 export type UpstreamConnection = 'connected' | 'reconnecting' | 'synchronizing';
@@ -116,6 +115,61 @@ export function parseOperatorFrame(data: string): StreamAction | null {
 const isUpstream = (value: unknown): value is UpstreamConnection =>
   value === 'connected' || value === 'reconnecting' || value === 'synchronizing';
 
+function applyGameEventToSnapshot(
+  snapshot: ClientRoundState | null,
+  event: ClientGameEvent,
+): ClientRoundState | null {
+  const payload = isRecord(event.payload) ? event.payload : {};
+
+  if (event.type === 'round.betting') {
+    if (snapshot?.roundId === event.roundId) return { ...snapshot, seq: event.seq };
+    const serverSeedHash = toStringOrNull(payload.serverSeedHash);
+    const bettingEndsAt = toNumber(payload.bettingEndsAt);
+    if (serverSeedHash === null || bettingEndsAt === null) return snapshot;
+    return {
+      roundId: event.roundId,
+      state: 'betting',
+      seq: event.seq,
+      multiplier: null,
+      crashPoint: null,
+      serverSeed: null,
+      serverSeedHash,
+      bettingEndsAt,
+      startedAt: null,
+    };
+  }
+
+  if (!snapshot || snapshot.roundId !== event.roundId || event.seq <= snapshot.seq) return snapshot;
+
+  switch (event.type) {
+    case 'round.started': {
+      const startedAt = toNumber(payload.startedAt);
+      if (snapshot.state !== 'betting' || startedAt === null) return snapshot;
+      return { ...snapshot, state: 'running', seq: event.seq, startedAt, multiplier: 1 };
+    }
+    case 'tick': {
+      const multiplier = toNumber(payload.multiplier);
+      if (snapshot.state !== 'running' || multiplier === null) return snapshot;
+      return { ...snapshot, seq: event.seq, multiplier };
+    }
+    case 'round.crashed': {
+      const crashPoint = toNumber(payload.crashPoint);
+      const serverSeed = toStringOrNull(payload.serverSeed);
+      if (snapshot.state === 'crashed' || crashPoint === null || serverSeed === null) return snapshot;
+      return {
+        ...snapshot,
+        state: 'crashed',
+        seq: event.seq,
+        multiplier: crashPoint,
+        crashPoint,
+        serverSeed,
+      };
+    }
+    default:
+      return snapshot;
+  }
+}
+
 export function streamReducer(state: OperatorStreamState, action: StreamAction): OperatorStreamState {
   switch (action.type) {
     case 'downstream-open':
@@ -137,7 +191,11 @@ export function streamReducer(state: OperatorStreamState, action: StreamAction):
       const events = [...state.events, action.event]
         .sort((left, right) => left.seq - right.seq)
         .slice(-MAX_RETAINED_EVENTS);
-      return { ...state, events };
+      return {
+        ...state,
+        snapshot: applyGameEventToSnapshot(state.snapshot, action.event),
+        events,
+      };
     }
     case 'connection':
       return { ...state, upstream: action.upstream };
