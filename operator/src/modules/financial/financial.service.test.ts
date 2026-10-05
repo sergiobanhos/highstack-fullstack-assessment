@@ -744,6 +744,39 @@ if (!testDatabaseUrl) {
       }
     });
 
+    test('completes only due payouts once without changing balance or ledger', async () => {
+      const playerId = randomUUID();
+      try {
+        await service.ensureWallet(playerId);
+        await service.topUp({ playerId, amount: 1_000, idempotencyKey: randomUUID() });
+        const payout = await service.requestPayout({
+          playerId, amount: 400, idempotencyKey: randomUUID(),
+        });
+        expect(payout.payout?.status).toBe('processing');
+        const beforeBalance = await service.getBalance(playerId);
+        const beforeLedger = await ledgerFor(playerId);
+
+        expect(await service.completeDuePayouts()).toEqual([]);
+        await connection.db.update(payouts)
+          .set({ completeAfter: sql`now() - interval '1 second'` })
+          .where(eq(payouts.id, payout.operationId));
+        const concurrentResults = await Promise.all([
+          service.completeDuePayouts(),
+          service.completeDuePayouts(),
+        ]);
+
+        expect(concurrentResults.flat()).toEqual([payout.operationId]);
+        expect(await service.getPayout({ playerId, payoutId: payout.operationId })).toMatchObject({
+          status: 'done', completedAt: expect.any(String),
+        });
+        expect(await service.completeDuePayouts()).toEqual([]);
+        expect(await service.getBalance(playerId)).toEqual(beforeBalance);
+        expect(await ledgerFor(playerId)).toEqual(beforeLedger);
+      } finally {
+        await cleanWallet(playerId);
+      }
+    });
+
     test('does not create a wallet or operation for an unknown engine player', async () => {
       const playerId = randomUUID();
       const txId = randomUUID();

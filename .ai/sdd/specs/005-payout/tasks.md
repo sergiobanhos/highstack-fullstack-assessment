@@ -155,18 +155,18 @@
 
 ### Trabalho
 
-- [ ] Implementar varredura de payouts vencidos e transição atômica apenas de `processing` para `done`, preenchendo `completed_at` sem tocar em saldo, operação ou ledger.
-- [ ] No módulo financeiro, executar varredura imediata ao iniciar e repetir a cada 500 ms, com no máximo uma varredura ativa por instância.
-- [ ] Capturar falhas da varredura para permitir retry no ciclo seguinte; encerrar e limpar o timer em `onClose`.
-- [ ] Retomar no startup itens que venceram durante interrupção a partir de `complete_after` persistido; não depender de timer em memória para definir o estado final.
+- [x] Implementar varredura de payouts vencidos e transição atômica apenas de `processing` para `done`, preenchendo `completed_at` sem tocar em saldo, operação ou ledger.
+- [x] No módulo financeiro, executar varredura imediata ao iniciar e repetir a cada 500 ms, com no máximo uma varredura ativa por instância.
+- [x] Capturar falhas da varredura para permitir retry no ciclo seguinte; encerrar e limpar o timer em `onClose`.
+- [x] Retomar no startup itens que venceram durante interrupção a partir de `complete_after` persistido; não depender de timer em memória para definir o estado final.
 
 ### Critérios de aceitação
 
-- [ ] Um payout não é concluído antes de `complete_after`; após o vencimento, muda uma vez para `done` e recebe `completed_at`.
-- [ ] Duas varreduras concorrentes não produzem transições ou lançamentos financeiros duplicados.
-- [ ] Reiniciar o módulo depois do prazo conclui o payout persistido; indisponibilidade temporária do banco deixa o item `processing` e uma tentativa posterior pode concluí-lo.
-- [ ] Concluir a simulação não altera saldo, ledger ou resultado da operação financeira.
-- [ ] Fechar o módulo não deixa timer ativo nem trabalho sobreposto.
+- [x] Um payout não é concluído antes de `complete_after`; após o vencimento, muda uma vez para `done` e recebe `completed_at`.
+- [x] Duas varreduras concorrentes não produzem transições ou lançamentos financeiros duplicados.
+- [x] Reiniciar o módulo depois do prazo conclui o payout persistido; indisponibilidade temporária do banco deixa o item `processing` e uma tentativa posterior pode concluí-lo.
+- [x] Concluir a simulação não altera saldo, ledger ou resultado da operação financeira.
+- [x] Fechar o módulo não deixa timer ativo nem trabalho sobreposto.
 
 ### Arquivos
 
@@ -177,8 +177,8 @@
 
 ### Verificação
 
-- [ ] Com PostgreSQL de teste dedicado migrado, `cd operator && bun test src/modules/financial/financial.service.test.ts src/modules/financial/financial.module.test.ts` verifica vencimento, reinício, retry e fechamento.
-- [ ] `cd operator && bun run typecheck` passa.
+- [x] Com PostgreSQL de teste dedicado migrado, a suíte `cd operator && bun run test:e2e` verifica vencimento, reinício, retry e fechamento junto à suíte completa (152 testes, 891 expectativas).
+- [x] `cd operator && bun run typecheck` passa.
 
 ## T5 — Expor API autenticada e habilitação local opt-in
 

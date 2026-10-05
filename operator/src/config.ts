@@ -117,6 +117,7 @@ export interface OperatorConfig {
   logLevel: LogLevel;
   appEnv: AppEnv;
   walletTestTopupEnabled: boolean;
+  payoutMockEnabled: boolean;
   databaseUrl: string;
   authSessionTtlSeconds: number;
   engine: EngineConfig;
@@ -152,6 +153,7 @@ const configSchema = v.object({
   logLevel: v.picklist(LOG_LEVELS),
   appEnv: v.picklist(APP_ENVS),
   walletTestTopupEnabled: v.boolean(),
+  payoutMockEnabled: v.boolean(),
   databaseUrl: v.pipe(v.string(), v.trim(), v.check(isPostgresUrl, 'must be a valid PostgreSQL URL')),
   authSessionTtlSeconds: v.pipe(v.number(), v.integer(), v.minValue(60), v.maxValue(604_800)),
   engine: v.object({
@@ -185,6 +187,7 @@ export function loadConfig(env: EnvSource): OperatorConfig {
     logLevel: env.LOG_LEVEL ?? 'info',
     appEnv: env.APP_ENV,
     walletTestTopupEnabled: toBooleanFlag(env.WALLET_TEST_TOPUP_ENABLED),
+    payoutMockEnabled: toBooleanFlag(env.PAYOUT_MOCK_ENABLED),
     databaseUrl: env.DATABASE_URL,
     authSessionTtlSeconds: Number(env.AUTH_SESSION_TTL_SECONDS ?? 86_400),
     engine: {
@@ -205,6 +208,9 @@ export function loadConfig(env: EnvSource): OperatorConfig {
 
   if (result.output.walletTestTopupEnabled && result.output.appEnv !== 'local') {
     throw new Error('Invalid operator configuration at: walletTestTopupEnabled');
+  }
+  if (result.output.payoutMockEnabled && result.output.appEnv !== 'local') {
+    throw new Error('Invalid operator configuration at: payoutMockEnabled');
   }
 
   return result.output;

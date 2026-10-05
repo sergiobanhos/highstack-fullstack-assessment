@@ -1,6 +1,6 @@
 # SDD Handoff Brief: Implementação por dependência — F02 → F06
 
-> Status: F02/F03 concluídas; F04 com smoke test real pendente; F05 implementação em andamento; F06 tasks aprovadas
+> Status: F02/F03 concluídas; F04 com smoke test real pendente; F05 implementação em andamento (T1–T4 verificadas); F06 tasks aprovadas
 > Readiness: F06 T1–T5 prontas para iniciar quando o usuário autorizar; T6 depende de F05 concluída. Implementação F06 ainda não iniciada conforme pedido do usuário.
 > Updated: 2026-10-05
 
@@ -88,7 +88,7 @@
 
 - **Spec ID:** `005-payout`
 - **Spec Path:** `.ai/sdd/specs/005-payout/`
-- **Current `.status`:** `implementation:in-progress`
+- **Current `.status`:** `implementation:in-progress` (T1–T4 concluídas e verificadas)
 - **Source Inputs:** `.ai/sdd/PLAN.md`; strategy handoff: N/A
 - **Requirements:** `.ai/sdd/specs/005-payout/requirements.md` (approved)
 - **Design:** `.ai/sdd/specs/005-payout/design.md` (approved)
@@ -116,6 +116,7 @@ Jogador autenticado solicita saque parcial do próprio saldo em centavos e acomp
 - **T3:** consultas de status e histórico por proprietário.
 - **T4:** processador local durável, restart, retry e lifecycle.
 - **T5:** rotas autenticadas, configuração, Compose e fluxo composto.
+- **Progresso:** T1–T4 concluídas; T5 em andamento.
 - **Arquivos prováveis:** `operator/src/modules/financial/*`, `operator/src/config.ts`, `operator/src/db.ts`, `operator/drizzle/*`, `operator/src/server.financial.integration.test.ts` e `docker-compose.yml`.
 
 ### Plano de verificação
@@ -135,9 +136,9 @@ Testes PostgreSQL devem usar banco de teste dedicado e migrado; não apontar com
 - **Ready for Implementation:** no — F05 já está em andamento.
 - **Ready for QA:** no
 - **Ready for Release:** no
-- **Blockers:** T4–T5 ainda precisam ser concluídas; a verificação PostgreSQL requer banco dedicado de teste.
-- **Progress:** T1 (schema/migration), T2 (débito idempotente) e T3 (status/histórico com ownership e cursor) concluídas; T4–T5 pendentes.
-- **Recommended Next Action:** executar T4, o processador local recuperável e seus hooks de lifecycle.
+- **Blockers:** T5 precisa ser concluída; a verificação PostgreSQL requer banco dedicado de teste.
+- **Progress:** T1–T4 concluídas e verificadas; T5 (rotas, configuração/Compose e fluxo composto) em andamento.
+- **Recommended Next Action:** concluir T5, repetir typecheck, suíte PostgreSQL e validação do Compose; então marcar F05 concluída.
 
 ## F06 aprovada: interface inicial do jogador
 

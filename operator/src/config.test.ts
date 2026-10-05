@@ -29,6 +29,7 @@ describe('loadConfig', () => {
     expect(config.logLevel).toBe('info');
     expect(config.appEnv).toBe('test');
     expect(config.walletTestTopupEnabled).toBe(false);
+    expect(config.payoutMockEnabled).toBe(false);
     expect(config.engine.httpUrl).toBe('http://localhost:4000');
     expect(config.engine.streamUrl).toBe('ws://localhost:4000/stream');
     expect(config.databaseUrl).toBe(testEnv.DATABASE_URL);
@@ -53,6 +54,19 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...testEnv, APP_ENV: undefined })).toThrow('appEnv');
     expect(loadConfig({ ...testEnv, APP_ENV: 'production', WALLET_TEST_TOPUP_ENABLED: 'false' })
       .walletTestTopupEnabled).toBe(false);
+  });
+
+  test('enables the payout mock only with an explicit local setting', () => {
+    const config = loadConfig({ ...testEnv, APP_ENV: 'local', PAYOUT_MOCK_ENABLED: 'true' });
+    expect(config.payoutMockEnabled).toBe(true);
+    expect(config.appEnv).toBe('local');
+    expect(loadConfig({ ...testEnv, APP_ENV: 'local' }).payoutMockEnabled).toBe(false);
+    expect(() => loadConfig({ ...testEnv, APP_ENV: 'test', PAYOUT_MOCK_ENABLED: 'true' }))
+      .toThrow('payoutMockEnabled');
+    expect(() => loadConfig({ ...testEnv, APP_ENV: 'production', PAYOUT_MOCK_ENABLED: 'true' }))
+      .toThrow('payoutMockEnabled');
+    expect(() => loadConfig({ ...testEnv, PAYOUT_MOCK_ENABLED: 'yes' }))
+      .toThrow('payoutMockEnabled');
   });
 
   test('requires an explicit Crashsim webhook secret without echoing it', () => {

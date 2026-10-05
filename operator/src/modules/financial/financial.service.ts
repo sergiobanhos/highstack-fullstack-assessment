@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull, lt, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, lt, lte, or, sql } from 'drizzle-orm';
 import type { OperatorDatabase } from '../../db';
 import {
   financialOperations,
@@ -236,6 +236,7 @@ export interface FinancialService {
   requestPayout(input: PayoutRequestInput): Promise<PayoutRequestResult>;
   getPayout(input: { playerId: string; payoutId: string }): Promise<PayoutRecord | null>;
   listPayouts(playerId: string, page: PayoutPageInput): Promise<PayoutPage>;
+  completeDuePayouts(): Promise<string[]>;
 }
 
 /**
@@ -676,6 +677,20 @@ export function createFinancialService({ db }: { db: OperatorDatabase }): Financ
           items: rows.slice(0, page.limit).map(payoutRecord),
           hasMore: rows.length > page.limit,
         };
+      });
+    },
+
+    completeDuePayouts() {
+      return withStorageErrors(async () => {
+        const completed = await db
+          .update(payouts)
+          .set({ status: 'done', completedAt: sql<Date>`now()` })
+          .where(and(
+            eq(payouts.status, 'processing'),
+            lte(payouts.completeAfter, sql`now()`),
+          ))
+          .returning({ id: payouts.id });
+        return completed.map(({ id }) => id);
       });
     },
   };
