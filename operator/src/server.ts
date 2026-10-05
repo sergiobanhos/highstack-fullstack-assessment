@@ -1,4 +1,4 @@
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance } from "fastify";
 import {
   createLogger,
   createRedactor,
@@ -6,11 +6,18 @@ import {
   operatorSecrets,
   type Logger,
   type OperatorConfig,
-} from './config';
-import { createDatabase, type DatabaseConnection } from './db';
-import { createAuthModule, type AuthModule } from './modules/auth/auth.module';
-import { createFinancialModule, type FinancialModule } from './modules/financial/financial.module';
-import { createGameModule, type GameModule, type GameModuleDeps } from './modules/game/game.module';
+} from "./config";
+import { createDatabase, type DatabaseConnection } from "./db";
+import { createAuthModule, type AuthModule } from "./modules/auth/auth.module";
+import {
+  createFinancialModule,
+  type FinancialModule,
+} from "./modules/financial/financial.module";
+import {
+  createGameModule,
+  type GameModule,
+  type GameModuleDeps,
+} from "./modules/game/game.module";
 
 export interface OperatorApp {
   app: FastifyInstance;
@@ -24,7 +31,7 @@ export interface OperatorApp {
 
 export type OperatorAppOverrides = Omit<
   GameModuleDeps,
-  'app' | 'config' | 'logger' | 'db' | 'auth' | 'financial'
+  "app" | "config" | "logger" | "db" | "auth" | "financial"
 > & {
   databaseConnection?: DatabaseConnection;
 };
@@ -34,7 +41,10 @@ export type OperatorAppOverrides = Omit<
  * functions. Modules own their workflows; this file only assembles them.
  * Importing this file never opens a socket, so it stays testable.
  */
-export function buildOperatorApp(config: OperatorConfig, overrides: OperatorAppOverrides = {}): OperatorApp {
+export function buildOperatorApp(
+  config: OperatorConfig,
+  overrides: OperatorAppOverrides = {},
+): OperatorApp {
   const logger = createLogger({
     level: config.logLevel,
     redactor: createRedactor(operatorSecrets(config)),
@@ -49,7 +59,13 @@ export function buildOperatorApp(config: OperatorConfig, overrides: OperatorAppO
     sessionTtlSeconds: config.authSessionTtlSeconds,
     logger,
   });
-  const financial = createFinancialModule({ app, db: database.db, config, logger, auth });
+  const financial = createFinancialModule({
+    app,
+    db: database.db,
+    config,
+    logger,
+    auth,
+  });
   const game = createGameModule({
     app,
     db: database.db,
@@ -60,17 +76,17 @@ export function buildOperatorApp(config: OperatorConfig, overrides: OperatorAppO
     ...gameOverrides,
   });
 
-  app.get('/health', async () => ({ status: 'ok' }));
-  app.get('/ready', async (_request, reply) => {
+  app.get("/health", async () => ({ status: "ok" }));
+  app.get("/ready", async (_request, reply) => {
     try {
       await checkOperatorReadiness({ database });
-      return { status: 'ready' };
+      return { status: "ready" };
     } catch {
-      return reply.code(503).send({ status: 'not_ready' });
+      return reply.code(503).send({ status: "not_ready" });
     }
   });
   // Closing the HTTP server also releases the game stream and database pool.
-  app.addHook('onClose', async () => {
+  app.addHook("onClose", async () => {
     try {
       await game.stop();
     } finally {
@@ -81,14 +97,16 @@ export function buildOperatorApp(config: OperatorConfig, overrides: OperatorAppO
   return { app, config, logger, game, auth, financial, database };
 }
 
-export async function checkOperatorReadiness({ database }: Pick<OperatorApp, 'database'>): Promise<void> {
+export async function checkOperatorReadiness({
+  database,
+}: Pick<OperatorApp, "database">): Promise<void> {
   await database.check();
   await database.checkSchema();
 }
 
 async function main(): Promise<void> {
   let operator: OperatorApp | undefined;
-  let stage = 'configuration';
+  let stage = "configuration";
   try {
     const config = loadConfig(process.env);
     operator = buildOperatorApp(config);
@@ -98,40 +116,45 @@ async function main(): Promise<void> {
     const shutdown = async (signal: string): Promise<void> => {
       if (shuttingDown) return;
       shuttingDown = true;
-      logger.info('operator shutting down', { signal });
+      logger.info("operator shutting down", { signal });
       try {
         await app.close();
       } catch {
-        logger.error('operator shutdown failed');
+        logger.error("operator shutdown failed");
         process.exitCode = 1;
       }
     };
 
-    for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+    for (const signal of ["SIGINT", "SIGTERM"] as const) {
       process.on(signal, () => void shutdown(signal));
     }
 
-    stage = 'route-registration';
+    stage = "route-registration";
     await app.ready();
-    stage = 'database-readiness';
+    stage = "database-readiness";
     await checkOperatorReadiness(operator);
-    stage = 'http-listen';
+    stage = "http-listen";
     await app.listen({ port: config.port, host: config.host });
-    logger.info('operator listening', { port: config.port, host: config.host });
+    logger.info("operator listening", { port: config.port, host: config.host });
     game.start();
   } catch (error) {
     if (operator) {
-      operator.logger.error('operator failed to start', { stage });
+      operator.logger.error("operator failed to start", { stage });
       try {
         await operator.app.close();
       } catch {
-        operator.logger.error('operator startup cleanup failed', { stage });
+        operator.logger.error("operator startup cleanup failed", { stage });
       }
     } else {
-      if (error instanceof Error && error.message.startsWith('Invalid operator configuration at: ')) {
+      if (
+        error instanceof Error &&
+        error.message.startsWith("Invalid operator configuration at: ")
+      ) {
         console.error(error.message);
       } else {
-        console.error('Operator configuration is invalid. Check the required environment variables.');
+        console.error(
+          "Operator configuration is invalid. Check the required environment variables.",
+        );
       }
     }
     process.exitCode = 1;
@@ -140,7 +163,9 @@ async function main(): Promise<void> {
 
 if (import.meta.main) {
   void main().catch(() => {
-    console.error('Operator startup failed. Check configuration and database readiness.');
+    console.error(
+      "Operator startup failed. Check configuration and database readiness.",
+    );
     process.exitCode = 1;
   });
 }
