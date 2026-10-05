@@ -1,7 +1,7 @@
-# SDD Handoff Brief: F03 Financeiro — F02 como pré-requisito
+# SDD Handoff Brief: Implementação em ordem de dependências — F02 → F03 → F04
 
-> Status: F03 tasks aprovadas; implementação não iniciada
-> Readiness: Não pronta para implementação; F02 precisa ser implementada primeiro e o usuário pediu seguir para F04
+> Status: F02, F03 e F04 tasks aprovadas; implementação autorizada
+> Readiness: iniciar F02 T1. F03 depende de F02; F04 depende de F02 e F03 concluídas e verificadas.
 > Updated: 2026-10-05
 
 ## Metadata
@@ -12,6 +12,7 @@
 - **F03 design:** `.ai/sdd/specs/003-financial-wallet-ledger/design.md` (approved)
 - **F03 tasks:** `.ai/sdd/specs/003-financial-wallet-ledger/tasks.md` (approved)
 - **F03 `.status`:** `.ai/sdd/specs/003-financial-wallet-ledger/.status` (`tasks:approved`)
+- **F04 `.status`:** `.ai/sdd/specs/004-crashsim-bet-cashout/.status` (`tasks:approved`)
 - **F02 `.status`:** `tasks:approved`
 - **F02 requirements:** `.ai/sdd/specs/002-database-auth/requirements.md` (approved)
 - **F02 design:** `.ai/sdd/specs/002-database-auth/design.md` (approved; REST)
@@ -44,16 +45,16 @@
 - Decisão F03 D-009: não alterar a engine; o operador rejeita `amount` fora de `Number.MAX_SAFE_INTEGER` antes do banco e emite incidente. Se valor seguro ultrapassaria o saldo máximo, registra recusa idempotente sem alterar carteira/ledger. Como a engine encerra retries em 4xx e o GET da aposta usa o mesmo contrato numérico, F06 não credita payout aproximado nem declara o caso automaticamente recuperado.
 - **Ordem aprovada:** T1 configuração/schema/migration → T2 serviço financeiro transacional → T3 webhooks HMAC → T4 API autenticada de saldo/histórico/top-up → T5 composição, Compose e documentação.
 - **Verificação planejada:** `cd operator && bun run typecheck && bun test`; `cd operator && bun run db:migrate` em PostgreSQL dedicado; `docker compose config`; fluxo manual com Crashsim e testes de concorrência/retry.
-- **Próximo passo:** iniciar requirements F04 (sessão Crashsim, aposta e cashout). A implementação F03 permanece adiada até F02 T1–T4 concluídas e não foi autorizada agora.
+- **Próximo passo:** implementar F02 T1–T4, depois F03 T1–T5, e então F04 T1–T7. F04 tasks adicionam os contratos públicos financeiros para localizar débito de aposta e consultar liquidação de cashout. O MVP documenta o risco raro de débito persistido com bet rejeitado sem adicionar estorno automático.
 
 ## Dependências de roadmap ainda não especificadas
 
-- F04: sessão Crashsim, apostas, cashout, propriedade e reconciliação.
+- F04: requirements, design e tasks aprovados para sessão Crashsim, apostas, cashout, propriedade, idempotência e reconciliação de resultados desconhecidos; estorno automático de débito de bet rejeitado foi deixado fora do MVP por decisão do usuário.
 - F05: integração do cliente autenticado com saldo, jogo e SSE.
 
 ## Prontidão
 
-- F02 requirements, design e tasks estão aprovados. Nenhum código F02 foi iniciado.
-- F03 requirements, design e tasks estão aprovados; implementação não foi iniciada.
-- F03 só pode ser implementada depois de F02 T1–T4; o usuário escolheu continuar agora com a especificação F04.
+- F02 requirements, design e tasks estão aprovados; a implementação autorizada começa em T1.
+- F03 requirements, design e tasks estão aprovados; implementar depois de F02 T1–T4.
+- F04 requirements, design e tasks estão aprovados; implementar depois de F02/F03 e verificar as consultas financeiras públicas usadas pela reconciliação.
 - O ambiente não conseguiu acessar o daemon Docker durante uma consulta; validações que dependem dele devem ser tentadas quando F02 for implementada.

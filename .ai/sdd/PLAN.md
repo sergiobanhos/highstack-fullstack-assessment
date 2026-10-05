@@ -78,9 +78,10 @@ flowchart LR
 
 ## Open Decisions
 
-- F02 requirements, REST design, and tasks are approved; implementation is deferred at the user's request.
-- F03 requirements, design, and tasks are approved in `.ai/sdd/specs/003-financial-wallet-ledger/`. F03 implementation depends on F02 and is deferred while the user proceeds to F04 requirements. The design defines USD-only currency, local test top-up, stable `402` replay, persist-before-`200` webhook acknowledgement, and F04/F06 cashout recovery. The user chose an operator-side `Number.MAX_SAFE_INTEGER` limit: unsafe payouts are rejected without mutation, logged as precision incidents, and cannot be automatically recovered by F06 through the current numeric engine contract.
-- Confirm whether the engine can accept a stable idempotency key for `POST /bets` in F04 requirements.
+- F02 requirements, REST design, and tasks are approved. Implementation was deferred earlier; the user has now authorized implementation, starting with F02 T1.
+- F03 requirements, design, and tasks are approved in `.ai/sdd/specs/003-financial-wallet-ledger/`. F03 implementation depends on F02 and follows it. The design defines USD-only currency, local test top-up, stable `402` replay, persist-before-`200` webhook acknowledgement, and F04/F06 cashout recovery. The user chose an operator-side `Number.MAX_SAFE_INTEGER` limit: unsafe payouts are rejected without mutation, logged as precision incidents, and cannot be automatically recovered by F06 through the current numeric engine contract.
+- F04 requirements, design, and tasks are approved in `.ai/sdd/specs/004-crashsim-bet-cashout/`. The engine contract stays unchanged: allow at most one accepted or unknown bet per player/round, never retry an ambiguous `POST /bets`, correlate through the persisted debit where possible, and allow a fresh command key after a definitive `402` while betting remains open. Unknown outcomes block another bet for that player/round. F04 implementation follows completed and verified F02/F03.
+- The user chose not to add automatic compensation for the rare case where the engine rejects a bet after the debit commit but all acknowledgements are lost; the local MVP design records this as a residual risk, without changing approved requirements.
 
 ## Next Actions
 
@@ -106,4 +107,12 @@ flowchart LR
 - [x] Approve F03 design
 - [x] Create F03 tasks
 - [x] Approve F03 tasks
-- [ ] Create F04 requirements draft: Crashsim bet and cashout commands
+- [x] Create F04 requirements draft: Crashsim bet and cashout commands
+- [x] Resolve F04 requirements questions about bet idempotency and `402` retry behavior
+- [x] Approve F04 requirements
+- [x] Resolve F04 design-discovered rejected-bet/debit-committed edge case (no automatic compensation in local MVP)
+- [x] Create F04 design draft
+- [x] Approve F04 design
+- [x] Create F04 tasks draft
+- [x] Approve F04 tasks
+- [ ] Implement F02 T1–T4, then F03 T1–T5, then F04 T1–T7

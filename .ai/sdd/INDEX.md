@@ -19,7 +19,7 @@
 
 | Field | Value | Notes |
 |-------|-------|-------|
-| Next Feature ID | 004 | Recompute from filesystem before creating a new spec |
+| Next Feature ID | 005 | Recompute from filesystem before creating a new spec |
 | Numbering Issues | none | duplicate prefix / invalid status / non-canonical directory |
 
 ## Specs
@@ -29,10 +29,11 @@
 | 001 | Crashsim real-time operator proxy | implementation:done | `.ai/sdd/specs/001-crashsim-realtime-proxy/requirements.md` (approved: single Crashsim scope) | `.ai/sdd/specs/001-crashsim-realtime-proxy/design.md` (approved: direct Crashsim integration) | `.ai/sdd/specs/001-crashsim-realtime-proxy/tasks.md` (approved; implementation complete) | pending |
 | 002 | Base de persistência e autenticação de jogadores | tasks:approved | `.ai/sdd/specs/002-database-auth/requirements.md` (approved) | `.ai/sdd/specs/002-database-auth/design.md` (approved: REST) | `.ai/sdd/specs/002-database-auth/tasks.md` (approved) | — |
 | 003 | Carteira, ledger e webhooks financeiros | tasks:approved | `.ai/sdd/specs/003-financial-wallet-ledger/requirements.md` (approved; Q-001–Q-005 respondidos; D-009 definido) | `.ai/sdd/specs/003-financial-wallet-ledger/design.md` (approved) | `.ai/sdd/specs/003-financial-wallet-ledger/tasks.md` (approved; execução após implementação de F02) | — |
+| 004 | Sessão Crashsim, aposta e cashout | tasks:approved | `.ai/sdd/specs/004-crashsim-bet-cashout/requirements.md` (approved; Q-001–Q-002 respondidos) | `.ai/sdd/specs/004-crashsim-bet-cashout/design.md` (approved; risco residual de débito sem estorno no MVP) | `.ai/sdd/specs/004-crashsim-bet-cashout/tasks.md` (approved; implementação após F02/F03) | — |
 
 ## Handoff
 
-- `.ai/sdd/handoff/sdd-brief.md`: available (F03 tasks aprovadas; implementação aguarda F02; próxima spec: F04)
+- `.ai/sdd/handoff/sdd-brief.md`: available (F03 tasks aprovadas; implementação aguarda F02; F04 design em draft)
 
 ## Next Actions
 
@@ -57,4 +58,11 @@
 - [x] Approve F03 design
 - [x] Create F03 tasks
 - [x] Approve F03 tasks
-- [ ] Create F04 requirements draft: Crashsim bet and cashout commands
+- [x] Create F04 requirements draft: Crashsim bet and cashout commands
+- [x] Resolve F04 questions about ambiguous bet creation and definitive 402
+- [x] Approve F04 requirements
+- [x] Create F04 design draft
+- [x] Approve F04 design
+- [x] Create F04 tasks draft
+- [x] Approve F04 tasks
+- [ ] Implement F02, then F03, then F04 in dependency order
