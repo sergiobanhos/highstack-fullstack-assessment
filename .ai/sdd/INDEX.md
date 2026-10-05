@@ -19,7 +19,7 @@
 
 | Field | Value | Notes |
 |-------|-------|-------|
-| Next Feature ID | 005 | Recompute from filesystem before creating a new spec |
+| Next Feature ID | 006 | Recompute from filesystem before creating a new spec |
 | Numbering Issues | none | duplicate prefix / invalid status / non-canonical directory |
 
 ## Specs
@@ -30,6 +30,7 @@
 | 002 | Base de persistência e autenticação de jogadores | implementation:done | `.ai/sdd/specs/002-database-auth/requirements.md` (approved) | `.ai/sdd/specs/002-database-auth/design.md` (approved: REST) | `.ai/sdd/specs/002-database-auth/tasks.md` (approved; T1–T4 complete) | — |
 | 003 | Carteira, ledger e webhooks financeiros | implementation:done | `.ai/sdd/specs/003-financial-wallet-ledger/requirements.md` (approved; Q-001–Q-005 respondidos; D-009 definido) | `.ai/sdd/specs/003-financial-wallet-ledger/design.md` (approved) | `.ai/sdd/specs/003-financial-wallet-ledger/tasks.md` (T1–T5 concluídas e verificadas) | — |
 | 004 | Sessão Crashsim, aposta e cashout | implementation:in-progress | `.ai/sdd/specs/004-crashsim-bet-cashout/requirements.md` (approved; Q-001–Q-002 respondidos) | `.ai/sdd/specs/004-crashsim-bet-cashout/design.md` (approved; risco residual de débito sem estorno no MVP) | `.ai/sdd/specs/004-crashsim-bet-cashout/tasks.md` (T1–T7 implementadas e verificadas; smoke test manual com Crashsim real pendente) | — |
+| 005 | Payout local de carteira | requirements:approved | `.ai/sdd/specs/005-payout/requirements.md` (approved; Q-001 respondido; D-005 definido) | — | — | — |
 
 ## Handoff
 
@@ -70,3 +71,4 @@
 - [x] Approve F04 tasks
 - [x] Implement F02 and F03 in dependency order
 - [ ] Implement F04 after F03 verification (T1–T5 complete)
+- [x] Review and approve payout requirements in `.ai/sdd/specs/005-payout/`
