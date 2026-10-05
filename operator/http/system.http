@@ -1,0 +1,9 @@
+@baseUrl = http://localhost:3000
+
+### Health: processo HTTP respondendo
+GET {{baseUrl}}/health
+Accept: application/json
+
+### Readiness: banco e schema disponíveis
+GET {{baseUrl}}/ready
+Accept: application/json

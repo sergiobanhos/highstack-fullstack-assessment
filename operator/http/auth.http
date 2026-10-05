@@ -1,0 +1,34 @@
+@baseUrl = http://localhost:3000
+@email = api-test@example.test
+@password = dev-password-123
+@name = API Test
+# Depois do login, cole o token retornado aqui para chamar /auth/me e /auth/logout.
+@token = cole-o-token-do-login-aqui
+
+### Criar jogador (email deve ser único)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "{{name}}",
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### Entrar e obter token de sessão
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### Consultar jogador da sessão
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### Encerrar sessão (204; cole novamente o token para testar)
+POST {{baseUrl}}/auth/logout
+Authorization: Bearer {{token}}

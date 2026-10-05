@@ -1,0 +1,7 @@
+@baseUrl = http://localhost:3000
+
+### Fluxo atual do game: SSE com snapshot inicial e eventos da rodada
+# A conexão fica aberta enquanto o stream estiver ativo.
+GET {{baseUrl}}/game/events
+Accept: text/event-stream
+Cache-Control: no-cache
