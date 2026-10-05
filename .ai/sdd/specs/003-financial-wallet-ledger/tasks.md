@@ -95,27 +95,27 @@ A F02 (.ai/sdd/specs/002-database-auth/) está em implementation:done e foi veri
 
 ### Trabalho
 
-- [ ] Criar financial.service.ts com ensureWallet, consulta de saldo, listagem do ledger, débito, crédito de cashout e top-up; receber playerId somente de contrato confiável.
-- [ ] Manter a aritmética em bigint e converter entradas JSON para inteiro somente depois de validar Number.isSafeInteger e positividade.
-- [ ] Na mesma transação PostgreSQL, reservar/verificar idempotência, alterar saldo, gravar resultado da operação e inserir ledger somente para movimentos aplicados.
-- [ ] Fazer débito por UPDATE condicional ao saldo disponível. Persistir insufficient_funds com o saldo da resposta, sem mutar carteira nem criar ledger.
-- [ ] Implementar replay por txId, conflito 409 para conteúdo divergente e concorrência de duplicatas sem deixar erro de unicidade escapar como falso sucesso ou efeito duplicado.
-- [ ] Implementar crédito idempotente por cashout:<betId> e creditCashoutOnce para o webhook e a futura reconciliação F06; conferir jogador e valor quando webhook e reconciliação concorrem ou chegam fora de ordem.
-- [ ] Se a reconciliação creditar primeiro, associar o txId do webhook tardio à operação existente após validar jogador/valor, sem criar novo movimento; preservar unicidade de txId e betId.
-- [ ] Persistir balance_limit e o saldo original quando crédito/top-up exceder o teto seguro, sem alterar carteira/ledger; preservar o resultado em replays.
-- [ ] Implementar idempotência de top-up por jogador e Idempotency-Key; conflito de mesmo identificador com outro conteúdo retorna conflito.
-- [ ] Testar service contra PostgreSQL dedicado, incluindo corridas, commit de resultado desconhecido, rollback e consistência entre saldo, operação e ledger.
+- [x] Criar financial.service.ts com ensureWallet, consulta de saldo, listagem do ledger, débito, crédito de cashout e top-up; receber playerId somente de contrato confiável.
+- [x] Manter a aritmética em bigint e converter entradas JSON para inteiro somente depois de validar Number.isSafeInteger e positividade.
+- [x] Na mesma transação PostgreSQL, reservar/verificar idempotência, alterar saldo, gravar resultado da operação e inserir ledger somente para movimentos aplicados.
+- [x] Fazer débito por UPDATE condicional ao saldo disponível. Persistir insufficient_funds com o saldo da resposta, sem mutar carteira nem criar ledger.
+- [x] Implementar replay por txId, conflito 409 para conteúdo divergente e concorrência de duplicatas sem deixar erro de unicidade escapar como falso sucesso ou efeito duplicado.
+- [x] Implementar crédito idempotente por cashout:<betId> e creditCashoutOnce para o webhook e a futura reconciliação F06; conferir jogador e valor quando webhook e reconciliação concorrem ou chegam fora de ordem.
+- [x] Se a reconciliação creditar primeiro, associar o txId do webhook tardio à operação existente após validar jogador/valor, sem criar novo movimento; preservar unicidade de txId e betId.
+- [x] Persistir balance_limit e o saldo original quando crédito/top-up exceder o teto seguro, sem alterar carteira/ledger; preservar o resultado em replays.
+- [x] Implementar idempotência de top-up por jogador e Idempotency-Key; conflito de mesmo identificador com outro conteúdo retorna conflito.
+- [x] Testar service contra PostgreSQL dedicado, incluindo corridas, commit de resultado desconhecido, rollback e consistência entre saldo, operação e ledger.
 
 ### Critérios de aceite
 
-- [ ] Débito, crédito e top-up aplicados atualizam saldo, operação e ledger atomicamente; recusas não criam lançamento nem saldo negativo.
-- [ ] Dois débitos simultâneos não consomem mais que o saldo; duas chamadas iguais em paralelo geram no máximo um efeito e retornam o resultado vencedor.
-- [ ] Replay de débito insuficiente continua recusado mesmo após top-up; nova tentativa exige novo txId.
-- [ ] Webhook e creditCashoutOnce para o mesmo betId resultam em um crédito; divergência de jogador/valor não muda saldo e é sinalizada como conflito.
-- [ ] Webhook tardio após reconciliação vincula seu txId à operação já aplicada e devolve o resultado persistido sem segundo lançamento.
-- [ ] Valor ou saldo acima da faixa segura não é arredondado; top-up/crédito com limite excedido tem resultado idempotente, sem movimento.
-- [ ] ensureWallet cria saldo zero idempotentemente apenas quando chamado com identidade confiável; débito/crédito de player sem carteira não cria carteira órfã.
-- [ ] listEntries retorna somente dados do jogador solicitado e usa ordenação estável por (created_at, id).
+- [x] Débito, crédito e top-up aplicados atualizam saldo, operação e ledger atomicamente; recusas não criam lançamento nem saldo negativo.
+- [x] Dois débitos simultâneos não consomem mais que o saldo; duas chamadas iguais em paralelo geram no máximo um efeito e retornam o resultado vencedor.
+- [x] Replay de débito insuficiente continua recusado mesmo após top-up; nova tentativa exige novo txId.
+- [x] Webhook e creditCashoutOnce para o mesmo betId resultam em um crédito; divergência de jogador/valor não muda saldo e é sinalizada como conflito.
+- [x] Webhook tardio após reconciliação vincula seu txId à operação já aplicada e devolve o resultado persistido sem segundo lançamento.
+- [x] Valor ou saldo acima da faixa segura não é arredondado; top-up/crédito com limite excedido tem resultado idempotente, sem movimento.
+- [x] ensureWallet cria saldo zero idempotentemente apenas quando chamado com identidade confiável; débito/crédito de player sem carteira não cria carteira órfã.
+- [x] listEntries retorna somente dados do jogador solicitado e usa ordenação estável por (created_at, id).
 
 ### Arquivos
 
@@ -126,10 +126,10 @@ A F02 (.ai/sdd/specs/002-database-auth/) está em implementation:done e foi veri
 
 ### Verificação
 
-- [ ] cd operator && bun run typecheck && bun test.
-- [ ] Com banco exclusivo de teste, cobrir débito coberto/insuficiente, crédito, top-up, replay, payload conflitante, limite de saldo e rollback.
-- [ ] Executar testes concorrentes de dois débitos sobre saldo limitado, duplicatas do mesmo txId e webhook/reconciliação pelo mesmo betId; conferir saldo igual ao ledger.
-- [ ] Confirmar que erro/timeout de commit pode ser resolvido pelo mesmo identificador sem aplicar um segundo movimento.
+- [x] `cd operator && bun run typecheck` — exit 0; `bun test` com `TEST_DATABASE_URL` dedicado — 83 pass, 0 fail, 362 expectations.
+- [x] Testes PostgreSQL cobrem débito coberto/insuficiente, crédito, top-up, replay, payload conflitante, limite de saldo, wallet ausente e rollback.
+- [x] Testes concorrentes cobrem dois débitos sobre saldo limitado, txId/top-up duplicados e webhook/reconciliação pelo mesmo betId; saldo final confere com o net do ledger.
+- [x] Simular resposta perdida depois do commit; retry pelo mesmo txId devolve o resultado salvo sem repetir o movimento.
 
 ## Task T3: Autenticação HMAC e rotas financeiras da engine
 
