@@ -111,32 +111,33 @@ T1 completa as duas consultas financeiras específicas que o design F04 precisa.
 
 ### Trabalho
 
-- [ ] Criar `game_commands` e `game_bets` conforme o modelo de dados aprovado, com tipos explícitos para tentativas de aposta/cashout e estados conhecidos/desconhecidos.
-- [ ] Persistir `amount_cents` e `auto_cashout_hundredths` como inteiros; payout fora da faixa segura não pode ser persistido aproximado.
-- [ ] Criar unique `(player_id, idempotency_key)`, unique parcial para aposta `pending`/`unknown`/`accepted` por `(player_id, round_id)` e unique parcial para cashout `pending`/`unknown` por `bet_id`.
-- [ ] Criar migration Drizzle aditiva após as migrations F02/F03, mantendo os schemas/tabelas dos outros módulos e o migrador único da F02.
-- [ ] Testar constraints com tentativas concorrentes, incluindo liberar vaga de aposta após `rejected` definitivo e mantê-la para `unknown`/`accepted`.
+- [x] Criar `game_commands` e `game_bets` conforme o modelo de dados aprovado, com tipos explícitos para tentativas de aposta/cashout e estados conhecidos/desconhecidos.
+- [x] Persistir `amount_cents` e `auto_cashout_hundredths` como inteiros; payout fora da faixa segura não pode ser persistido aproximado.
+- [x] Criar unique `(player_id, idempotency_key)`, unique parcial para aposta `pending`/`unknown`/`accepted` por `(player_id, round_id)` e unique parcial para cashout `pending`/`unknown` por `bet_id`.
+- [x] Criar migration Drizzle aditiva após as migrations F02/F03, mantendo os schemas/tabelas dos outros módulos e o migrador único da F02.
+- [x] Testar constraints com tentativas concorrentes, incluindo liberar vaga de aposta após `rejected` definitivo e mantê-la para `unknown`/`accepted`.
 
 ### Critérios de aceite
 
-- [ ] Reexecutar a migration não apaga nem recria dados existentes.
-- [ ] Duas reservas concorrentes para o mesmo jogador/rodada não deixam duas apostas `pending`, `unknown` ou `accepted`.
-- [ ] Recusa definitiva libera a vaga para nova chave; aposta aceita ou desconhecida continua ocupando-a.
-- [ ] Chave idempotente não pode ser reutilizada com tipo ou fingerprint diferente; reserva de cashout incerta é única por `betId`.
-- [ ] Os dados necessários para correlacionar débito e resultado após restart persistem; `sessionId` não é armazenado.
+- [x] Reexecutar a migration não apaga nem recria dados existentes.
+- [x] Duas reservas concorrentes para o mesmo jogador/rodada não deixam duas apostas `pending`, `unknown` ou `accepted`.
+- [x] Recusa definitiva libera a vaga para nova chave; aposta aceita ou desconhecida continua ocupando-a.
+- [x] Chave idempotente não pode ser reutilizada com tipo ou fingerprint diferente; reserva de cashout incerta é única por `betId`.
+- [x] Os dados necessários para correlacionar débito e resultado após restart persistem; `sessionId` não é armazenado.
 
 ### Arquivos
 
 - `operator/src/modules/game/game.schema.ts` — criar tabelas, índices e tipos Drizzle.
+- `operator/src/db.ts` — incluir as tabelas no schema compartilhado e na checagem de prontidão.
 - `operator/drizzle/` — migration SQL e metadados aditivos.
 - `operator/src/modules/game/game.schema.test.ts` — validar constraints e migration em banco dedicado.
 - `operator/drizzle.config.ts` — incluir o schema game sem substituir auth/financial.
 
 ### Verificação
 
-- [ ] `cd operator && bun run typecheck && bun test`.
-- [ ] Com `TEST_DATABASE_URL` em PostgreSQL dedicado, aplicar migration duas vezes e confirmar tabelas/índices e preservação de dados.
-- [ ] Fazer reservas paralelas para aposta/cashout e conferir as constraints e transições aceitas.
+- [x] `cd operator && bun run typecheck && bun run test:e2e` (suíte Bun completa em PostgreSQL temporário dedicado).
+- [x] Com PostgreSQL dedicado, aplicar migration duas vezes e confirmar tabelas/índices e preservação de dados.
+- [x] Fazer reservas paralelas para aposta/cashout e conferir as constraints e transições aceitas.
 
 ## Task T3: Completar cliente HTTP concreto do Crashsim
 

@@ -2,8 +2,9 @@ import postgres from 'postgres';
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as authSchema from './modules/auth/auth.schema';
 import * as financialSchema from './modules/financial/financial.schema';
+import * as gameSchema from './modules/game/game.schema';
 
-const databaseSchema = { ...authSchema, ...financialSchema };
+const databaseSchema = { ...authSchema, ...financialSchema, ...gameSchema };
 
 export type OperatorDatabase = PostgresJsDatabase<typeof databaseSchema>;
 
@@ -58,6 +59,8 @@ export function createDatabase(databaseUrl: string): DatabaseConnection {
         await client`select 1 from wallets limit 0`;
         await client`select 1 from financial_operations limit 0`;
         await client`select 1 from wallet_ledger_entries limit 0`;
+        await client`select 1 from game_commands limit 0`;
+        await client`select 1 from game_bets limit 0`;
       } catch {
         throw new Error('Database schema is not ready');
       }

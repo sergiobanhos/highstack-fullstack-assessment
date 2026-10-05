@@ -15,6 +15,13 @@
       "when": 1791226371454,
       "tag": "0001_financial-wallet",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791230484151,
+      "tag": "0002_rich_gladiator",
+      "breakpoints": true
     }
   ]
 }
