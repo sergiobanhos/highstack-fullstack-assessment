@@ -5,6 +5,12 @@ import type { AuthModule } from '../auth/auth.module';
 import { registerFinancialController } from './financial.controller';
 import { createFinancialService, type FinancialService } from './financial.service';
 
+export type {
+  BetDebitCandidate,
+  BetDebitLookupInput,
+  CashoutCreditStatus,
+} from './financial.service';
+
 /** Public financial contract for game and authenticated API modules. */
 export type FinancialModule = FinancialService;
 

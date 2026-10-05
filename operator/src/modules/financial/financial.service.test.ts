@@ -331,6 +331,162 @@ if (!testDatabaseUrl) {
       }
     });
 
+    test('finds all exact bet debits after the reservation timestamp without crossing player boundaries', async () => {
+      const playerId = randomUUID();
+      const otherPlayerId = randomUUID();
+      const targetRound = 'lookup-target-round';
+      const operationIds: Array<{ id: string; createdAt: string }> = [];
+      try {
+        await service.ensureWallet(playerId);
+        await service.ensureWallet(otherPlayerId);
+        await service.topUp({ playerId, amount: 40, idempotencyKey: randomUUID() });
+        const earlier = await service.debit({
+          txId: randomUUID(), playerId, amount: 20, betId: 'lookup-before', roundId: targetRound,
+        });
+        const boundary = await service.debit({
+          txId: randomUUID(), playerId, amount: 20, betId: 'lookup-boundary', roundId: targetRound,
+        });
+        const insufficient = await service.debit({
+          txId: randomUUID(), playerId, amount: 20, betId: 'lookup-insufficient', roundId: targetRound,
+        });
+        await service.topUp({ playerId, amount: 20, idempotencyKey: randomUUID() });
+        const applied = await service.debit({
+          txId: randomUUID(), playerId, amount: 20, betId: 'lookup-applied', roundId: targetRound,
+        });
+        await service.topUp({ playerId, amount: 100, idempotencyKey: randomUUID() });
+        const wrongRound = await service.debit({
+          txId: randomUUID(), playerId, amount: 20, betId: 'lookup-wrong-round', roundId: 'another-round',
+        });
+        const wrongAmount = await service.debit({
+          txId: randomUUID(), playerId, amount: 19, betId: 'lookup-wrong-amount', roundId: targetRound,
+        });
+        const single = await service.debit({
+          txId: randomUUID(), playerId, amount: 7, betId: 'lookup-single', roundId: 'single-candidate-round',
+        });
+        await service.topUp({ playerId: otherPlayerId, amount: 20, idempotencyKey: randomUUID() });
+        const otherPlayer = await service.debit({
+          txId: randomUUID(), playerId: otherPlayerId, amount: 20, betId: 'lookup-other-player', roundId: targetRound,
+        });
+
+        operationIds.push(
+          { id: earlier.operationId, createdAt: '2026-01-01T00:00:00.000001Z' },
+          { id: boundary.operationId, createdAt: '2026-01-01T00:00:00.000002Z' },
+          { id: insufficient.operationId, createdAt: '2026-01-01T00:00:00.000003Z' },
+          { id: applied.operationId, createdAt: '2026-01-01T00:00:00.000004Z' },
+          { id: otherPlayer.operationId, createdAt: '2026-01-01T00:00:00.000005Z' },
+          { id: wrongRound.operationId, createdAt: '2026-01-01T00:00:00.000006Z' },
+          { id: wrongAmount.operationId, createdAt: '2026-01-01T00:00:00.000007Z' },
+          { id: single.operationId, createdAt: '2026-01-01T00:00:00.000008Z' },
+        );
+        for (const operation of operationIds) {
+          await connection.db.execute(sql`
+            UPDATE financial_operations
+            SET created_at = ${operation.createdAt}::timestamptz
+            WHERE id = ${operation.id}::uuid
+          `);
+        }
+
+        const afterReservation = await service.findBetDebitForCommand({
+          playerId,
+          roundId: targetRound,
+          amount: 20,
+          createdAt: '2026-01-01T00:00:00.000002Z',
+        });
+        expect(afterReservation).toEqual([
+          { betId: 'lookup-insufficient', outcome: 'insufficient_funds' },
+          { betId: 'lookup-applied', outcome: 'applied' },
+        ]);
+
+        const oneCandidate = await service.findBetDebitForCommand({
+          playerId,
+          roundId: 'single-candidate-round',
+          amount: 7,
+          createdAt: '2026-01-01T00:00:00.000007Z',
+        });
+        expect(oneCandidate).toEqual([{ betId: 'lookup-single', outcome: 'applied' }]);
+
+        const noCandidates = await service.findBetDebitForCommand({
+          playerId,
+          roundId: 'missing-round',
+          amount: 20,
+          createdAt: '2026-01-01T00:00:00.000000Z',
+        });
+        expect(noCandidates).toEqual([]);
+
+        const otherPlayerCandidates = await service.findBetDebitForCommand({
+          playerId: otherPlayerId,
+          roundId: targetRound,
+          amount: 20,
+          createdAt: '2026-01-01T00:00:00.000004Z',
+        });
+        expect(otherPlayerCandidates).toEqual([
+          { betId: 'lookup-other-player', outcome: 'applied' },
+        ]);
+        await expect(service.findBetDebitForCommand({
+          playerId,
+          roundId: targetRound,
+          amount: 20,
+          createdAt: 'not-a-database-timestamp',
+        })).rejects.toMatchObject({ code: 'INVALID_LOOKUP' });
+      } finally {
+        await cleanWallet(playerId);
+        await cleanWallet(otherPlayerId);
+      }
+    });
+
+    test('reports cashout credit only when the matching player ledger entry is persisted', async () => {
+      const playerId = randomUUID();
+      const otherPlayerId = randomUUID();
+      const limitPlayerId = randomUUID();
+      const betId = `cashout-status-${randomUUID()}`;
+      const limitBetId = `cashout-limit-${randomUUID()}`;
+      try {
+        await service.ensureWallet(playerId);
+        await service.ensureWallet(otherPlayerId);
+        await service.ensureWallet(limitPlayerId);
+
+        expect(await service.getCashoutCreditStatus({ playerId, betId })).toEqual({ status: 'pending' });
+        await service.topUp({ playerId, amount: 100, idempotencyKey: randomUUID() });
+        const credit = await service.creditCashoutOnce({
+          playerId,
+          amount: 50,
+          betId,
+          source: 'engine',
+          txId: randomUUID(),
+        });
+        expect(await service.getCashoutCreditStatus({ playerId, betId })).toEqual({ status: 'credited' });
+        expect(await service.getCashoutCreditStatus({ playerId: otherPlayerId, betId })).toEqual({ status: 'pending' });
+
+        await connection.db.delete(walletLedgerEntries)
+          .where(eq(walletLedgerEntries.operationId, credit.operationId));
+        expect(await service.getCashoutCreditStatus({ playerId, betId })).toEqual({
+          status: 'incident',
+          reason: 'ledger_missing',
+        });
+
+        await service.topUp({
+          playerId: limitPlayerId,
+          amount: Number.MAX_SAFE_INTEGER,
+          idempotencyKey: randomUUID(),
+        });
+        const limited = await service.creditCashoutOnce({
+          playerId: limitPlayerId,
+          amount: 1,
+          betId: limitBetId,
+          source: 'reconciliation',
+        });
+        expect(limited.outcome).toBe('balance_limit');
+        expect(await service.getCashoutCreditStatus({ playerId: limitPlayerId, betId: limitBetId })).toEqual({
+          status: 'incident',
+          reason: 'balance_limit',
+        });
+      } finally {
+        await cleanWallet(playerId);
+        await cleanWallet(otherPlayerId);
+        await cleanWallet(limitPlayerId);
+      }
+    });
+
     test('persists top-up idempotency and stable balance-limit refusals', async () => {
       const playerId = randomUUID();
       const topupKey = randomUUID();

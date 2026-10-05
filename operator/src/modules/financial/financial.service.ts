@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lt, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, lt, or, sql } from 'drizzle-orm';
 import type { OperatorDatabase } from '../../db';
 import {
   financialOperations,
@@ -17,6 +17,7 @@ export type FinancialErrorCode =
   | 'WALLET_NOT_FOUND'
   | 'IDEMPOTENCY_CONFLICT'
   | 'INVALID_PAGE'
+  | 'INVALID_LOOKUP'
   | 'STORAGE_UNAVAILABLE';
 
 export class FinancialServiceError extends Error {
@@ -89,6 +90,24 @@ export interface TopUpInput {
   idempotencyKey: string;
 }
 
+/** Timestamp returned by the command reservation query, in UTC with microseconds. */
+export interface BetDebitLookupInput {
+  playerId: string;
+  roundId: string;
+  amount: number;
+  createdAt: string;
+}
+
+export interface BetDebitCandidate {
+  betId: string;
+  outcome: 'applied' | 'insufficient_funds';
+}
+
+export type CashoutCreditStatus =
+  | { status: 'credited' }
+  | { status: 'pending' }
+  | { status: 'incident'; reason: 'balance_limit' | 'ledger_missing' | 'unexpected_outcome' };
+
 interface OperationInput {
   playerId: string;
   kind: 'debit' | 'credit' | 'test_top_up';
@@ -154,6 +173,8 @@ export interface FinancialService {
   listEntries(playerId: string, page: LedgerPageInput): Promise<LedgerPage>;
   debit(input: DebitInput): Promise<FinancialResult>;
   creditCashoutOnce(input: CreditCashoutInput): Promise<FinancialResult>;
+  findBetDebitForCommand(input: BetDebitLookupInput): Promise<BetDebitCandidate[]>;
+  getCashoutCreditStatus(input: { playerId: string; betId: string }): Promise<CashoutCreditStatus>;
   topUp(input: TopUpInput): Promise<FinancialResult>;
 }
 
@@ -411,6 +432,76 @@ export function createFinancialService({ db }: { db: OperatorDatabase }): Financ
         businessKey: `cashout:${input.betId}`,
         betId: input.betId,
         roundId: input.roundId ?? null,
+      });
+    },
+
+    findBetDebitForCommand(input): Promise<BetDebitCandidate[]> {
+      if (!input.playerId || !input.roundId || !Number.isSafeInteger(input.amount) || input.amount <= 0 ||
+          !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(input.createdAt) ||
+          Number.isNaN(Date.parse(input.createdAt))) {
+        return Promise.reject(new FinancialServiceError('INVALID_LOOKUP'));
+      }
+      const amountCents = BigInt(input.amount);
+      return withStorageErrors(async () => {
+        const rows = await db
+          .select({ betId: financialOperations.betId, outcome: financialOperations.outcome })
+          .from(financialOperations)
+          .where(and(
+            eq(financialOperations.playerId, input.playerId),
+            eq(financialOperations.kind, 'debit'),
+            eq(financialOperations.source, 'engine'),
+            eq(financialOperations.roundId, input.roundId),
+            eq(financialOperations.amountCents, amountCents),
+            inArray(financialOperations.outcome, ['applied', 'insufficient_funds']),
+            isNotNull(financialOperations.betId),
+            sql`${financialOperations.createdAt} > ${input.createdAt}::timestamptz`,
+          ))
+          .orderBy(asc(financialOperations.createdAt), asc(financialOperations.id));
+
+        return rows.map((row) => ({
+          betId: row.betId!,
+          outcome: row.outcome as BetDebitCandidate['outcome'],
+        }));
+      });
+    },
+
+    getCashoutCreditStatus({ playerId, betId }): Promise<CashoutCreditStatus> {
+      if (!playerId || !betId) {
+        return Promise.reject(new FinancialServiceError('INVALID_LOOKUP'));
+      }
+      return withStorageErrors(async () => {
+        const [operation] = await db
+          .select({ id: financialOperations.id, outcome: financialOperations.outcome, source: financialOperations.source })
+          .from(financialOperations)
+          .where(and(
+            eq(financialOperations.playerId, playerId),
+            eq(financialOperations.kind, 'credit'),
+            eq(financialOperations.businessKey, `cashout:${betId}`),
+            eq(financialOperations.betId, betId),
+          ))
+          .limit(1);
+
+        if (!operation) return { status: 'pending' };
+        if (operation.outcome === 'balance_limit') {
+          return { status: 'incident', reason: 'balance_limit' };
+        }
+        if (operation.outcome !== 'applied') {
+          return { status: 'incident', reason: 'unexpected_outcome' };
+        }
+
+        const [entry] = await db
+          .select({ id: walletLedgerEntries.id })
+          .from(walletLedgerEntries)
+          .where(and(
+            eq(walletLedgerEntries.operationId, operation.id),
+            eq(walletLedgerEntries.playerId, playerId),
+            eq(walletLedgerEntries.direction, 'credit'),
+            eq(walletLedgerEntries.source, operation.source),
+            eq(walletLedgerEntries.betId, betId),
+          ))
+          .limit(1);
+
+        return entry ? { status: 'credited' } : { status: 'incident', reason: 'ledger_missing' };
       });
     },
 

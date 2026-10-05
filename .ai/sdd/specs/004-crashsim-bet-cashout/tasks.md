@@ -43,7 +43,7 @@ T1 completa as duas consultas financeiras específicas que o design F04 precisa.
 | Perguntas críticas respondidas | Pass | Q-001 e Q-002 estão respondidas; a ausência de estorno automático é risco aceito para o MVP local. |
 | Tasks têm dependências, critérios, arquivos e verificação | Pass | Cada tarefa lista esses elementos e inclui os casos críticos relevantes. |
 | Comandos de verificação conhecidos ou marcados como manuais | Pass | Typecheck/testes Bun, migração em PostgreSQL dedicado, Compose e fluxo manual Crashsim estão descritos. |
-| F02/F03 implementadas e verificadas | Pendente | Pré-requisito externo; F02 e F03 estão aprovadas, mas sua implementação foi adiada. |
+| F02/F03 implementadas e verificadas | Pass | F02 e F03 foram implementadas e verificadas; F03 está commitada antes do início de F04. |
 
 ## Slices de implementação
 
@@ -77,18 +77,18 @@ T1 completa as duas consultas financeiras específicas que o design F04 precisa.
 
 ### Trabalho
 
-- [ ] Exportar de `financial.module.ts` `findBetDebitForCommand({ playerId, roundId, amount, createdAt })`, consultando somente operações do jogador, rodada, valor e intervalo definidos pelo design.
-- [ ] Retornar todos os candidatos correspondentes, com `betId` e resultado `applied` ou `insufficient_funds`; nenhum candidato, um candidato e múltiplos candidatos devem permanecer distinguíveis.
-- [ ] Exportar `getCashoutCreditStatus({ playerId, betId })`, retornando `credited`, `pending` ou incidente conhecido sem expor schema/linhas financeiras privadas.
-- [ ] Manter toda consulta e tipo do módulo financeiro encapsulados; `game` recebe somente os métodos e DTOs públicos.
-- [ ] Cobrir buscas sem resultado, candidato único, múltiplos candidatos, outro jogador, intervalo anterior/posterior à reserva e crédito pendente/confirmado.
+- [x] Exportar de `financial.module.ts` `findBetDebitForCommand({ playerId, roundId, amount, createdAt })`, consultando somente operações do jogador, rodada, valor e intervalo definidos pelo design.
+- [x] Retornar todos os candidatos correspondentes, com `betId` e resultado `applied` ou `insufficient_funds`; nenhum candidato, um candidato e múltiplos candidatos devem permanecer distinguíveis.
+- [x] Exportar `getCashoutCreditStatus({ playerId, betId })`, retornando `credited`, `pending` ou incidente conhecido sem expor schema/linhas financeiras privadas.
+- [x] Manter toda consulta e tipo do módulo financeiro encapsulados; `game` recebe somente os métodos e DTOs públicos.
+- [x] Cobrir buscas sem resultado, candidato único, múltiplos candidatos, outro jogador, intervalo anterior/posterior à reserva e crédito pendente/confirmado.
 
 ### Critérios de aceite
 
-- [ ] Uma busca com candidato único retorna a operação e o `betId` corretos; múltiplos resultados não são reduzidos por heurística.
-- [ ] `getCashoutCreditStatus` não informa crédito confirmado antes de existir operação financeira persistida para o jogador e `betId`.
-- [ ] `financial.module.ts` expõe apenas funções/DTOs necessários; `game` não precisa importar schema, tabela ou serviço privado financeiro.
-- [ ] A consulta usa o mesmo timestamp do banco registrado na reserva do comando e não inclui débitos anteriores a ela.
+- [x] Uma busca com candidato único retorna a operação e o `betId` corretos; múltiplos resultados não são reduzidos por heurística.
+- [x] `getCashoutCreditStatus` não informa crédito confirmado antes de existir operação financeira persistida para o jogador e `betId`.
+- [x] `financial.module.ts` expõe apenas funções/DTOs necessários; `game` não precisa importar schema, tabela ou serviço privado financeiro.
+- [x] A consulta usa o mesmo timestamp do banco registrado na reserva do comando e não inclui débitos anteriores a ela.
 
 ### Arquivos
 
@@ -98,9 +98,9 @@ T1 completa as duas consultas financeiras específicas que o design F04 precisa.
 
 ### Verificação
 
-- [ ] `cd operator && bun run typecheck && bun test`.
-- [ ] Em PostgreSQL dedicado, validar candidato único/múltiplo, filtros de jogador/rodada/valor/tempo e estado de crédito.
-- [ ] Inspecionar imports de `game` e confirmar ausência de dependência em arquivos privados de financial.
+- [x] `cd operator && bun run typecheck && bun run test:e2e` (a suíte Bun completa executa com PostgreSQL temporário dedicado).
+- [x] Em PostgreSQL dedicado, validar candidato único/múltiplo, filtros de jogador/rodada/valor/tempo e estado de crédito.
+- [x] Inspecionar imports de `game` e confirmar ausência de dependência em arquivos privados de financial.
 
 ## Task T2: Persistir comandos e apostas do módulo game
 

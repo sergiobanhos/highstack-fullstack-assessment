@@ -46,7 +46,7 @@ O serviço não executa polling de fundo. O retry do cliente com a mesma `Idempo
 
 - `auth.requireUser(request) -> AuthenticatedPlayer`: identidade persistente da sessão do operador.
 - `financial.ensureWallet(playerId)`: provisiona a carteira antes de criar a sessão Crashsim.
-- `financial.findBetDebitForCommand({ playerId, roundId, amount, createdAt })`: retorna nenhum, um ou vários débitos correspondentes criados depois da reserva do comando, com `betId` e resultado (`applied` ou `insufficient_funds`). Mais de um candidato é ambíguo e não autoriza escolher um por heurística.
+- `financial.findBetDebitForCommand({ playerId, roundId, amount, createdAt })`: `createdAt` é o timestamp UTC exato da reserva, preservado como string com seis casas de microssegundos. Retorna nenhum, um ou vários débitos correspondentes criados estritamente depois dela, com `betId` e resultado (`applied` ou `insufficient_funds`). Mais de um candidato é ambíguo e não autoriza escolher um por heurística.
 - `financial.getCashoutCreditStatus({ playerId, betId })`: informa `credited`, `pending` ou incidente conhecido sem expor tabelas do módulo.
 
 Os dois últimos são leituras públicas sobre dados já definidos em F03 (`financial_operations` e chave de cashout por `betId`). Devem ser implementados/exportados pelo módulo `financial` antes da F04; `game` não consulta schema, tabela ou conexão privada de `financial`. `financial.creditCashoutOnce` continua sendo usado pelo webhook/F06, não pelo controller de cashout.

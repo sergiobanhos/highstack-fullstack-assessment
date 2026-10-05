@@ -170,6 +170,8 @@ function mapServiceError(error: unknown): { status: number; code: string; messag
       return { status: 409, code: 'IDEMPOTENCY_CONFLICT', message: 'Operation conflicts with an existing transaction', reason: 'idempotency_conflict' };
     case 'INVALID_PAGE':
       return { status: 400, code: 'INVALID_PAYLOAD', message: 'Request payload is invalid', reason: 'invalid_page' };
+    case 'INVALID_LOOKUP':
+      return { status: 400, code: 'INVALID_PAYLOAD', message: 'Request payload is invalid', reason: 'invalid_lookup' };
     case 'STORAGE_UNAVAILABLE':
       return { status: 503, code: 'SERVICE_UNAVAILABLE', message: 'Financial service is unavailable', reason: 'storage_unavailable' };
   }
