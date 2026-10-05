@@ -2,7 +2,7 @@
 
 > Requirements: @requirements.md
 > Design: @design.md
-> Status: Draft
+> Status: Approved
 
 ## Cobertura dos requisitos
 

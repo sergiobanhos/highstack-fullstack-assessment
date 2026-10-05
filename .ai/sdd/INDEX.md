@@ -31,11 +31,11 @@
 | 003 | Carteira, ledger e webhooks financeiros | implementation:done | `.ai/sdd/specs/003-financial-wallet-ledger/requirements.md` (approved; Q-001–Q-005 respondidos; D-009 definido) | `.ai/sdd/specs/003-financial-wallet-ledger/design.md` (approved) | `.ai/sdd/specs/003-financial-wallet-ledger/tasks.md` (T1–T5 concluídas e verificadas) | — |
 | 004 | Sessão Crashsim, aposta e cashout | implementation:in-progress | `.ai/sdd/specs/004-crashsim-bet-cashout/requirements.md` (approved; Q-001–Q-002 respondidos) | `.ai/sdd/specs/004-crashsim-bet-cashout/design.md` (approved; risco residual de débito sem estorno no MVP) | `.ai/sdd/specs/004-crashsim-bet-cashout/tasks.md` (T1–T7 implementadas e verificadas; smoke test manual com Crashsim real pendente) | — |
 | 005 | F05 — Payout local de carteira | implementation:in-progress | `.ai/sdd/specs/005-payout/requirements.md` (approved; Q-001 respondido; D-005 definido) | `.ai/sdd/specs/005-payout/design.md` (approved) | `.ai/sdd/specs/005-payout/tasks.md` (approved; execução T1–T5) | — |
-| 006 | F06 — Interface inicial do jogador | tasks:draft | `.ai/sdd/specs/006-player-frontend/requirements.md` (approved; inclui payout local) | `.ai/sdd/specs/006-player-frontend/design.md` (approved; contrato de payout conforme F05) | `.ai/sdd/specs/006-player-frontend/tasks.md` (draft; T1–T5 avançam enquanto T6 aguarda F05) | — |
+| 006 | F06 — Interface inicial do jogador | tasks:approved | `.ai/sdd/specs/006-player-frontend/requirements.md` (approved; inclui payout local) | `.ai/sdd/specs/006-player-frontend/design.md` (approved; contrato de payout conforme F05) | `.ai/sdd/specs/006-player-frontend/tasks.md` (approved; T1–T5 podem avançar, T6 aguarda F05) | — |
 
 ## Handoff
 
-- `.ai/sdd/handoff/sdd-brief.md`: available (F02 and F03 done; F04 tasks approved and ready to implement)
+- `.ai/sdd/handoff/sdd-brief.md`: available (F05 implementation in progress; F06 tasks approved; F06 implementation deferred)
 
 ## Next Actions
 
@@ -46,7 +46,7 @@
 - [x] Reorder roadmap by user direction: F05 payout, F06 frontend, F07 operational reconciliation
 - [x] Create F06 requirements draft and non-binding design with ASCII prototypes
 - [x] Approve F06 requirements and design; create F06 task draft
-- [ ] Approve F06 tasks
+- [x] Approve F06 tasks
 - [x] Implement feature 001: align T2, then continue T3–T5
 - [x] Commit feature 001 (`ebb9f95`)
 - [x] Approve the revised roadmap for database, auth, financial, game commands, and client integration

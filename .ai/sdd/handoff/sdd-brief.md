@@ -1,12 +1,12 @@
-# SDD Handoff Brief: Implementação por dependência — F02 → F03 → F04 → F05
+# SDD Handoff Brief: Implementação por dependência — F02 → F06
 
-> Status: F02/F03 concluídas; F04 implementada com smoke test real pendente; F05 implementação em andamento
-> Readiness: F05 pronta para implementação; F04 mantém a verificação manual com Crashsim real como pendência separada.
+> Status: F02/F03 concluídas; F04 com smoke test real pendente; F05 implementação em andamento; F06 tasks aprovadas
+> Readiness: F06 T1–T5 prontas para iniciar quando o usuário autorizar; T6 depende de F05 concluída. Implementação F06 ainda não iniciada conforme pedido do usuário.
 > Updated: 2026-10-05
 
 ## Metadata
 
-- **Feature atual:** F04 — `.ai/sdd/specs/004-crashsim-bet-cashout/` (T5)
+- **Trabalho ativo:** F05 — `.ai/sdd/specs/005-payout/` (implementação em andamento); F06 tasks aprovadas, aguardando instrução para iniciar.
 - **F02 aprovado:** `.ai/sdd/specs/002-database-auth/`
 - **F03 requirements:** `.ai/sdd/specs/003-financial-wallet-ledger/requirements.md` (approved)
 - **F03 design:** `.ai/sdd/specs/003-financial-wallet-ledger/design.md` (approved)
@@ -69,12 +69,12 @@
 - **Verificação F04 T6:** `bun run typecheck && bun run test:e2e` passou; PostgreSQL temporário isolado executou 133 testes/688 expectativas. Cobertos cashout normal, replay e conflito de chave, concorrência de chaves, timeout com GET `active`/`cashed_out`, consulta indisponível, recuperação de unknown após recriar o serviço sem novo POST, ownership, stream/fase/status, settlement pendente/confirmado e payout inseguro. O teste com Crashsim real e `CASHOUT_TIMEOUT=1` fica para T7 após a composição REST.
 - **F04 T7 implementada:** REST autenticada para sessão, apostas, leituras e cashout; `server.ts` monta `auth` e `financial` antes de injetar seus contratos públicos em `game.module.ts`. `GET /game/bets/:betId` também retoma a reconciliação de cashout desconhecido após reload, sem novo POST. O README agora documenta o fluxo REST, unknown, cashout, settle e limites do MVP.
 - **Verificação F04 T7:** `bun run typecheck`, `bun run test:e2e` e `docker compose config --quiet` passaram. O PostgreSQL temporário isolado executou 141 testes/774 expectativas; a integração cobre cadastro/login, top-up, sessão sem expor `sessionId`, aposta/débito, replay idempotente, resposta de cashout perdida após mutação, GET autoritativo, crédito financeiro atrasado, reload e saldo final correto. O HTTP Crashsim e o stream foram simulados pelo contrato; o smoke test com o processo Crashsim real ainda está pendente.
-- **Próximo passo:** executar o smoke test manual com Crashsim real registrado em T6/T7; depois disso, revisar e marcar F04 completa.
+- **Próximo passo F04:** executar o smoke test manual com Crashsim real registrado em T6/T7; depois disso, revisar e marcar F04 completa.
 
 ## Dependências de roadmap ainda não especificadas
 
 - F04: requirements, design e tasks aprovados para sessão Crashsim, apostas, cashout, propriedade, idempotência e reconciliação de resultados desconhecidos; estorno automático de débito de bet rejeitado foi deixado fora do MVP por decisão do usuário.
-- F05: integração do cliente autenticado com saldo, jogo e SSE.
+- F06: integração do cliente autenticado com saldo, jogo e SSE.
 
 ## Prontidão
 
@@ -132,9 +132,57 @@ Testes PostgreSQL devem usar banco de teste dedicado e migrado; não apontar com
 
 ### Handoff readiness
 
-- **Ready for Implementation:** yes
+- **Ready for Implementation:** no — F05 já está em andamento.
 - **Ready for QA:** no
 - **Ready for Release:** no
-- **Blockers:** N/A para iniciar; a verificação PostgreSQL requer banco dedicado de teste.
+- **Blockers:** T4–T5 ainda precisam ser concluídas; a verificação PostgreSQL requer banco dedicado de teste.
 - **Progress:** T1 (schema/migration), T2 (débito idempotente) e T3 (status/histórico com ownership e cursor) concluídas; T4–T5 pendentes.
 - **Recommended Next Action:** executar T4, o processador local recuperável e seus hooks de lifecycle.
+
+## F06 aprovada: interface inicial do jogador
+
+### Metadata
+
+- **Spec ID:** `006-player-frontend`
+- **Spec Path:** `.ai/sdd/specs/006-player-frontend/`
+- **Current `.status`:** `.ai/sdd/specs/006-player-frontend/.status` (`tasks:approved`)
+- **Requirements:** `.ai/sdd/specs/006-player-frontend/requirements.md` (approved)
+- **Design:** `.ai/sdd/specs/006-player-frontend/design.md` (approved)
+- **Tasks:** `.ai/sdd/specs/006-player-frontend/tasks.md` (approved)
+- **Decisions:** D-001 payout local incluído; D-002 login automático após cadastro; D-003 client usa somente contratos públicos do operador.
+
+### Resumo e escopo
+
+Client local em React 19, TypeScript e Vite para cadastro/login, stream de rodada Crashsim, carteira USD, top-up local, bets, cashout, recuperação por REST, payout simulado e painel de diagnóstico. O estado financeiro confirmado vem do operador; o browser não chama a engine. Não inclui meios de pagamento reais, outro jogo ou UI de produção.
+
+### Design aprovado
+
+- Mantine para componentes; API REST tipada em `client/src/operator-api.ts`; estado transitório fica nas telas, sem React Query ou cache global.
+- `App.tsx` restaura sessão via `sessionStorage` e `/auth/me`; `auth-screen.tsx`, `game-screen.tsx` e `wallet-screen.tsx` separam as telas principais.
+- SSE `/game/events` fornece rodada global e saúde. Dados pessoais de carteira/bets/payout vêm por REST.
+- Reconexão mantém o último snapshot congelado e bloqueia bets/cashout até snapshot sincronizado. Comandos desconhecidos usam leituras para reconciliação, sem novo POST às cegas.
+- Dinheiro trafega em centavos inteiros. Top-up e payout são identificados como testes locais; payout usa apenas a API F05 persistida.
+
+### Plano de implementação aprovado
+
+- **Ordem:** T1 fundação/Mantine/API/proxy → T2 auth → T3 carteira/top-up → T4 SSE/diagnóstico → T5 bet/cashout/recuperação → T6 payout.
+- **Dependências:** T4 pode seguir T2 em paralelo com T3; T5 depende de T2–T4; T6 depende de T3 e de F05 `implementation:done`.
+- **Arquivos principais:** `client/src/App.tsx`, `main.tsx`, `operator-api.ts`, `auth-screen.tsx`, `game-screen.tsx`, `wallet-screen.tsx`, `operator-events.client.ts`, `client/vite.config.ts` e `docker-compose.yml`.
+
+### Verificação planejada
+
+```text
+cd client && bun run typecheck
+cd client && bun test
+cd client && bun run build
+docker compose config
+```
+
+Após F05, validar localmente cadastro/login, reload autenticado, top-up/histórico, bet/cashout, estado desconhecido, reconexão com `DROP_WS_EVERY=8 REORDER=1`, payout `processing` → `done`, recuperação após reload e logout. A stream não tem replay; a verificação deve confirmar ressincronização por snapshot, não reprodução de eventos perdidos.
+
+### Handoff readiness
+
+- **Ready for Implementation:** T1–T5 estão prontas após as aprovações; T6 aguarda F05 concluída.
+- **Implementation started:** no — o usuário pediu explicitamente para não implementar ainda.
+- **Open questions:** nenhuma crítica.
+- **Recommended Next Action:** aguardar instrução do usuário antes de iniciar qualquer task F06; manter T6 dependente de F05.
