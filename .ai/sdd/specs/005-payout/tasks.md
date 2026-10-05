@@ -124,17 +124,17 @@
 
 ### Trabalho
 
-- [ ] Adicionar ao serviço financeiro consulta de payout por `payoutId` e identidade do jogador, retornando nenhum resultado para referência ausente ou alheia.
-- [ ] Adicionar listagem do histórico próprio por `(created_at, id)` em ordem decrescente, com cursor keyset opaco e limite padrão 50/máximo 100.
-- [ ] Projetar os campos do DTO a partir da operação e estado persistidos: `id`, `amountCents`, `currency`, `status`, `requestedAt`, `completedAt` e `simulated`.
-- [ ] Manter precisão de timestamp suficiente para a paginação keyset e serializar somente valores dentro do limite seguro de número.
+- [x] Adicionar ao serviço financeiro consulta de payout por `payoutId` e identidade do jogador, retornando nenhum resultado para referência ausente ou alheia.
+- [x] Adicionar listagem do histórico próprio por `(created_at, id)` em ordem decrescente, com cursor keyset opaco e limite padrão 50/máximo 100.
+- [x] Projetar os campos do DTO a partir da operação e estado persistidos: `id`, `amountCents`, `currency`, `status`, `requestedAt`, `completedAt` e `simulated`.
+- [x] Manter precisão de timestamp suficiente para a paginação keyset e serializar somente valores dentro do limite seguro de número.
 
 ### Critérios de aceitação
 
-- [ ] Consulta individual sempre filtra pelo jogador autenticado e payout; referência pertencente a outra pessoa não retorna valor, status ou proprietário.
-- [ ] Histórico contém só registros próprios, ordena por data e ID de forma estável e não duplica/omite itens ao paginar enquanto chegam novas solicitações.
-- [ ] Itens `processing` e `done` aparecem sob o mesmo ID; `completedAt` é nulo antes da conclusão e preenchido depois.
-- [ ] Cursor inválido, limite fora de 1–100 ou resultado monetário inseguro é recusado sem ampliar escopo ou truncar silenciosamente dados.
+- [x] Consulta individual sempre filtra pelo jogador autenticado e payout; referência pertencente a outra pessoa não retorna valor, status ou proprietário.
+- [x] Histórico contém só registros próprios, ordena por data e ID de forma estável e não duplica/omite itens ao paginar enquanto chegam novas solicitações.
+- [x] Itens `processing` e `done` aparecem sob o mesmo ID; `completedAt` é nulo antes da conclusão e preenchido depois.
+- [x] Cursor inválido, limite fora de 1–100 ou resultado monetário inseguro é recusado sem ampliar escopo ou truncar silenciosamente dados.
 
 ### Arquivos
 
@@ -143,8 +143,8 @@
 
 ### Verificação
 
-- [ ] Com PostgreSQL de teste dedicado migrado, `cd operator && bun test src/modules/financial/financial.service.test.ts` cobre isolamento de proprietário, ordenação, paginação e estados.
-- [ ] `cd operator && bun run typecheck` passa.
+- [x] Com PostgreSQL de teste dedicado migrado, `cd operator && bun test src/modules/financial/financial.service.test.ts` cobre isolamento de proprietário, ordenação, paginação e estados.
+- [x] `cd operator && bun run typecheck` passa.
 
 ## T4 — Concluir a simulação local e recuperar após restart
 

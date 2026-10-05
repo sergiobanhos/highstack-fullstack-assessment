@@ -105,6 +105,22 @@ export interface PayoutRecord {
   completedAt: string | null;
 }
 
+export interface PayoutCursor {
+  /** UTC ISO timestamp with microsecond precision, kept losslessly for keyset paging. */
+  requestedAt: string;
+  id: string;
+}
+
+export interface PayoutPageInput {
+  limit: number;
+  before?: PayoutCursor;
+}
+
+export interface PayoutPage {
+  items: PayoutRecord[];
+  hasMore: boolean;
+}
+
 export interface PayoutRequestResult extends FinancialResult {
   payout: PayoutRecord | null;
 }
@@ -140,6 +156,24 @@ interface OperationInput {
 
 type FinancialTransaction = Parameters<Parameters<OperatorDatabase['transaction']>[0]>[0];
 type AppliedOperationEffect = (tx: FinancialTransaction, operationId: string) => Promise<void>;
+
+const payoutProjection = {
+  id: payouts.id,
+  amountCents: financialOperations.amountCents,
+  status: payouts.status,
+  requestedAt: sql<string>`to_char(${financialOperations.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+  completedAt: sql<string | null>`CASE WHEN ${payouts.completedAt} IS NULL THEN NULL ELSE to_char(${payouts.completedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END`,
+};
+
+function payoutRecord(row: {
+  id: string;
+  amountCents: bigint;
+  status: string;
+  requestedAt: string;
+  completedAt: string | null;
+}): PayoutRecord {
+  return { ...row, status: row.status as PayoutRecord['status'] };
+}
 
 interface Reservation {
   id: string;
@@ -200,6 +234,8 @@ export interface FinancialService {
   getCashoutCreditStatus(input: { playerId: string; betId: string }): Promise<CashoutCreditStatus>;
   topUp(input: TopUpInput): Promise<FinancialResult>;
   requestPayout(input: PayoutRequestInput): Promise<PayoutRequestResult>;
+  getPayout(input: { playerId: string; payoutId: string }): Promise<PayoutRecord | null>;
+  listPayouts(playerId: string, page: PayoutPageInput): Promise<PayoutPage>;
 }
 
 /**
@@ -578,21 +614,67 @@ export function createFinancialService({ db }: { db: OperatorDatabase }): Financ
 
       return withStorageErrors(async () => {
         const [row] = await db
-          .select({
-            id: payouts.id,
-            amountCents: financialOperations.amountCents,
-            status: payouts.status,
-            requestedAt: sql<string>`to_char(${financialOperations.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
-            completedAt: sql<string | null>`CASE WHEN ${payouts.completedAt} IS NULL THEN NULL ELSE to_char(${payouts.completedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END`,
-          })
+          .select(payoutProjection)
           .from(payouts)
           .innerJoin(financialOperations, eq(payouts.id, financialOperations.id))
           .where(and(eq(payouts.id, result.operationId), eq(financialOperations.playerId, input.playerId)))
           .limit(1);
         if (!row) throw new FinancialServiceError('STORAGE_UNAVAILABLE');
+        return { ...result, payout: payoutRecord(row) };
+      });
+    },
+
+    getPayout({ playerId, payoutId }) {
+      if (!playerId || !payoutId) {
+        return Promise.reject(new FinancialServiceError('INVALID_LOOKUP'));
+      }
+      return withStorageErrors(async () => {
+        const [row] = await db
+          .select(payoutProjection)
+          .from(payouts)
+          .innerJoin(financialOperations, eq(payouts.id, financialOperations.id))
+          .where(and(eq(payouts.id, payoutId), eq(financialOperations.playerId, playerId)))
+          .limit(1);
+        return row ? payoutRecord(row) : null;
+      });
+    },
+
+    listPayouts(playerId, page) {
+      if (!playerId || !Number.isSafeInteger(page.limit) || page.limit < 1 || page.limit > 100) {
+        return Promise.reject(new FinancialServiceError('INVALID_PAGE'));
+      }
+      if (page.before && (
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(page.before.id) ||
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(page.before.requestedAt) ||
+        Number.isNaN(Date.parse(page.before.requestedAt))
+      )) {
+        return Promise.reject(new FinancialServiceError('INVALID_PAGE'));
+      }
+      return withStorageErrors(async () => {
+        const cursorTimestamp = page.before
+          ? sql`${page.before.requestedAt}::timestamptz`
+          : undefined;
+        const cursorCondition = page.before
+          ? or(
+              lt(financialOperations.createdAt, cursorTimestamp!),
+              and(
+                eq(financialOperations.createdAt, cursorTimestamp!),
+                lt(payouts.id, page.before.id),
+              ),
+            )
+          : undefined;
+        const rows = await db
+          .select(payoutProjection)
+          .from(payouts)
+          .innerJoin(financialOperations, eq(payouts.id, financialOperations.id))
+          .where(cursorCondition
+            ? and(eq(financialOperations.playerId, playerId), cursorCondition)
+            : eq(financialOperations.playerId, playerId))
+          .orderBy(desc(financialOperations.createdAt), desc(payouts.id))
+          .limit(page.limit + 1);
         return {
-          ...result,
-          payout: { ...row, status: row.status as PayoutRecord['status'] },
+          items: rows.slice(0, page.limit).map(payoutRecord),
+          hasMore: rows.length > page.limit,
         };
       });
     },

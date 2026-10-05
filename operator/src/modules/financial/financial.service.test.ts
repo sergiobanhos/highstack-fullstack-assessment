@@ -674,6 +674,76 @@ if (!testDatabaseUrl) {
       }
     });
 
+    test('reads only owned payouts and pages history with a stable timestamp/id cursor', async () => {
+      const playerId = randomUUID();
+      const otherPlayerId = randomUUID();
+      const ownPayouts = [] as Awaited<ReturnType<typeof service.requestPayout>>[];
+      let otherPayout: Awaited<ReturnType<typeof service.requestPayout>> | undefined;
+      try {
+        await service.ensureWallet(playerId);
+        await service.ensureWallet(otherPlayerId);
+        await service.topUp({ playerId, amount: 700, idempotencyKey: randomUUID() });
+        await service.topUp({ playerId: otherPlayerId, amount: 200, idempotencyKey: randomUUID() });
+        for (const amount of [100, 200, 300]) {
+          ownPayouts.push(await service.requestPayout({
+            playerId, amount, idempotencyKey: randomUUID(),
+          }));
+        }
+        otherPayout = await service.requestPayout({
+          playerId: otherPlayerId, amount: 150, idempotencyKey: randomUUID(),
+        });
+
+        for (const [index, result] of ownPayouts.entries()) {
+          await connection.db.update(financialOperations)
+            .set({ createdAt: new Date(Date.UTC(2025, 0, 1, 0, 0, index)) })
+            .where(eq(financialOperations.id, result.operationId));
+        }
+
+        const firstPage = await service.listPayouts(playerId, { limit: 2 });
+        expect(firstPage.items).toHaveLength(2);
+        expect(firstPage.hasMore).toBe(true);
+        expect(firstPage.items.every(({ status }) => status === 'processing')).toBe(true);
+        expect(firstPage.items.every(({ requestedAt }) => /\.\d{6}Z$/.test(requestedAt))).toBe(true);
+
+        const cursorRecord = firstPage.items.at(-1)!;
+        const insertedAfterPage = await service.requestPayout({
+          playerId, amount: 50, idempotencyKey: randomUUID(),
+        });
+        const secondPage = await service.listPayouts(playerId, {
+          limit: 2,
+          before: { requestedAt: cursorRecord.requestedAt, id: cursorRecord.id },
+        });
+        expect(secondPage.items.map(({ id }) => id)).toEqual([ownPayouts[0]?.operationId]);
+        expect(secondPage.items.some(({ id }) => id === insertedAfterPage.payout?.id)).toBe(false);
+        expect(secondPage.hasMore).toBe(false);
+        expect(firstPage.items.some(({ id }) => id === otherPayout?.payout?.id)).toBe(false);
+
+        const ownStatus = await service.getPayout({
+          playerId, payoutId: ownPayouts[0]!.operationId,
+        });
+        const foreignStatus = await service.getPayout({
+          playerId, payoutId: otherPayout.payout!.id,
+        });
+        expect(ownStatus).toMatchObject({
+          id: ownPayouts[0]!.operationId,
+          amountCents: 100n,
+          status: 'processing',
+          completedAt: null,
+        });
+        expect(foreignStatus).toBeNull();
+        expect(await service.getPayout({ playerId, payoutId: randomUUID() })).toBeNull();
+        await expect(service.listPayouts(playerId, { limit: 101 })).rejects
+          .toMatchObject({ code: 'INVALID_PAGE' });
+        await expect(service.listPayouts(playerId, {
+          limit: 10,
+          before: { requestedAt: 'invalid', id: randomUUID() },
+        })).rejects.toMatchObject({ code: 'INVALID_PAGE' });
+      } finally {
+        await cleanWallet(playerId);
+        await cleanWallet(otherPlayerId);
+      }
+    });
+
     test('does not create a wallet or operation for an unknown engine player', async () => {
       const playerId = randomUUID();
       const txId = randomUUID();
