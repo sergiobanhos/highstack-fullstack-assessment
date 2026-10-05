@@ -183,23 +183,23 @@ T1 completa as duas consultas financeiras específicas que o design F04 precisa.
 
 ### Trabalho
 
-- [ ] Criar `game-command.service.ts` para obter/criar sessão por `playerId` autenticado, chamando `financial.ensureWallet` antes de `createSession`; manter `sessionId` em memória somente no servidor.
-- [ ] Validar aposta em centavos inteiros de 1 a 1.000.000.000 e normalizar `autoCashout` para centésimos dentro da faixa Crashsim.
-- [ ] Antes de enviar aposta, exigir snapshot conectado/sincronizado, estado `betting` e rodada correspondente; persistir comando e reservar vaga em transação curta antes da chamada externa.
-- [ ] Implementar replay da mesma chave/fingerprint, conflito para reuso divergente e serialização concorrente por constraints do banco; 402 persistido libera slot para nova chave.
-- [ ] Recriar sessão e repetir `POST /bets` no máximo uma vez somente após `session_not_found` definitivo; nunca repetir por timeout, conexão fechada, 5xx ou resposta inválida.
-- [ ] Para resposta ambígua, manter `unknown`, correlacionar débito via contrato financeiro e consultar `getBet` somente se houver candidato único; nunca escolher por aproximação nem repetir `POST /bets`.
-- [ ] Tratar débito `applied` com bet `rejected` como risco documentado: sem estorno automático nesta entrega; não declarar saldo compensado.
-- [ ] Adicionar testes de estado e integração com PostgreSQL dedicado para chave repetida, concorrência, 402, sessão inválida, timeout e reconciliação.
+- [x] Criar `game-command.service.ts` para obter/criar sessão por `playerId` autenticado, chamando `financial.ensureWallet` antes de `createSession`; manter `sessionId` em memória somente no servidor.
+- [x] Validar aposta em centavos inteiros de 1 a 1.000.000.000 e normalizar `autoCashout` para centésimos dentro da faixa Crashsim.
+- [x] Antes de enviar aposta, exigir snapshot conectado/sincronizado, estado `betting` e rodada correspondente; persistir comando e reservar vaga em transação curta antes da chamada externa.
+- [x] Implementar replay da mesma chave/fingerprint, conflito para reuso divergente e serialização concorrente por constraints do banco; 402 persistido libera slot para nova chave.
+- [x] Recriar sessão e repetir `POST /bets` no máximo uma vez somente após `session_not_found` definitivo; nunca repetir por timeout, conexão fechada, 5xx ou resposta inválida.
+- [x] Para resposta ambígua, manter `unknown`, correlacionar débito via contrato financeiro e consultar `getBet` somente se houver candidato único; nunca escolher por aproximação nem repetir `POST /bets`.
+- [x] Tratar débito `applied` com bet `rejected` como risco documentado: sem estorno automático nesta entrega; não declarar saldo compensado.
+- [x] Adicionar testes de estado e integração com PostgreSQL dedicado para chave repetida, concorrência, 402, sessão inválida, timeout e reconciliação.
 
 ### Critérios de aceite
 
-- [ ] O `playerId` usado em sessão, aposta e correlação vem da identidade autenticada fornecida pela camada pública; carteira é garantida antes da sessão.
-- [ ] Snapshot `reconnecting`/`synchronizing` ou rodada que não esteja `betting` impede chamada à engine.
-- [ ] Só um bet aceito/desconhecido por jogador/rodada permanece ativo; recusa 402 permite nova chave, resultado desconhecido bloqueia nova aposta na rodada.
-- [ ] Uma chave igual com mesmo conteúdo devolve resultado/reconcilia; conteúdo ou tipo diferente retorna conflito sem efeito externo.
-- [ ] Nenhum caminho de resultado ambíguo reenvia aposta; falha sem evidência autoritativa persiste como `unknown`.
-- [ ] Uma sessão perdida só provoca retry da aposta quando o Crashsim confirma `session_not_found`; falha de rede não é convertida nessa condição.
+- [x] O `playerId` usado em sessão, aposta e correlação vem da identidade autenticada fornecida pela camada pública; carteira é garantida antes da sessão.
+- [x] Snapshot `reconnecting`/`synchronizing` ou rodada que não esteja `betting` impede chamada à engine.
+- [x] Só um bet aceito/desconhecido por jogador/rodada permanece ativo; recusa 402 permite nova chave, resultado desconhecido bloqueia nova aposta na rodada.
+- [x] Uma chave igual com mesmo conteúdo devolve resultado/reconcilia; conteúdo ou tipo diferente retorna conflito sem efeito externo.
+- [x] Nenhum caminho de resultado ambíguo reenvia aposta; falha sem evidência autoritativa persiste como `unknown`.
+- [x] Uma sessão perdida só provoca retry da aposta quando o Crashsim confirma `session_not_found`; falha de rede não é convertida nessa condição.
 
 ### Arquivos
 
@@ -210,10 +210,10 @@ T1 completa as duas consultas financeiras específicas que o design F04 precisa.
 
 ### Verificação
 
-- [ ] `cd operator && bun run typecheck && bun test`.
-- [ ] Em PostgreSQL dedicado, testar duas apostas concorrentes, replay de chave, reuso conflitante, 402 após top-up e slot desconhecido.
-- [ ] Com Crashsim, validar débito aceito/recusado, `session_not_found`, timeout de criação e consulta de bet por candidato único.
-- [ ] Confirmar nos testes que não ocorre segundo `POST /bets` após resposta ambígua e que nenhuma compensação automática é criada.
+- [x] `cd operator && bun run typecheck && bun run test:e2e` (a suíte Bun completa executa em PostgreSQL temporário dedicado).
+- [x] Em PostgreSQL dedicado, testar duas apostas concorrentes, replay de chave, reuso conflitante, 402 após top-up e slot desconhecido.
+- [x] Com o contrato Crashsim simulado no serviço, validar débito aceito/recusado, `session_not_found`, timeout e consulta de bet por candidato único; o fluxo com engine real será exercitado em T7 após a composição da API.
+- [x] Confirmar nos testes que não ocorre segundo `POST /bets` após resposta ambígua e que nenhuma compensação automática é criada.
 
 ## Task T5: Implementar leitura autenticada e recuperação após reload
 
