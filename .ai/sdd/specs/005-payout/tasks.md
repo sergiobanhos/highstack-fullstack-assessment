@@ -91,19 +91,19 @@
 
 ### Trabalho
 
-- [ ] Adicionar `requestPayout` ao contrato/implementação do serviço financeiro, reutilizando o núcleo transacional de débito em vez de chamar `debit()` e inserir o payout em uma segunda transação.
-- [ ] Validar valor como inteiro positivo seguro em centavos e criar a chave `payout:<playerId>:<Idempotency-Key>` no namespace `business_key`.
-- [ ] Na mesma transação, bloquear a carteira, reservar/verificar idempotência, atualizar saldo, inserir operação e ledger e criar `payouts(status='processing', complete_after=now()+5s)`.
-- [ ] Persistir a recusa `insufficient_funds` para repetição estável da chave, sem alterar saldo, ledger ou criar linha em `payouts`.
-- [ ] Devolver o mesmo payout em replay aceito e recusar reutilização conflitante da chave; falha de qualquer escrita deve reverter toda a transação.
+- [x] Adicionar `requestPayout` ao contrato/implementação do serviço financeiro, reutilizando o núcleo transacional de débito em vez de chamar `debit()` e inserir o payout em uma segunda transação.
+- [x] Validar valor como inteiro positivo seguro em centavos e criar a chave `payout:<playerId>:<Idempotency-Key>` no namespace `business_key`.
+- [x] Na mesma transação, bloquear a carteira, reservar/verificar idempotência, atualizar saldo, inserir operação e ledger e criar `payouts(status='processing', complete_after=now()+5s)`.
+- [x] Persistir a recusa `insufficient_funds` para repetição estável da chave, sem alterar saldo, ledger ou criar linha em `payouts`.
+- [x] Devolver o mesmo payout em replay aceito e recusar reutilização conflitante da chave; falha de qualquer escrita deve reverter toda a transação.
 
 ### Critérios de aceitação
 
-- [ ] Uma solicitação aceita grava exatamente um débito, uma operação, um lançamento de ledger e um payout no mesmo commit.
-- [ ] Duas solicitações concorrentes com a mesma chave e conteúdo não duplicam débito, ledger ou payout; uma chave com valor divergente resulta em conflito sem nova mutação.
-- [ ] Payout concorrente com débito de aposta não permite saldo negativo; valor acima do saldo não cria payout nem ledger.
-- [ ] A repetição da chave recusada por saldo insuficiente continua recusada; após funding, uma chave nova pode ser aceita.
-- [ ] Erro entre atualização da carteira e gravação do payout reverte todas as alterações; o sucesso não é retornado antes da confirmação do commit.
+- [x] Uma solicitação aceita grava exatamente um débito, uma operação, um lançamento de ledger e um payout no mesmo commit.
+- [x] Duas solicitações concorrentes com a mesma chave e conteúdo não duplicam débito, ledger ou payout; uma chave com valor divergente resulta em conflito sem nova mutação.
+- [x] Payout concorrente com débito de aposta não permite saldo negativo; valor acima do saldo não cria payout nem ledger.
+- [x] A repetição da chave recusada por saldo insuficiente continua recusada; após funding, uma chave nova pode ser aceita.
+- [x] Erro entre atualização da carteira e gravação do payout reverte todas as alterações; o sucesso não é retornado antes da confirmação do commit.
 
 ### Arquivos
 
@@ -112,8 +112,8 @@
 
 ### Verificação
 
-- [ ] Com PostgreSQL de teste dedicado migrado, `cd operator && bun test src/modules/financial/financial.service.test.ts` cobre saldo, replay, conflito, rollback e concorrência.
-- [ ] `cd operator && bun run typecheck` passa.
+- [x] Com PostgreSQL de teste dedicado migrado, `cd operator && bun test src/modules/financial/financial.service.test.ts` cobre saldo, replay, conflito, rollback e concorrência.
+- [x] `cd operator && bun run typecheck` passa.
 
 ## T3 — Consultar status e histórico no escopo do jogador
 

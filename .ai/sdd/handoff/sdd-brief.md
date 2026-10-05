@@ -136,5 +136,5 @@ Testes PostgreSQL devem usar banco de teste dedicado e migrado; não apontar com
 - **Ready for QA:** no
 - **Ready for Release:** no
 - **Blockers:** N/A para iniciar; a verificação PostgreSQL requer banco dedicado de teste.
-- **Progress:** T1 (schema, migration, database readiness) concluída; T2–T5 pendentes.
-- **Recommended Next Action:** executar T2, o comando financeiro idempotente, e atualizar este brief com a evidência.
+- **Progress:** T1 (schema, migration, database readiness) e T2 (débito transacional idempotente) concluídas; T3–T5 pendentes.
+- **Recommended Next Action:** executar T3, as consultas próprias de status e histórico, e atualizar este brief com a evidência.

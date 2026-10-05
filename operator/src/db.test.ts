@@ -1,11 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { authSessions, players } from './modules/auth/auth.schema';
 import {
   financialOperations,
+  payouts,
   walletLedgerEntries,
   wallets,
 } from './modules/financial/financial.schema';
@@ -120,6 +121,7 @@ if (!testDatabaseUrl) {
     const businessKey = `top-up:${playerId}:${randomUUID()}`;
     const cashoutBetId = randomUUID();
     const cashoutBusinessKey = `cashout:${cashoutBetId}`;
+    const payoutBusinessKey = `payout:${playerId}:${randomUUID()}`;
 
     await connection.db.insert(players).values({
       id: playerId,
@@ -173,6 +175,26 @@ if (!testDatabaseUrl) {
         responseBalanceCents: 1_400n,
       })
       .returning({ id: financialOperations.id });
+    const [payoutOperation] = await connection.db
+      .insert(financialOperations)
+      .values({
+        playerId,
+        kind: 'debit',
+        source: 'payout',
+        amountCents: 50n,
+        businessKey: payoutBusinessKey,
+        outcome: 'applied',
+        responseBalanceCents: 750n,
+      })
+      .returning({ id: financialOperations.id });
+    const [payout] = await connection.db
+      .insert(payouts)
+      .values({
+        id: payoutOperation!.id,
+        status: 'processing',
+        completeAfter: new Date(Date.now() + 5_000),
+      })
+      .returning({ id: payouts.id });
     const [ledgerEntry] = await connection.db
       .insert(walletLedgerEntries)
       .values({
@@ -182,6 +204,17 @@ if (!testDatabaseUrl) {
         source: 'engine',
         amountCents: 100n,
         balanceAfterCents: 800n,
+      })
+      .returning({ id: walletLedgerEntries.id });
+    const [payoutLedgerEntry] = await connection.db
+      .insert(walletLedgerEntries)
+      .values({
+        operationId: payoutOperation!.id,
+        playerId,
+        direction: 'debit',
+        source: 'payout',
+        amountCents: 50n,
+        balanceAfterCents: 750n,
       })
       .returning({ id: walletLedgerEntries.id });
 
@@ -223,6 +256,16 @@ if (!testDatabaseUrl) {
         .from(walletLedgerEntries)
         .where(eq(walletLedgerEntries.id, ledgerEntry!.id));
       expect(persistedLedgerEntry?.id).toBe(ledgerEntry!.id);
+      const [persistedPayout] = await connection.db
+        .select({ id: payouts.id, status: payouts.status })
+        .from(payouts)
+        .where(eq(payouts.id, payout!.id));
+      expect(persistedPayout).toEqual({ id: payout!.id, status: 'processing' });
+      const [persistedPayoutLedgerEntry] = await connection.db
+        .select({ id: walletLedgerEntries.id })
+        .from(walletLedgerEntries)
+        .where(eq(walletLedgerEntries.id, payoutLedgerEntry!.id));
+      expect(persistedPayoutLedgerEntry?.id).toBe(payoutLedgerEntry!.id);
 
       await expectPostgresCode(
         connection.db.insert(players).values({
@@ -367,6 +410,47 @@ if (!testDatabaseUrl) {
         'financial_operations_business_key_unique',
       );
       await expectPostgresCode(
+        connection.db.insert(financialOperations).values({
+          playerId,
+          kind: 'credit',
+          source: 'payout',
+          amountCents: 1n,
+          outcome: 'applied',
+          responseBalanceCents: 900n,
+        }),
+        '23514',
+        'financial_operations_kind_source_check',
+      );
+      await expectPostgresCode(
+        connection.db.update(payouts).set({ status: 'done' }).where(eq(payouts.id, payout!.id)),
+        '23514',
+        'payouts_status_timestamps_check',
+      );
+      const [creditDirectionOperation] = await connection.db
+        .insert(financialOperations)
+        .values({
+          playerId,
+          kind: 'debit',
+          source: 'payout',
+          amountCents: 1n,
+          businessKey: `payout:${playerId}:${randomUUID()}`,
+          outcome: 'applied',
+          responseBalanceCents: 899n,
+        })
+        .returning({ id: financialOperations.id });
+      await expectPostgresCode(
+        connection.db.insert(walletLedgerEntries).values({
+          operationId: creditDirectionOperation!.id,
+          playerId,
+          direction: 'credit',
+          source: 'payout',
+          amountCents: 1n,
+          balanceAfterCents: 900n,
+        }),
+        '23514',
+        'wallet_ledger_entries_source_direction_check',
+      );
+      await expectPostgresCode(
         connection.db.insert(walletLedgerEntries).values({
           operationId: debit!.id,
           playerId,
@@ -415,6 +499,13 @@ if (!testDatabaseUrl) {
         'wallet_ledger_entries_operation_id_financial_operations_id_fk',
       );
     } finally {
+      const playerOperations = await connection.db
+        .select({ id: financialOperations.id })
+        .from(financialOperations)
+        .where(eq(financialOperations.playerId, playerId));
+      if (playerOperations.length > 0) {
+        await connection.db.delete(payouts).where(inArray(payouts.id, playerOperations.map(({ id }) => id)));
+      }
       await connection.db.delete(walletLedgerEntries).where(eq(walletLedgerEntries.playerId, playerId));
       await connection.db.delete(financialOperations).where(eq(financialOperations.playerId, playerId));
       await connection.db.delete(wallets).where(eq(wallets.playerId, playerId));

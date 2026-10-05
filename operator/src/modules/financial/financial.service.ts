@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gte, inArray, isNotNull, lt, or, sql } from 'drizzl
 import type { OperatorDatabase } from '../../db';
 import {
   financialOperations,
+  payouts,
   walletLedgerEntries,
   wallets,
 } from './financial.schema';
@@ -9,7 +10,7 @@ import {
 const MAX_SAFE_CENTS = 9_007_199_254_740_991n;
 
 export type FinancialOutcome = 'applied' | 'insufficient_funds' | 'balance_limit';
-export type FinancialSource = 'engine' | 'reconciliation' | 'test';
+export type FinancialSource = 'engine' | 'reconciliation' | 'test' | 'payout';
 
 export type FinancialErrorCode =
   | 'INVALID_AMOUNT'
@@ -90,6 +91,24 @@ export interface TopUpInput {
   idempotencyKey: string;
 }
 
+export interface PayoutRequestInput {
+  playerId: string;
+  amount: number;
+  idempotencyKey: string;
+}
+
+export interface PayoutRecord {
+  id: string;
+  amountCents: bigint;
+  status: 'processing' | 'done';
+  requestedAt: string;
+  completedAt: string | null;
+}
+
+export interface PayoutRequestResult extends FinancialResult {
+  payout: PayoutRecord | null;
+}
+
 /** Timestamp returned by the command reservation query, in UTC with microseconds. */
 export interface BetDebitLookupInput {
   playerId: string;
@@ -118,6 +137,9 @@ interface OperationInput {
   betId: string | null;
   roundId: string | null;
 }
+
+type FinancialTransaction = Parameters<Parameters<OperatorDatabase['transaction']>[0]>[0];
+type AppliedOperationEffect = (tx: FinancialTransaction, operationId: string) => Promise<void>;
 
 interface Reservation {
   id: string;
@@ -148,8 +170,9 @@ function asFinancialError(error: unknown): FinancialServiceError {
 }
 
 function sameCashoutSource(existing: FinancialSource, incoming: FinancialSource): boolean {
-  return existing === incoming ||
-    (existing !== 'test' && incoming !== 'test');
+  const isCashoutSource = (source: FinancialSource): source is 'engine' | 'reconciliation' =>
+    source === 'engine' || source === 'reconciliation';
+  return existing === incoming || (isCashoutSource(existing) && isCashoutSource(incoming));
 }
 
 function matchesOperation(
@@ -176,6 +199,7 @@ export interface FinancialService {
   findBetDebitForCommand(input: BetDebitLookupInput): Promise<BetDebitCandidate[]>;
   getCashoutCreditStatus(input: { playerId: string; betId: string }): Promise<CashoutCreditStatus>;
   topUp(input: TopUpInput): Promise<FinancialResult>;
+  requestPayout(input: PayoutRequestInput): Promise<PayoutRequestResult>;
 }
 
 /**
@@ -259,7 +283,10 @@ export function createFinancialService({ db }: { db: OperatorDatabase }): Financ
     return wallet;
   }
 
-  async function applyOperation(input: OperationInput): Promise<FinancialResult> {
+  async function applyOperation(
+    input: OperationInput,
+    onApplied?: AppliedOperationEffect,
+  ): Promise<FinancialResult> {
     return withStorageErrors(() => db.transaction(async (tx) => {
       const wallet = await readWalletForUpdate(tx, input.playerId);
       const reservation = await reserveOperation(tx, input);
@@ -316,6 +343,10 @@ export function createFinancialService({ db }: { db: OperatorDatabase }): Financ
         .update(financialOperations)
         .set({ outcome, responseBalanceCents })
         .where(eq(financialOperations.id, reservation.id));
+
+      if (outcome === 'applied' && onApplied) {
+        await onApplied(tx, reservation.id);
+      }
 
       return {
         operationId: reservation.id,
@@ -517,6 +548,52 @@ export function createFinancialService({ db }: { db: OperatorDatabase }): Financ
         businessKey: `top-up:${input.playerId}:${input.idempotencyKey}`,
         betId: null,
         roundId: null,
+      });
+    },
+
+    async requestPayout(input) {
+      const amountCents = amountInCents(input.amount);
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.idempotencyKey)) {
+        throw new FinancialServiceError('INVALID_IDEMPOTENCY_KEY');
+      }
+
+      const result = await applyOperation({
+        playerId: input.playerId,
+        kind: 'debit',
+        source: 'payout',
+        amountCents,
+        engineTxId: null,
+        businessKey: `payout:${input.playerId}:${input.idempotencyKey}`,
+        betId: null,
+        roundId: null,
+      }, async (tx, operationId) => {
+        await tx.insert(payouts).values({
+          id: operationId,
+          status: 'processing',
+          completeAfter: sql<Date>`now() + interval '5 seconds'`,
+        });
+      });
+
+      if (result.outcome !== 'applied') return { ...result, payout: null };
+
+      return withStorageErrors(async () => {
+        const [row] = await db
+          .select({
+            id: payouts.id,
+            amountCents: financialOperations.amountCents,
+            status: payouts.status,
+            requestedAt: sql<string>`to_char(${financialOperations.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+            completedAt: sql<string | null>`CASE WHEN ${payouts.completedAt} IS NULL THEN NULL ELSE to_char(${payouts.completedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END`,
+          })
+          .from(payouts)
+          .innerJoin(financialOperations, eq(payouts.id, financialOperations.id))
+          .where(and(eq(payouts.id, result.operationId), eq(financialOperations.playerId, input.playerId)))
+          .limit(1);
+        if (!row) throw new FinancialServiceError('STORAGE_UNAVAILABLE');
+        return {
+          ...result,
+          payout: { ...row, status: row.status as PayoutRecord['status'] },
+        };
       });
     },
   };

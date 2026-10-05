@@ -1,11 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { eq, sql } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createDatabase } from '../../db';
 import {
   financialOperations,
+  payouts,
   walletLedgerEntries,
   wallets,
 } from './financial.schema';
@@ -34,6 +35,13 @@ if (!testDatabaseUrl) {
   const migrationsFolder = fileURLToPath(new URL('../../../drizzle', import.meta.url));
 
   async function cleanWallet(playerId: string): Promise<void> {
+    const operations = await connection.db
+      .select({ id: financialOperations.id })
+      .from(financialOperations)
+      .where(eq(financialOperations.playerId, playerId));
+    if (operations.length > 0) {
+      await connection.db.delete(payouts).where(inArray(payouts.id, operations.map(({ id }) => id)));
+    }
     await connection.db.delete(walletLedgerEntries).where(eq(walletLedgerEntries.playerId, playerId));
     await connection.db.delete(financialOperations).where(eq(financialOperations.playerId, playerId));
     await connection.db.delete(wallets).where(eq(wallets.playerId, playerId));
@@ -44,6 +52,14 @@ if (!testDatabaseUrl) {
       .select()
       .from(walletLedgerEntries)
       .where(eq(walletLedgerEntries.playerId, playerId));
+  }
+
+  async function payoutsFor(playerId: string) {
+    return connection.db
+      .select({ id: payouts.id })
+      .from(payouts)
+      .innerJoin(financialOperations, eq(payouts.id, financialOperations.id))
+      .where(eq(financialOperations.playerId, playerId));
   }
 
   async function ledgerNet(playerId: string): Promise<bigint> {
@@ -529,6 +545,131 @@ if (!testDatabaseUrl) {
         expect(await ledgerFor(playerId)).toHaveLength(2);
         expect(await ledgerNet(playerId)).toBe(BigInt(Number.MAX_SAFE_INTEGER));
       } finally {
+        await cleanWallet(playerId);
+      }
+    });
+
+    test('requests a payout once and keeps accepted and insufficient-funds retries stable', async () => {
+      const playerId = randomUUID();
+      const acceptedKey = randomUUID();
+      const insufficientKey = randomUUID();
+      try {
+        await service.ensureWallet(playerId);
+        await service.topUp({ playerId, amount: 1_000, idempotencyKey: randomUUID() });
+
+        const first = await service.requestPayout({
+          playerId, amount: 400, idempotencyKey: acceptedKey,
+        });
+        const replay = await service.requestPayout({
+          playerId, amount: 400, idempotencyKey: acceptedKey,
+        });
+        await expect(service.requestPayout({
+          playerId, amount: 401, idempotencyKey: acceptedKey,
+        })).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
+
+        expect(first).toMatchObject({ outcome: 'applied', balanceCents: 600n, replayed: false });
+        expect(first.payout).toMatchObject({
+          id: first.operationId,
+          amountCents: 400n,
+          status: 'processing',
+          completedAt: null,
+        });
+        expect(replay).toMatchObject({
+          operationId: first.operationId,
+          outcome: 'applied',
+          replayed: true,
+          payout: first.payout,
+        });
+
+        const insufficient = await service.requestPayout({
+          playerId, amount: 601, idempotencyKey: insufficientKey,
+        });
+        const insufficientReplay = await service.requestPayout({
+          playerId, amount: 601, idempotencyKey: insufficientKey,
+        });
+        expect(insufficient).toMatchObject({
+          outcome: 'insufficient_funds', balanceCents: 600n, replayed: false, payout: null,
+        });
+        expect(insufficientReplay).toMatchObject({
+          operationId: insufficient.operationId,
+          outcome: 'insufficient_funds', balanceCents: 600n, replayed: true, payout: null,
+        });
+        expect(await service.getBalance(playerId)).toEqual({ playerId, balanceCents: 600n });
+        expect(await payoutsFor(playerId)).toHaveLength(1);
+        expect(await ledgerFor(playerId)).toHaveLength(2);
+        expect(await ledgerNet(playerId)).toBe(600n);
+      } finally {
+        await cleanWallet(playerId);
+      }
+    });
+
+    test('serializes concurrent payouts for a wallet and deduplicates a repeated key', async () => {
+      const playerId = randomUUID();
+      try {
+        await service.ensureWallet(playerId);
+        await service.topUp({ playerId, amount: 1_000, idempotencyKey: randomUUID() });
+        const results = await Promise.all([
+          service.requestPayout({ playerId, amount: 700, idempotencyKey: randomUUID() }),
+          service.requestPayout({ playerId, amount: 700, idempotencyKey: randomUUID() }),
+        ]);
+
+        expect(results.map(({ outcome }) => outcome).sort()).toEqual(['applied', 'insufficient_funds']);
+        const accepted = results.find(({ outcome }) => outcome === 'applied')!;
+        expect(accepted.payout?.status).toBe('processing');
+        expect(await service.getBalance(playerId)).toEqual({ playerId, balanceCents: 300n });
+        expect(await payoutsFor(playerId)).toHaveLength(1);
+        expect(await ledgerFor(playerId)).toHaveLength(2);
+        expect(await ledgerNet(playerId)).toBe(300n);
+
+        const key = randomUUID();
+        await service.topUp({ playerId, amount: 500, idempotencyKey: randomUUID() });
+        const repeated = await Promise.all([
+          service.requestPayout({ playerId, amount: 200, idempotencyKey: key }),
+          service.requestPayout({ playerId, amount: 200, idempotencyKey: key }),
+        ]);
+        expect(repeated.map(({ replayed }) => replayed).sort()).toEqual([false, true]);
+        expect(repeated[0]?.operationId).toBe(repeated[1]?.operationId);
+        expect(await service.getBalance(playerId)).toEqual({ playerId, balanceCents: 600n });
+        expect(await payoutsFor(playerId)).toHaveLength(2);
+        expect(await ledgerFor(playerId)).toHaveLength(4);
+      } finally {
+        await cleanWallet(playerId);
+      }
+    });
+
+    test('rolls back wallet, operation, and ledger if payout persistence fails', async () => {
+      const playerId = randomUUID();
+      const idempotencyKey = randomUUID();
+      const businessKey = `payout:${playerId}:${idempotencyKey}`;
+      try {
+        await service.ensureWallet(playerId);
+        await service.topUp({ playerId, amount: 1_000, idempotencyKey: randomUUID() });
+        await connection.db.execute(sql.raw(`
+          CREATE OR REPLACE FUNCTION financial_test_reject_payout_insert()
+          RETURNS trigger LANGUAGE plpgsql AS $$
+          BEGIN
+            RAISE EXCEPTION 'test-only payout rejection';
+          END;
+          $$
+        `));
+        await connection.db.execute(sql.raw(`
+          CREATE TRIGGER financial_test_reject_payout_insert
+          BEFORE INSERT ON payouts
+          FOR EACH ROW EXECUTE FUNCTION financial_test_reject_payout_insert()
+        `));
+
+        await expect(service.requestPayout({
+          playerId, amount: 400, idempotencyKey,
+        })).rejects.toMatchObject({ code: 'STORAGE_UNAVAILABLE' });
+
+        expect(await service.getBalance(playerId)).toEqual({ playerId, balanceCents: 1_000n });
+        expect(await connection.db.select().from(financialOperations)
+          .where(eq(financialOperations.businessKey, businessKey))).toHaveLength(0);
+        expect(await ledgerFor(playerId)).toHaveLength(1);
+        expect(await payoutsFor(playerId)).toHaveLength(0);
+      } finally {
+        await connection.db.execute(sql.raw('DROP TRIGGER IF EXISTS financial_test_reject_payout_insert ON payouts'));
+        await connection.db.execute(sql.raw('DROP FUNCTION IF EXISTS financial_test_reject_payout_insert()'));
         await cleanWallet(playerId);
       }
     });
