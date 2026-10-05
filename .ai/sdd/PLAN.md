@@ -1,6 +1,6 @@
 # Product Plan: Crash Game Operator
 
-> Status: Draft
+> Status: Approved
 > Steering: @.ai/steering/product.md · @.ai/steering/tech-stack.md · @.ai/steering/conventions.md
 
 ## Vision
@@ -23,36 +23,65 @@ Build a server-side operator that safely proxies player actions to game engines,
 ### Must Have
 
 - Keep the engine private behind the operator and protect provider credentials.
-- Synchronize and fan out Crashsim state through disconnects and out-of-order delivery.
+- Persist player identity, wallets, and financial operations in PostgreSQL through reviewed migrations.
+- Authenticate players before starting engine sessions or accepting bet/cashout commands.
 - Keep wallet debits and credits idempotent and concurrency-safe.
-- Provide a minimal React debug client for inspecting connection health, the current snapshot, and received events.
+- Support Crashsim bet and cashout commands, including unknown-outcome reconciliation.
+- Keep clients synchronized with the round and the authoritative wallet balance.
 
 ### Won't Have Yet
 
 - A second game provider or dynamic adapter registry.
 - Multi-instance fan-out infrastructure such as Redis Pub/Sub.
 - Durable replay of engine events unless the provider adds a replay contract.
-- Full player gameplay UI, including balance, bet, and cashout controls.
+- A full production design system or advanced gameplay UI.
 
 ## Feature Map
 
-### Phase 1 — Operator foundation
+### Phase 1 — Operator MVP (Must Have)
 
 | ID | Feature | Module | Description |
 |----|---------|--------|-------------|
 | F01 | Crashsim live state relay and debug client | Operator / game | Keep one direct Crashsim integration in a small `game` module, resynchronize the engine stream, fan out state over SSE, and inspect it in a minimal React debug client. |
+| F02 | Database foundation and player authentication | Operator / auth + persistence | Configure PostgreSQL/Drizzle and migrations, then add player accounts and authenticated operator sessions. Auth owns its identity tables; later modules own their tables. Login method: email/password. |
+| F03 | Wallet ledger and engine webhooks | Operator / financial | Resolve webhook `playerId` to the operator player and wallet; process signed debit/credit operations idempotently and safely under concurrent requests, independently of browser sessions. |
+| F04 | Crashsim bet and cashout commands | Operator / game | Create engine sessions when the authenticated player opens the game, using the operator player ID; enforce session/bet ownership, call the engine REST API, and reconcile timeouts without creating duplicate bets or cashouts. |
+| F05 | End-to-end player integration | Operator + Client | Connect authenticated player flows, balance, game commands, and the existing SSE round stream in the React client. |
 
 ### Later phases
 
 | ID | Feature | Module | Description |
 |----|---------|--------|-------------|
-| F02 | Player identity and game sessions | Operator / auth | Add the `auth` module for player identity and provider sessions. |
-| F03 | Wallet ledger and webhooks | Operator / financial | Add the `financial` module for signed, retried debit and credit webhooks processed idempotently and safely under concurrency. |
-| F04 | Player game client | Client | Display current state, balance, bet form, and cashout flow after identity and wallet flows exist. |
+| F06 | Operational reconciliation | Operator | Add operator-facing visibility and recovery workflows for pending or failed engine settlements. |
 
-## Open Questions
+## Dependencies
 
-- None for the initial Crashsim stream feature. Player behavior during an outage is recorded in its requirements.
+```mermaid
+flowchart LR
+    F01[F01 Live stream — done] --> F04[F04 Bet and cashout]
+    F01 --> F05[F05 Player integration]
+    F02[F02 Database and auth] --> F03[F03 Financial]
+    F02 --> F04
+    F03 --> F04
+    F04 --> F05
+    F03 --> F06[F06 Reconciliation]
+```
+
+## Risks
+
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| Repeated or concurrent debit webhooks change balance more than once or below zero | High | Unique `txId`, same-transaction ledger and balance mutation, atomic conditional debit, and concurrent-request tests. |
+| Engine accepts a bet/cashout but the operator times out before receiving the response | High | Persist command state and reconcile by engine bet ID; add request idempotency for bet creation if the engine contract supports it. |
+| Cashout is reported successful before the asynchronous credit webhook commits | High | Model bet outcome separately from wallet settlement; define pending-credit recovery and reconciliation before exposing final balance. |
+| Invalid/replayed webhook reaches wallet endpoints | High | Verify HMAC against the raw body, compare signatures safely, and enforce timestamp freshness. |
+
+## Open Decisions
+
+- F02 requirements specify self-registration, email/password login, logout and current user; its approved REST design defines session policy and persistence structure.
+- Confirm wallet currency scope and how rejected debit attempts are recorded in F03 requirements.
+- Confirm whether the engine can accept a stable idempotency key for `POST /bets` in F04 requirements.
+- Define how delayed/failed cashout credit webhooks are reconciled in F03/F04 requirements.
 
 ## Next Actions
 
@@ -62,3 +91,12 @@ Build a server-side operator that safely proxies player actions to game engines,
 - [x] Review and approve tasks for feature F01
 - [x] Approve the simplified Crashsim-only design and task plan
 - [x] Implement feature F01, aligning existing code with the direct Crashsim structure
+- [x] Commit feature F01 as `ebb9f95`
+- [x] Approve this revised roadmap
+- [x] Create requirements for F02: database foundation and player authentication
+- [x] Approve F02 requirements
+- [x] Create F02 design
+- [x] Approve F02 REST design
+- [x] Create F02 tasks
+- [x] Approve F02 tasks
+- [ ] Implement F02 when scheduled

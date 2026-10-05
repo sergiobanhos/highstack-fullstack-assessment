@@ -10,7 +10,7 @@
 
 | Layer | Choice | Notes |
 |-------|--------|-------|
-| Operator HTTP | Fastify | Assessment stack; GraphQL is the current API direction in the root README. |
+| Operator HTTP | Fastify | Assessment stack; expose operator commands through REST endpoints and realtime state through SSE. |
 | Database | PostgreSQL + Drizzle | Schema changes should be migrations. |
 | Validation | Valibot | Validate browser input and third-party payloads. |
 | Realtime to clients | SSE | Initial operator design uses SSE for one-way event fan-out. |

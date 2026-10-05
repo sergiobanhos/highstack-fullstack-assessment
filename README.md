@@ -18,7 +18,7 @@ Player Client -> Operador (Auth, Game, Financial, DB) <-> Crashsim Engine
 
 ## Operador
 
-- O servico do opoerador vai ser uma API GraphQL
+- O operador expõe comandos e autenticação por API REST (Fastify); o estado realtime é distribuído por SSE.
 - A comunicacao da engine com o operador deve ser idempotente
 - Vamos utilizar filas assincronas para processar os webhooks vindos da engine
 - Operacoes financeiras e que podem mexer com dinheiro devem usar lock, para tratar 2 debitos sendo feitos ao mesmo tempo, por exemplo. Evitando ficar com saldo errado.

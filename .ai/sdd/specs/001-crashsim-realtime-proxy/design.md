@@ -28,7 +28,7 @@ A local React diagnostic client displays connection health, the current snapshot
 
 ## 3. Technical Approach
 
-Use Bun and TypeScript for the operator, with Fastify at the HTTP boundary. Preserve the project direction toward GraphQL for game commands, but this feature uses SSE for one-way state updates. Use React 19 and TypeScript with Vite for the local diagnostic client. QuickJS is not part of the browser client.
+Use Bun and TypeScript for the operator, with Fastify at the HTTP boundary. Use REST endpoints for future game commands; this feature uses SSE for one-way state updates. Use React 19 and TypeScript with Vite for the local diagnostic client. QuickJS is not part of the browser client.
 
 The `game` module contains only Crashsim-specific implementation. It communicates with the engine, maintains synchronized in-memory state, and publishes that state. Do not add ports or interfaces intended to support other games, a registry, type folders, or use-case classes for simple internal calls. Keep responsibilities visible through a few concrete files; add no layer unless this flow needs it.
 
@@ -155,7 +155,7 @@ No database migration is required. Keep the engine, operator, PostgreSQL, and lo
 
 ### TD-002: SSE for downstream fan-out
 
-- **Decision:** Use SSE for one-way game events; keep commands on their existing/separately specified HTTP or GraphQL path.
+- **Decision:** Use SSE for one-way game events; specify game commands as REST endpoints in their own feature design.
 - **Why:** The browser only needs server-to-client updates in this stream.
 - **Trade-off:** Browser-to-server messages use a separate request path.
 - **Alternatives considered:** A downstream WebSocket for both directions.
