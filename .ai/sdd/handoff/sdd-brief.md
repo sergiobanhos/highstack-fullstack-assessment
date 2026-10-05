@@ -1,7 +1,7 @@
 # SDD Handoff Brief: Implementação em ordem de dependências — F02 → F03 → F04
 
-> Status: F02 implementation done; F03 T1–T4 concluídas, T5 próxima; F04 tasks aprovadas
-> Readiness: F03 T4 verificada e pronta para commit; comitar antes de iniciar T5. F04 depende de F02 e F03 concluídas e verificadas.
+> Status: F02 e F03 implementation done; F04 tasks aprovadas
+> Readiness: F03 passou por testes PostgreSQL dedicados e fluxo Compose isolado com Crashsim. F04 está pronta para implementação.
 > Updated: 2026-10-05
 
 ## Metadata
@@ -11,7 +11,7 @@
 - **F03 requirements:** `.ai/sdd/specs/003-financial-wallet-ledger/requirements.md` (approved)
 - **F03 design:** `.ai/sdd/specs/003-financial-wallet-ledger/design.md` (approved)
 - **F03 tasks:** `.ai/sdd/specs/003-financial-wallet-ledger/tasks.md` (approved)
-- **F03 `.status`:** `.ai/sdd/specs/003-financial-wallet-ledger/.status` (`implementation:in-progress`; T1–T4 complete, T5 pending)
+- **F03 `.status`:** `.ai/sdd/specs/003-financial-wallet-ledger/.status` (`implementation:done`; T1–T5 complete and verified)
 - **F04 `.status`:** `.ai/sdd/specs/004-crashsim-bet-cashout/.status` (`tasks:approved`)
 - **F02 `.status`:** `implementation:done`
 - **F02 requirements:** `.ai/sdd/specs/002-database-auth/requirements.md` (approved)
@@ -53,7 +53,9 @@
 - **Verificação F03 T3:** `bun run typecheck`, `docker compose config --quiet` e suíte completa com PostgreSQL dedicado `operator_financial_test` passaram (93 testes/426 expectativas). Cobertos HMAC/bytes crus, timestamps, payload, limite de corpo, status, persistência/idempotência e sanitização dos logs.
 - **F03 T4 concluída:** rotas autenticadas de saldo, histórico paginado e top-up local; o controller depende somente do contrato público `auth.requireUser`, filtra playerId do request e retorna cursores estáveis do ledger.
 - **Verificação F03 T4:** `bun run typecheck`, `docker compose config --quiet` e suíte completa com PostgreSQL dedicado `operator_financial_test` passaram (98 testes/472 expectativas). Cobertos identidade ausente, isolamento, cursor, top-up idempotente e limite de saldo; testes de config cobrem flag fora de local.
-- **Próximo passo:** comitar F03 T4 antes de iniciar T5. Depois seguir T5 e então F04 T1–T7. F04 tasks adicionam os contratos públicos financeiros para localizar débito de aposta e consultar liquidação de cashout. O MVP documenta o risco raro de débito persistido com bet rejeitado sem adicionar estorno automático.
+- **F03 T5 concluída:** composição financeira registrada em `server.ts`, com contrato público retornado por `buildOperatorApp`; o README documenta rotas, assinatura, retries, idempotência, top-up e limites. `server.financial.integration.test.ts` cobre Auth + carteira + webhooks + histórico com PostgreSQL.
+- **Verificação F03 T5:** `bun run typecheck`, `bun run test:e2e` e `docker compose config --quiet` passaram. A suíte PostgreSQL dedicada passou com 99 testes/503 expectativas. Em projeto Compose isolado, auth → top-up → bet → cashout → histórico passou com `DUPLICATE_WEBHOOKS=1` e somente um crédito no ledger; `CLOCK_SKEW=90` foi rejeitado sem mutação; durante parada do PostgreSQL, health retornou 200, readiness e webhook 503; depois da recuperação, reenvio do mesmo `txId` aplicou e reproduziu o resultado sem duplicação.
+- **Próximo passo:** iniciar F04 T1–T7. F04 tasks adicionam os contratos de sessão Crashsim, aposta/cashout e reconciliação financeira. O MVP documenta o risco raro de débito persistido com bet rejeitado sem adicionar estorno automático.
 
 ## Dependências de roadmap ainda não especificadas
 
@@ -63,5 +65,5 @@
 ## Prontidão
 
 - F02 requirements, design e tasks estão aprovados; implementação T1–T4 concluída e verificada.
-- F03 requirements, design e tasks estão aprovados; F02 foi concluída, então a implementação F03 pode começar.
-- F04 requirements, design e tasks estão aprovados; implementar depois de F02/F03 e verificar as consultas financeiras públicas usadas pela reconciliação.
+- F03 requirements, design e tasks estão aprovados; implementação e verificação PostgreSQL/Crashsim foram concluídas.
+- F04 requirements, design e tasks estão aprovados; pode iniciar usando as consultas financeiras públicas verificadas em F03.

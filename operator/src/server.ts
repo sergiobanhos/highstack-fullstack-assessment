@@ -9,6 +9,7 @@ import {
 } from './config';
 import { createDatabase, type DatabaseConnection } from './db';
 import { createAuthModule, type AuthModule } from './modules/auth/auth.module';
+import { createFinancialModule, type FinancialModule } from './modules/financial/financial.module';
 import { createGameModule, type GameModule, type GameModuleDeps } from './modules/game/game.module';
 
 export interface OperatorApp {
@@ -17,6 +18,7 @@ export interface OperatorApp {
   logger: Logger;
   game: GameModule;
   auth: AuthModule;
+  financial: FinancialModule;
   database: DatabaseConnection;
 }
 
@@ -45,6 +47,7 @@ export function buildOperatorApp(config: OperatorConfig, overrides: OperatorAppO
     sessionTtlSeconds: config.authSessionTtlSeconds,
     logger,
   });
+  const financial = createFinancialModule({ app, db: database.db, config, logger, auth });
 
   app.get('/health', async () => ({ status: 'ok' }));
   app.get('/ready', async (_request, reply) => {
@@ -64,7 +67,7 @@ export function buildOperatorApp(config: OperatorConfig, overrides: OperatorAppO
     }
   });
 
-  return { app, config, logger, game, auth, database };
+  return { app, config, logger, game, auth, financial, database };
 }
 
 export async function checkOperatorReadiness({ database }: Pick<OperatorApp, 'database'>): Promise<void> {

@@ -21,7 +21,7 @@ function testConfig() {
 }
 
 describe('operator composition and readiness', () => {
-  test('keeps liveness separate from database readiness and registers auth routes', async () => {
+  test('keeps liveness separate from readiness and composes auth, financial, and game routes', async () => {
     let connectionChecks = 0;
     let schemaChecks = 0;
     const database = makeDatabase({
@@ -42,7 +42,15 @@ describe('operator composition and readiness', () => {
       expect(connectionChecks).toBe(1);
       expect(schemaChecks).toBe(1);
       expect(operator.app.hasRoute({ method: 'POST', url: '/auth/login' })).toBe(true);
+      expect(operator.app.hasRoute({ method: 'GET', url: '/wallet' })).toBe(true);
+      expect(operator.app.hasRoute({ method: 'GET', url: '/wallet/transactions' })).toBe(true);
+      expect(operator.app.hasRoute({ method: 'POST', url: '/wallet/top-ups' })).toBe(false);
+      expect(operator.app.hasRoute({ method: 'POST', url: '/wallet/debit' })).toBe(true);
       expect(operator.app.hasRoute({ method: 'GET', url: '/game/events' })).toBe(true);
+      expect(typeof operator.financial.ensureWallet).toBe('function');
+      expect(typeof operator.financial.creditCashoutOnce).toBe('function');
+      const unauthorizedWallet = await operator.app.inject({ method: 'GET', url: '/wallet' });
+      expect(unauthorizedWallet.statusCode).toBe(401);
     } finally {
       await operator.app.close();
     }

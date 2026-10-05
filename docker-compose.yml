@@ -25,7 +25,7 @@ services:
   operator:
     build: ./operator
     ports:
-      # Loopback-only: the debug/operator surface is not public until player auth exists.
+      # Keep the local operator surface on loopback; production exposure is configured separately.
       - "127.0.0.1:3000:3000"
     environment:
       PORT: "3000"

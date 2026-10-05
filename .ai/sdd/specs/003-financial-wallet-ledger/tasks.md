@@ -221,34 +221,37 @@ A F02 (.ai/sdd/specs/002-database-auth/) está em implementation:done e foi veri
 
 ### Trabalho
 
-- [ ] Finalizar financial.module.ts para compor service/controller e exportar o contrato do design: ensureWallet, getBalance, listEntries e creditCashoutOnce; manter tabelas internas.
-- [ ] Integrar financial em server.ts como composição de módulos, usando a conexão, logger e auth da F02; preservar lifecycle/shutdown e o módulo game existente.
-- [ ] Atualizar Compose local para fornecer o mesmo segredo de webhook ao engine e ao operador, configurar APP_ENV=local e habilitar top-up somente na composição local; manter o segredo fora do client.
-- [ ] Atualizar README com setup/migration, variáveis, assinatura e janela, respostas HTTP, retries, idempotência, top-up local, precisão máxima e limite de recuperação do payout inseguro.
-- [ ] Adicionar teste de integração do servidor para composição financeira, rotas, fechamento de recursos e preservação das rotas game/health/readiness da F02.
-- [ ] Executar a verificação ponta a ponta com PostgreSQL de teste e Crashsim: cadastro/login, carteira, top-up, débito, cashout, histórico, webhook duplicado, CLOCK_SKEW=90 e indisponibilidade do banco.
+- [x] Finalizar financial.module.ts para compor service/controller e exportar o contrato do design: ensureWallet, getBalance, listEntries e creditCashoutOnce; manter tabelas internas.
+- [x] Integrar financial em server.ts como composição de módulos, usando a conexão, logger e auth da F02; preservar lifecycle/shutdown e o módulo game existente.
+- [x] Compose local fornece o mesmo segredo de webhook ao engine e ao operador, configura APP_ENV=local e habilita top-up somente na composição local; segredo fica fora do client.
+- [x] Atualizar README com setup/migration, variáveis, assinatura e janela, respostas HTTP, retries, idempotência, top-up local, precisão máxima e limite de recuperação do payout inseguro.
+- [x] Adicionar teste de integração do servidor para composição financeira, rotas, fechamento de recursos e preservação das rotas game/health/readiness da F02.
+- [x] Executar a verificação ponta a ponta com PostgreSQL de teste e Crashsim: cadastro/login, carteira, top-up, débito, cashout, histórico, webhook duplicado, CLOCK_SKEW=90 e indisponibilidade do banco.
 
 ### Critérios de aceite
 
-- [ ] server.ts injeta dependências públicas sem importar tabelas nem pastas privadas de auth; F04/F06 podem usar o contrato financeiro exportado.
-- [ ] Operator e engine recebem localmente o mesmo WEBHOOK_SECRET, sem segredos em variáveis do client, resposta HTTP ou logs.
-- [ ] Migrations são executadas pelo migrador único da F02, antes da API; Compose existente mantém o volume PostgreSQL.
-- [ ] O fluxo local completa auth → top-up → débito da aposta → crédito do cashout → consulta de histórico, sem divergência entre carteira e ledger.
-- [ ] Duplicar um webhook não duplica movimento; banco indisponível não produz falso 200; clock skew continua visível e rejeitado.
-- [ ] README descreve limites conhecidos: retries síncronos, cashout por betId, ausência de Inbox/worker/Outbox nesta feature e payout fora da faixa sem recuperação automática exata.
+- [x] server.ts injeta dependências públicas sem importar tabelas nem pastas privadas de auth; F04/F06 podem usar o contrato financeiro exportado.
+- [x] Operator e engine recebem localmente o mesmo WEBHOOK_SECRET, sem segredos em variáveis do client, resposta HTTP ou logs.
+- [x] Migrations são executadas pelo migrador único da F02, antes da API; Compose existente mantém o volume PostgreSQL.
+- [x] O fluxo local completa auth → top-up → débito da aposta → crédito do cashout → consulta de histórico, sem divergência entre carteira e ledger.
+- [x] Duplicar um webhook não duplica movimento; banco indisponível não produz falso 200; clock skew continua visível e rejeitado.
+- [x] README descreve limites conhecidos: retries síncronos, cashout por betId, ausência de Inbox/worker/Outbox nesta feature e payout fora da faixa sem recuperação automática exata.
 
 ### Arquivos
 
 - operator/src/modules/financial/financial.module.ts — composição e contrato do módulo.
 - operator/src/server.ts — registrar financial no composition root e integrar ciclo de vida F02.
 - operator/src/server.test.ts e/ou operator/src/modules/financial/financial.module.test.ts — integração e lifecycle.
+- operator/src/server.financial.integration.test.ts — fluxo composto com PostgreSQL de teste.
 - docker-compose.yml — segredo compartilhado localmente e configuração explícita do top-up.
 - README.md — operação, endpoints, retries, configuração e limites conhecidos.
 
 ### Verificação
 
-- [ ] cd operator && bun run typecheck && bun test.
-- [ ] docker compose config.
-- [ ] Com PostgreSQL dedicado, executar migration e testes de integração sem apontar operações destrutivas ao banco de desenvolvimento.
-- [ ] Fazer fluxo manual local com Crashsim e verificar no histórico o único débito/crédito após retry/duplicação.
-- [ ] Induzir indisponibilidade do banco e verificar resposta não-success; validar que health/readiness e shutdown continuam seguindo o contrato da F02.
+- [x] `cd operator && bun run typecheck && bun run test:e2e` — typecheck passou; suíte completa com PostgreSQL dedicado passou com 99 testes e 503 expectativas.
+- [x] `docker compose config --quiet`.
+- [x] Com PostgreSQL dedicado, executar migration e testes de integração sem apontar operações destrutivas ao banco de desenvolvimento.
+- [x] Fazer fluxo local isolado com Crashsim e verificar no histórico o único débito/crédito após retry/duplicação.
+- [x] Induzir indisponibilidade do banco e verificar resposta não-success; validar que health/readiness e shutdown continuam seguindo o contrato da F02.
+
+> **Execução em 2026-10-05:** `bun run typecheck`, `bun run test:e2e` e `docker compose config --quiet` passaram. A suíte PostgreSQL dedicada passou com 99 testes e 503 expectativas, incluindo o novo teste de composição Auth + Financial + Game. O fluxo Crashsim foi executado em projeto Compose isolado: auth, top-up, aposta, cashout e histórico; `DUPLICATE_WEBHOOKS=1` gerou só um crédito; `CLOCK_SKEW=90` foi rejeitado sem mutação; com PostgreSQL parado, health respondeu 200, readiness e webhook responderam 503; após reiniciar o banco, o mesmo `txId` aplicou e reproduziu o resultado sem duplicar movimento. T5 e F03 concluídas.

@@ -172,9 +172,9 @@ Expected in the debug client:
 3. No tick for a round already marked `crashed` moves state backward, including late ticks delivered out of order.
 4. The operator key never appears in browser payloads or in operator logs.
 
-## Banco de dados e autenticação do jogador (spec 002)
+## Banco de dados e autenticação do jogador (specs 002 e 003)
 
-O serviço `operator-migrate` aplica as migrations Drizzle uma vez, depois que o PostgreSQL passa no healthcheck. O serviço `operator` só inicia depois que essa migration termina com sucesso. Reiniciar os containers não remove o volume `postgres-data` nem invalida sessões ainda válidas.
+O serviço `operator-migrate` aplica as migrations Drizzle de auth e financial uma vez, depois que o PostgreSQL passa no healthcheck. O serviço `operator` só inicia depois que essas migrations terminam com sucesso. Reiniciar os containers não remove o volume `postgres-data` nem invalida sessões ainda válidas.
 
 ```bash
 docker compose up --build
@@ -229,6 +229,57 @@ curl -i http://127.0.0.1:3000/auth/me -H "Authorization: Bearer ${AUTH_TOKEN}"
 curl -i -X POST http://127.0.0.1:3000/auth/logout -H "Authorization: Bearer ${AUTH_TOKEN}"
 ```
 
-`/health` mede se o processo está vivo e continua retornando `200` durante indisponibilidade do banco. `/ready` confere conexão e tabelas de auth, retornando `503` enquanto o PostgreSQL ou o schema não estiver pronto. O operador não abre a porta HTTP se a verificação inicial falhar.
+`/health` mede se o processo está vivo e continua retornando `200` durante indisponibilidade do banco. `/ready` confere conexão e tabelas de auth e financial, retornando `503` enquanto o PostgreSQL ou o schema não estiver pronto. O operador não abre a porta HTTP se a verificação inicial falhar.
 
 Tentativas de cadastro e login são limitadas separadamente por endereço IP: 5 cadastros e 10 logins por minuto. O limite é local ao processo, conta também payload inválido e não usa `X-Forwarded-For`. Hashes Argon2id simultâneos também têm um teto de duas operações.
+
+## Carteira, ledger e webhooks financeiros (spec 003)
+
+O saldo é USD e todas as quantias da API são inteiros em centavos. A carteira começa em zero e é criada no primeiro `GET /wallet` autenticado. O top-up é uma ferramenta local de desenvolvimento, sem integração com pagamento: o Compose define `APP_ENV=local` e `WALLET_TEST_TOPUP_ENABLED=true`. Em outras configurações, a flag fica desligada e a rota não é registrada; a configuração também rejeita habilitá-la fora do ambiente local.
+
+### Rotas do jogador
+
+Todas as rotas exigem `Authorization: Bearer <token>` emitido por `/auth/login`. A identidade vem da sessão e não pode ser escolhida por `playerId` em body ou query. Respostas financeiras usam `Cache-Control: no-store`.
+
+| Método e rota | Sucesso | Notas |
+|---|---:|---|
+| `GET /wallet` | `200 { balance, currency: "USD" }` | Cria a carteira zero na primeira consulta. `balance` está em centavos. |
+| `GET /wallet/transactions?limit=&cursor=` | `200 { items, nextCursor }` | Histórico próprio, mais novo primeiro; `limit` default 50, máximo 100. Cursor opaco e estável. |
+| `POST /wallet/top-ups` | `201 { transactionId, balance, currency: "USD" }` | Apenas no Compose local. Body `{ "amount": 1000 }` adiciona USD 10,00. |
+
+Exemplo de top-up local (use uma chave UUID nova por ação e mantenha o token no terminal):
+
+```bash
+curl -i -X POST http://127.0.0.1:3000/wallet/top-ups \
+  -H "Authorization: Bearer ${AUTH_TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: 7b7a2c9d-08b8-44c5-b735-49f2f41c993d' \
+  -d '{"amount":1000}'
+
+curl -i http://127.0.0.1:3000/wallet -H "Authorization: Bearer ${AUTH_TOKEN}"
+curl -i 'http://127.0.0.1:3000/wallet/transactions?limit=50' \
+  -H "Authorization: Bearer ${AUTH_TOKEN}"
+```
+
+O mesmo `Idempotency-Key` com o mesmo valor devolve o resultado persistido sem novo crédito; reutilizá-lo com conteúdo diferente retorna `409`. Top-ups também respeitam o saldo máximo seguro e retornam `422` sem ultrapassá-lo.
+
+### Webhooks privados da engine
+
+`POST /wallet/debit` e `POST /wallet/credit` são endpoints servidor-servidor. A engine envia `{ txId, playerId, amount, betId, roundId }`, onde `amount` está em centavos. Essas rotas não usam sessão de jogador: validam `x-timestamp` (Unix em segundos) e `x-signature` antes de parsear o JSON. A assinatura é HMAC-SHA256 em hexadecimal sobre os bytes exatos `${timestamp}.${rawBody}` com `ENGINE_WEBHOOK_SECRET`; o timestamp deve estar dentro de ±60 segundos. O corpo tem limite de 16 KiB.
+
+O Compose injeta o mesmo valor local de `WEBHOOK_SECRET` no Crashsim como `WEBHOOK_SECRET` e no Operator como `ENGINE_WEBHOOK_SECRET`. `ENGINE_OPERATOR_KEY` autentica as chamadas do Operator para a engine e é um segredo diferente. Nenhuma dessas chaves deve ser enviada ao browser ou incluída em logs.
+
+| Resultado | HTTP | Efeito |
+|---|---:|---|
+| Débito/crédito aplicado ou replay equivalente | `200 { balance }` | Só responde sucesso após o commit; saldo em centavos. |
+| Débito com saldo insuficiente | `402` | Resultado idempotente salvo; saldo e ledger não mudam. |
+| HMAC ausente/inválido ou timestamp vencido | `401` | Nenhuma operação financeira é chamada. |
+| Body inválido ou assinatura correta sobre JSON inválido | `400` | Sem mutação. |
+| Mesmo identificador com dados divergentes | `409` | Sem segundo movimento. |
+| Carteira inexistente | `404` | Webhook não cria carteira órfã. |
+| Quantia insegura ou saldo resultante acima do limite | `422` | Sem movimento; limite de saldo fica idempotente. |
+| Banco indisponível ou resultado de commit não confirmado | `503` | A engine pode repetir com o mesmo `txId`; o operador não declara sucesso. |
+
+O Crashsim faz retries síncronos para timeout e respostas `5xx` (atrasos locais de 500 ms, 1 s, 2 s, 4 s e 8 s); `402` recusa a aposta e outras respostas `4xx` são terminais para a engine atual. A deduplicação usa `txId`; crédito de cashout também converge por `cashout:<betId>`, permitindo que webhook e futura reconciliação não dupliquem o payout. Não há Inbox, Outbox ou worker nesta entrega: o débito precisa ser concluído antes de a engine aceitar a aposta.
+
+O contrato numérico atual só transporta inteiros até `Number.MAX_SAFE_INTEGER` centavos. Um payout inseguro é recusado com `422` e gera `wallet.cashout.precision_incident`, sem registrar valor, corpo ou assinatura. Como a engine converte seu payout de `BigInt` para `number`, o valor exato já não pode ser recuperado pelo contrato atual; F06 não credita o valor aproximado automaticamente. Esse limite permanece até que a engine ofereça um contrato exato, por exemplo uma string decimal.
