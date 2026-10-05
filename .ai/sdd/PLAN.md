@@ -46,25 +46,29 @@ Build a server-side operator that safely proxies player actions to game engines,
 | F02 | Database foundation and player authentication | Operator / auth + persistence | Configure PostgreSQL/Drizzle and migrations, then add player accounts and authenticated operator sessions. Auth owns its identity tables; later modules own their tables. Login method: email/password. |
 | F03 | Wallet ledger and engine webhooks | Operator / financial | Resolve webhook `playerId` to the operator player and wallet; process signed debit/credit operations idempotently and safely under concurrent requests, independently of browser sessions. |
 | F04 | Crashsim bet and cashout commands | Operator / game | Create engine sessions when the authenticated player opens the game, using the operator player ID; enforce session/bet ownership, call the engine REST API, and reconcile timeouts without creating duplicate bets or cashouts. |
-| F05 | End-to-end player integration | Operator + Client | Connect authenticated player flows, balance, game commands, and the existing SSE round stream in the React client. |
+| F05 | Payout local de carteira | Operator / financial | Permitir saque simulado autenticado em ambiente local, com débito único, estado consultável e histórico próprio. |
+| F06 | Integração fim a fim do jogador | Operator + Client | Integrar cadastro/login, carteira, top-up local, payout local, apostas/cashout e stream SSE em uma experiência React funcional. |
 
 ### Later phases
 
 | ID | Feature | Module | Description |
 |----|---------|--------|-------------|
-| F06 | Operational reconciliation | Operator | Add operator-facing visibility and recovery workflows for pending or failed engine settlements. |
+| F07 | Operational reconciliation | Operator | Add operator-facing visibility and recovery workflows for pending or failed engine settlements. |
 
 ## Dependencies
 
 ```mermaid
 flowchart LR
     F01[F01 Live stream — done] --> F04[F04 Bet and cashout]
-    F01 --> F05[F05 Player integration]
+    F01 --> F06[F06 Player integration]
     F02[F02 Database and auth] --> F03[F03 Financial]
     F02 --> F04
     F03 --> F04
-    F04 --> F05
-    F03 --> F06[F06 Reconciliation]
+    F03 --> F05[F05 Local payout]
+    F04 --> F06
+    F05 --> F06
+    F03 --> F07[F07 Reconciliation]
+    F04 --> F07
 ```
 
 ## Risks
@@ -82,6 +86,8 @@ flowchart LR
 - F03 requirements, design, and tasks are approved in `.ai/sdd/specs/003-financial-wallet-ledger/`. F03 implementation depends on F02 and follows it. The design defines USD-only currency, local test top-up, stable `402` replay, persist-before-`200` webhook acknowledgement, and F04/F06 cashout recovery. The user chose an operator-side `Number.MAX_SAFE_INTEGER` limit: unsafe payouts are rejected without mutation, logged as precision incidents, and cannot be automatically recovered by F06 through the current numeric engine contract.
 - F04 requirements, design, and tasks are approved in `.ai/sdd/specs/004-crashsim-bet-cashout/`. The engine contract stays unchanged: allow at most one accepted or unknown bet per player/round, never retry an ambiguous `POST /bets`, correlate through the persisted debit where possible, and allow a fresh command key after a definitive `402` while betting remains open. Unknown outcomes block another bet for that player/round. F04 implementation follows completed and verified F02/F03.
 - The user chose not to add automatic compensation for the rare case where the engine rejects a bet after the debit commit but all acknowledgements are lost; the local MVP design records this as a residual risk, without changing approved requirements.
+- F05 payout requirements are approved at `.ai/sdd/specs/005-payout/requirements.md`; its design, tasks, and API implementation remain prerequisites for the payout portion of F06.
+- F06 is the initial player-facing React integration. It depends on F01–F05; F07 remains operational reconciliation.
 
 ## Next Actions
 
@@ -120,3 +126,7 @@ flowchart LR
 - [x] Implement F02 T3: REST routes and request-scoped authenticated identity
 - [x] Implement F02 T1–T4
 - [ ] Implement F03 T1–T5, then F04 T1–T7
+- [ ] Design, plan, and implement F05 local wallet payout.
+- [ ] Create and approve F06 player integration requirements, design, and tasks.
+- [ ] Implement F06 after the required F05 payout API is available.
+- [ ] Plan F07 operational reconciliation after the player MVP integration.
