@@ -10,6 +10,7 @@ import { financialOperations, walletLedgerEntries, wallets } from './financial.s
 import { createFinancialModule } from './financial.module';
 import { FinancialServiceError, type FinancialService } from './financial.service';
 import { registerFinancialController } from './financial.controller';
+import { UnauthenticatedError, type AuthModule, type AuthenticatedPlayer } from '../auth/auth.module';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const webhookSecret = 'controller-test-webhook-secret';
@@ -49,6 +50,24 @@ if (!testDatabaseUrl) {
     APP_ENV: 'test',
     ENGINE_WEBHOOK_SECRET: webhookSecret,
   });
+  const localConfig = loadConfig({
+    DATABASE_URL: testDatabaseUrl,
+    APP_ENV: 'local',
+    ENGINE_WEBHOOK_SECRET: webhookSecret,
+    WALLET_TEST_TOPUP_ENABLED: 'true',
+  });
+  const identitiesByToken = new Map<string, AuthenticatedPlayer>();
+  const testAuth: Pick<AuthModule, 'requireUser'> = {
+    async requireUser(request) {
+      const authorization = request.headers.authorization;
+      const token = typeof authorization === 'string' && authorization.startsWith('Bearer ')
+        ? authorization.slice('Bearer '.length)
+        : '';
+      const identity = identitiesByToken.get(token);
+      if (!identity) throw new UnauthenticatedError();
+      return identity;
+    },
+  };
   const capturedLogs: string[] = [];
   const logger: Logger = {
     debug: (message, fields) => capturedLogs.push(`${message} ${JSON.stringify(fields ?? {})}`),
@@ -63,9 +82,17 @@ if (!testDatabaseUrl) {
     await connection.db.delete(wallets).where(eq(wallets.playerId, playerId));
   }
 
+  function authenticatedAs(playerId: string): { authorization: string } {
+    const token = randomUUID();
+    identitiesByToken.set(token, { id: playerId, name: 'Test Player', email: `${playerId}@test.invalid` });
+    return { authorization: `Bearer ${token}` };
+  }
+
   describe('financial webhook REST controller', () => {
     let app: FastifyInstance;
+    let localApp: FastifyInstance;
     let service: FinancialService;
+    let localService: FinancialService;
 
     beforeAll(async () => {
       await connection.check();
@@ -79,16 +106,184 @@ if (!testDatabaseUrl) {
 
     beforeAll(async () => {
       app = Fastify({ logger: false });
-      service = createFinancialModule({ app, db: connection.db, config, logger });
+      service = createFinancialModule({ app, db: connection.db, config, logger, auth: testAuth });
       await app.ready();
+      localApp = Fastify({ logger: false });
+      localService = createFinancialModule({ app: localApp, db: connection.db, config: localConfig, logger, auth: testAuth });
+      await localApp.ready();
     });
 
     afterEach(() => {
       capturedLogs.length = 0;
+      identitiesByToken.clear();
     });
 
     afterAll(async () => {
-      await app.close();
+      await Promise.all([app.close(), localApp.close()]);
+    });
+
+    test('requires an authenticated identity and provisions only that player’s zero USD wallet', async () => {
+      const unauthenticatedBalance = await app.inject({ method: 'GET', url: '/wallet' });
+      const unauthenticatedHistory = await app.inject({ method: 'GET', url: '/wallet/transactions' });
+      expect(unauthenticatedBalance.statusCode).toBe(401);
+      expect(unauthenticatedHistory.statusCode).toBe(401);
+
+      const playerId = randomUUID();
+      try {
+        const response = await app.inject({ method: 'GET', url: '/wallet', headers: authenticatedAs(playerId) });
+        expect(response.statusCode).toBe(200);
+        expect(response.headers['cache-control']).toBe('no-store');
+        expect(responseJson(response)).toEqual({ balance: 0, currency: 'USD' });
+        expect(await service.getBalance(playerId)).toEqual({ playerId, balanceCents: 0n });
+
+        const forgedQuery = await app.inject({
+          method: 'GET', url: `/wallet?playerId=${randomUUID()}`, headers: authenticatedAs(playerId),
+        });
+        expect(forgedQuery.statusCode).toBe(400);
+      } finally {
+        await cleanWallet(playerId);
+      }
+    });
+
+    test('registers test top-up only in explicit local configuration', async () => {
+      expect(app.hasRoute({ method: 'POST', url: '/wallet/top-ups' })).toBe(false);
+      expect(localApp.hasRoute({ method: 'POST', url: '/wallet/top-ups' })).toBe(true);
+      const unauthorized = await localApp.inject({
+        method: 'POST', url: '/wallet/top-ups',
+        headers: { 'idempotency-key': randomUUID() }, payload: { amount: 100 },
+      });
+      expect(unauthorized.statusCode).toBe(401);
+      const disabledRoute = await app.inject({
+        method: 'POST', url: '/wallet/top-ups',
+        headers: { ...authenticatedAs(randomUUID()), 'idempotency-key': randomUUID() },
+        payload: { amount: 100 },
+      });
+      expect(disabledRoute.statusCode).toBe(404);
+    });
+
+    test('top-ups use only the authenticated player and replay or conflict by Idempotency-Key', async () => {
+      const playerId = randomUUID();
+      const otherPlayerId = randomUUID();
+      const idempotencyKey = randomUUID();
+      try {
+        await localService.ensureWallet(otherPlayerId);
+        const authorization = authenticatedAs(playerId);
+        const headers = { ...authorization, 'idempotency-key': idempotencyKey };
+        const forgedTarget = await localApp.inject({
+          method: 'POST', url: '/wallet/top-ups', headers, payload: { amount: 500, playerId: otherPlayerId },
+        });
+        expect(forgedTarget.statusCode).toBe(400);
+
+        const missingKey = await localApp.inject({
+          method: 'POST', url: '/wallet/top-ups', headers: authorization, payload: { amount: 500 },
+        });
+        expect(missingKey.statusCode).toBe(400);
+        const malformedKey = await localApp.inject({
+          method: 'POST', url: '/wallet/top-ups',
+          headers: { ...authorization, 'idempotency-key': 'not-a-uuid' }, payload: { amount: 500 },
+        });
+        expect(malformedKey.statusCode).toBe(400);
+        const unsafeAmount = await localApp.inject({
+          method: 'POST', url: '/wallet/top-ups', headers,
+          payload: { amount: Number.MAX_SAFE_INTEGER + 1 },
+        });
+        expect(unsafeAmount.statusCode).toBe(400);
+        const oversized = await localApp.inject({
+          method: 'POST', url: '/wallet/top-ups',
+          headers: { ...authorization, 'idempotency-key': randomUUID() },
+          payload: { amount: 1, extra: 'x'.repeat(16 * 1024) },
+        });
+        expect(oversized.statusCode).toBe(413);
+        expect(responseJson(oversized)).toMatchObject({ error: { code: 'PAYLOAD_TOO_LARGE' } });
+        const first = await localApp.inject({ method: 'POST', url: '/wallet/top-ups', headers, payload: { amount: 500 } });
+        const replay = await localApp.inject({ method: 'POST', url: '/wallet/top-ups', headers, payload: { amount: 500 } });
+        const conflict = await localApp.inject({ method: 'POST', url: '/wallet/top-ups', headers, payload: { amount: 501 } });
+
+        expect(first.statusCode).toBe(201);
+        expect(responseJson(first)).toMatchObject({ transactionId: expect.any(String), balance: 500, currency: 'USD' });
+        expect(responseJson(replay)).toEqual(responseJson(first));
+        expect(replay.statusCode).toBe(201);
+        expect(conflict.statusCode).toBe(409);
+        expect(await localService.getBalance(playerId)).toEqual({ playerId, balanceCents: 500n });
+        expect(await localService.getBalance(otherPlayerId)).toEqual({ playerId: otherPlayerId, balanceCents: 0n });
+        expect(await connection.db.select().from(walletLedgerEntries).where(eq(walletLedgerEntries.playerId, playerId))).toHaveLength(1);
+        expect(await connection.db.select().from(financialOperations).where(eq(financialOperations.playerId, playerId))).toHaveLength(1);
+        expect(await connection.db.select().from(financialOperations).where(eq(financialOperations.playerId, otherPlayerId))).toHaveLength(0);
+      } finally {
+        await cleanWallet(playerId);
+        await cleanWallet(otherPlayerId);
+      }
+    });
+
+    test('rejects a top-up that would exceed the safe balance without changing wallet or ledger', async () => {
+      const playerId = randomUUID();
+      const idempotencyKey = randomUUID();
+      const nearLimit = 9_007_199_254_740_986n;
+      try {
+        await localService.ensureWallet(playerId);
+        await connection.db.update(wallets).set({ balanceCents: nearLimit }).where(eq(wallets.playerId, playerId));
+        const headers = { ...authenticatedAs(playerId), 'idempotency-key': idempotencyKey };
+        const first = await localApp.inject({ method: 'POST', url: '/wallet/top-ups', headers, payload: { amount: 6 } });
+        const replay = await localApp.inject({ method: 'POST', url: '/wallet/top-ups', headers, payload: { amount: 6 } });
+        expect(first.statusCode).toBe(422);
+        expect(replay.statusCode).toBe(422);
+        expect(await localService.getBalance(playerId)).toEqual({ playerId, balanceCents: nearLimit });
+        expect(await connection.db.select().from(walletLedgerEntries).where(eq(walletLedgerEntries.playerId, playerId))).toHaveLength(0);
+      } finally {
+        await cleanWallet(playerId);
+      }
+    });
+
+    test('paginates only the authenticated player’s ledger with a stable cursor and validates query input', async () => {
+      const playerId = randomUUID();
+      const otherPlayerId = randomUUID();
+      try {
+        await localService.ensureWallet(playerId);
+        await localService.ensureWallet(otherPlayerId);
+        for (const amount of [100, 200, 300]) {
+          await localService.topUp({ playerId, amount, idempotencyKey: randomUUID() });
+        }
+        await localService.topUp({ playerId: otherPlayerId, amount: 999, idempotencyKey: randomUUID() });
+
+        const headers = authenticatedAs(playerId);
+        const first = await app.inject({ method: 'GET', url: '/wallet/transactions?limit=2', headers });
+        expect(first.statusCode).toBe(200);
+        const firstPage = responseJson(first);
+        expect(firstPage.items).toHaveLength(2);
+        expect(firstPage.nextCursor).toEqual(expect.any(String));
+        expect(firstPage.items.map((entry: { amountCents: number }) => entry.amountCents)).toEqual([300, 200]);
+        expect(firstPage.items.every((entry: Record<string, unknown>) => !('playerId' in entry))).toBe(true);
+
+        const second = await app.inject({
+          method: 'GET',
+          url: `/wallet/transactions?limit=2&cursor=${encodeURIComponent(firstPage.nextCursor)}`,
+          headers,
+        });
+        const secondPage = responseJson(second);
+        expect(second.statusCode).toBe(200);
+        expect(secondPage.items).toHaveLength(1);
+        expect(secondPage.items.map((entry: { amountCents: number }) => entry.amountCents)).toEqual([100]);
+        expect(secondPage.nextCursor).toBeNull();
+        const itemIds = [
+          ...firstPage.items.map((entry: { id: string }) => entry.id),
+          ...secondPage.items.map((entry: { id: string }) => entry.id),
+        ];
+        expect(new Set(itemIds).size).toBe(3);
+
+        for (const url of [
+          '/wallet/transactions?limit=0',
+          '/wallet/transactions?limit=101',
+          '/wallet/transactions?cursor=AAAA',
+          `/wallet/transactions?playerId=${otherPlayerId}`,
+        ]) {
+          expect((await app.inject({ method: 'GET', url, headers })).statusCode).toBe(400);
+        }
+        const defaultLimit = await app.inject({ method: 'GET', url: '/wallet/transactions', headers });
+        expect(responseJson(defaultLimit).items).toHaveLength(3);
+      } finally {
+        await cleanWallet(playerId);
+        await cleanWallet(otherPlayerId);
+      }
     });
 
     test('accepts an HMAC-authenticated debit without browser auth and returns committed balance', async () => {
@@ -256,7 +451,14 @@ describe('financial webhook controller error mapping', () => {
       debit: async () => { throw new FinancialServiceError('STORAGE_UNAVAILABLE'); },
       creditCashoutOnce: async () => { throw new FinancialServiceError('STORAGE_UNAVAILABLE'); },
     } as unknown as FinancialService;
-    registerFinancialController({ app, service: failingService, webhookSecret, logger });
+    registerFinancialController({
+      app,
+      service: failingService,
+      webhookSecret,
+      walletTestTopupEnabled: false,
+      requireUser: async () => { throw new UnauthenticatedError(); },
+      logger,
+    });
     await app.ready();
     try {
       const request = { txId: randomUUID(), playerId: randomUUID(), amount: 1, betId: randomUUID(), roundId: randomUUID() };

@@ -181,22 +181,22 @@ A F02 (.ai/sdd/specs/002-database-auth/) está em implementation:done e foi veri
 
 ### Trabalho
 
-- [ ] Registrar GET /wallet usando auth.requireUser(request), ensureWallet(player.id) e consulta do saldo persistido.
-- [ ] Registrar GET /wallet/transactions com limite padrão 50, máximo 100 e cursor estável (created_at, id); limitar a consulta ao jogador autenticado.
-- [ ] Registrar POST /wallet/top-ups somente quando a configuração local habilitar a função; validar centavos positivos e Idempotency-Key UUID.
-- [ ] Obter o jogador exclusivamente da sessão autenticada; rejeitar playerId extra e nunca aceitar um ID do browser como destino do crédito.
-- [ ] Mapear erros para o envelope REST da F02, incluindo autenticação, validação, conflito de idempotência, limite de saldo e indisponibilidade.
-- [ ] Testar inject para identidade ausente/inválida, isolamento entre jogadores, paginação, criação de carteira zero, top-up, replay e chave conflitante.
-- [ ] Validar cursor malformado, limit fora da faixa e header Idempotency-Key ausente/malformado sem mutar saldo.
+- [x] Registrar GET /wallet usando auth.requireUser(request), ensureWallet(player.id) e consulta do saldo persistido.
+- [x] Registrar GET /wallet/transactions com limite padrão 50, máximo 100 e cursor estável (created_at, id); limitar a consulta ao jogador autenticado.
+- [x] Registrar POST /wallet/top-ups somente quando a configuração local habilitar a função; validar centavos positivos e Idempotency-Key UUID.
+- [x] Obter o jogador exclusivamente da sessão autenticada; rejeitar playerId extra e nunca aceitar um ID do browser como destino do crédito.
+- [x] Mapear erros para o envelope REST da F02, incluindo autenticação, validação, conflito de idempotência, limite de saldo e indisponibilidade.
+- [x] Testar inject para identidade ausente/inválida, isolamento entre jogadores, paginação, criação de carteira zero, top-up, replay e chave conflitante.
+- [x] Validar cursor malformado, limit fora da faixa e header Idempotency-Key ausente/malformado sem mutar saldo.
 
 ### Critérios de aceite
 
-- [ ] GET saldo e histórico exigem auth e não retornam carteira/lançamentos de outro jogador.
-- [ ] A primeira consulta cria uma carteira zero vinculada ao ID retornado pelo contrato auth.
-- [ ] Top-up só existe em APP_ENV=local com flag explícita; quando desabilitado, a rota não é registrada.
-- [ ] Top-up credita somente o jogador autenticado; corpo com playerId é rejeitado e não muda qualquer outra carteira.
-- [ ] Repetir a mesma chave e conteúdo devolve o resultado original sem novo ledger; repetir a chave com outro valor retorna 409.
-- [ ] Histórico contém apenas movimentos aplicados e sua paginação não repete nem perde entradas na fronteira do cursor.
+- [x] GET saldo e histórico exigem auth e não retornam carteira/lançamentos de outro jogador.
+- [x] A primeira consulta cria uma carteira zero vinculada ao ID retornado pelo contrato auth.
+- [x] Top-up só existe em APP_ENV=local com flag explícita; quando desabilitado, a rota não é registrada.
+- [x] Top-up credita somente o jogador autenticado; corpo com playerId é rejeitado e não muda qualquer outra carteira.
+- [x] Repetir a mesma chave e conteúdo devolve o resultado original sem novo ledger; repetir a chave com outro valor retorna 409.
+- [x] Histórico contém apenas movimentos aplicados e sua paginação não repete nem perde entradas na fronteira do cursor.
 
 ### Arquivos
 
@@ -207,10 +207,10 @@ A F02 (.ai/sdd/specs/002-database-auth/) está em implementation:done e foi veri
 
 ### Verificação
 
-- [ ] cd operator && bun run typecheck && bun test.
-- [ ] Testar GET sem sessão, dois jogadores com carteiras diferentes, histórico paginado e tentativa de playerId forjado.
-- [ ] Testar top-up local com primeira execução, replay equivalente, chave/conteúdo conflitante e saldo acima do teto seguro.
-- [ ] Inicializar com a flag ligada fora de local e confirmar falha segura; iniciar com flag desligada e confirmar rota ausente.
+- [x] `cd operator && bun run typecheck && bun test` — typecheck passou; suíte completa com PostgreSQL de teste dedicado passou com 98 testes e 472 expectativas.
+- [x] Testar GET sem sessão, carteiras de dois jogadores, histórico paginado e tentativa de forjar `playerId` por body/query.
+- [x] Testar top-up local com primeira execução, replay equivalente, chave ausente/malformada/conflitante, payload excessivo e saldo acima do teto seguro.
+- [x] Testes de configuração confirmam falha ao ligar a flag fora de local; `hasRoute`/HTTP confirmam que a rota desaparece com flag false e existe somente no app local habilitado.
 
 ## Task T5: Composição, Compose e documentação operacional
 

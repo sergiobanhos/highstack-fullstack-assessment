@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { Logger, OperatorConfig } from '../../config';
 import type { OperatorDatabase } from '../../db';
+import type { AuthModule } from '../auth/auth.module';
 import { registerFinancialController } from './financial.controller';
 import { createFinancialService, type FinancialService } from './financial.service';
 
@@ -13,11 +14,19 @@ export interface FinancialModuleOptions {
   db: OperatorDatabase;
   config: OperatorConfig;
   logger: Logger;
+  auth: Pick<AuthModule, 'requireUser'>;
 }
 
 /** Composes the service and its Crashsim webhook routes, matching the other modules. */
-export function createFinancialModule({ app, db, config, logger }: FinancialModuleOptions): FinancialModule {
+export function createFinancialModule({ app, db, config, logger, auth }: FinancialModuleOptions): FinancialModule {
   const service = createFinancialService({ db });
-  registerFinancialController({ app, service, webhookSecret: config.engine.webhookSecret, logger });
+  registerFinancialController({
+    app,
+    service,
+    webhookSecret: config.engine.webhookSecret,
+    walletTestTopupEnabled: config.walletTestTopupEnabled,
+    requireUser: auth.requireUser,
+    logger,
+  });
   return service;
 }

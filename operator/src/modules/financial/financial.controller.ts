@@ -1,10 +1,12 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import * as v from 'valibot';
 import type { Logger } from '../../config';
+import { UnauthenticatedError, type AuthModule, type AuthenticatedPlayer } from '../auth/auth.module';
 import { FinancialServiceError, type FinancialService } from './financial.service';
-import { verifyCrashsimWebhook, type WebhookAuthFailure } from './crashsim-webhook-auth';
+import { verifyCrashsimWebhook } from './crashsim-webhook-auth';
 
 const MAX_WEBHOOK_BODY_BYTES = 16 * 1024;
+const MAX_PLAYER_BODY_BYTES = 16 * 1024;
 
 const webhookPayloadSchema = v.strictObject({
   txId: v.pipe(v.string(), v.uuid()),
@@ -14,12 +16,52 @@ const webhookPayloadSchema = v.strictObject({
   roundId: v.pipe(v.string(), v.minLength(1), v.maxLength(255)),
 });
 
+const walletQuerySchema = v.strictObject({});
+
+const walletHistoryQuerySchema = v.strictObject({
+  limit: v.optional(v.pipe(
+    v.string(),
+    v.regex(/^[0-9]+$/),
+    v.transform((value) => Number(value)),
+    v.integer(),
+    v.minValue(1),
+    v.maxValue(100),
+  )),
+  cursor: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(512), v.regex(/^[A-Za-z0-9_-]+$/))),
+});
+
+const walletTopUpBodySchema = v.strictObject({
+  amount: v.pipe(
+    v.number(),
+    v.integer(),
+    v.minValue(1),
+    v.check((amount) => Number.isSafeInteger(amount), 'Amount must be a safe integer'),
+  ),
+});
+
+const idempotencyKeySchema = v.pipe(v.string(), v.uuid());
+const cursorTimestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
+const ledgerCursorSchema = v.strictObject({
+  createdAt: v.pipe(
+    v.string(),
+    v.regex(cursorTimestampPattern),
+    v.check((value) => {
+      const milliseconds = value.replace(/(\.\d{3})\d{3}Z$/, '$1Z');
+      const parsed = Date.parse(value);
+      return Number.isFinite(parsed) && new Date(parsed).toISOString() === milliseconds;
+    }),
+  ),
+  id: v.pipe(v.string(), v.uuid()),
+});
+
 type WebhookOperation = 'debit' | 'credit';
 
 export interface FinancialControllerOptions {
   app: FastifyInstance;
   service: FinancialService;
   webhookSecret: string;
+  walletTestTopupEnabled: boolean;
+  requireUser: AuthModule['requireUser'];
   logger: Pick<Logger, 'info' | 'warn' | 'error'>;
 }
 
@@ -29,6 +71,58 @@ interface ErrorBody {
 
 function errorBody(code: string, message: string): ErrorBody {
   return { error: { code, message } };
+}
+
+function decodeLedgerCursor(value: string): { createdAt: string; id: string } | undefined {
+  try {
+    const decoded = Buffer.from(value, 'base64url');
+    if (decoded.toString('base64url') !== value) return undefined;
+    const parsed: unknown = JSON.parse(decoded.toString('utf8'));
+    const result = v.safeParse(ledgerCursorSchema, parsed);
+    return result.success ? result.output : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function encodeLedgerCursor(cursor: { createdAt: string; id: string }): string {
+  return Buffer.from(JSON.stringify(cursor)).toString('base64url');
+}
+
+async function resolvePlayer(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  requireUser: AuthModule['requireUser'],
+  logger: FinancialControllerOptions['logger'],
+  operation: string,
+): Promise<AuthenticatedPlayer | null> {
+  try {
+    return await requireUser(request);
+  } catch (error) {
+    if (error instanceof UnauthenticatedError) {
+      reply.code(401).send(errorBody('UNAUTHENTICATED', 'Authentication required'));
+      return null;
+    }
+    logger.warn('wallet authentication unavailable', {
+      event: 'wallet.auth.unavailable', operation, requestId: request.id,
+    });
+    reply.code(503).send(errorBody('SERVICE_UNAVAILABLE', 'Financial service is unavailable'));
+    return null;
+  }
+}
+
+function sendFinancialError(
+  error: unknown,
+  operation: string,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  logger: FinancialControllerOptions['logger'],
+): FastifyReply {
+  const mapped = mapServiceError(error);
+  logger.warn('wallet operation failed', {
+    event: 'wallet.operation.failed', operation, requestId: request.id, reason: mapped.reason,
+  });
+  return reply.code(mapped.status).send(errorBody(mapped.code, mapped.message));
 }
 
 function fastifyErrorStatus(error: unknown): number | undefined {
@@ -46,12 +140,6 @@ function errorFromFastify(error: unknown): { status: number; body: ErrorBody } {
     return { status, body: errorBody('UNSUPPORTED_MEDIA_TYPE', 'Content-Type must be application/json') };
   }
   return { status: 400, body: errorBody('INVALID_PAYLOAD', 'Request body must be valid JSON') };
-}
-
-function isWebhookAuthFailure(value: unknown): value is WebhookAuthFailure {
-  return typeof value === 'string' && [
-    'missing_timestamp', 'invalid_timestamp', 'stale_timestamp', 'missing_signature', 'invalid_signature',
-  ].includes(value);
 }
 
 function logRejected(
@@ -182,6 +270,109 @@ function createWebhookHandler(
 
 /** Registers Crashsim callbacks in a child Fastify scope with a raw-byte JSON parser. */
 export function registerFinancialController({ app, ...deps }: FinancialControllerOptions): void {
+  app.register(async (playerRoutes) => {
+    playerRoutes.addHook('onRequest', async (_request, reply) => {
+      reply.header('Cache-Control', 'no-store');
+    });
+    playerRoutes.setErrorHandler((error, request, reply) => {
+      const mapped = errorFromFastify(error);
+      const operation = request.url.startsWith('/wallet/top-ups') ? 'top_up' : 'wallet_read';
+      deps.logger.warn('wallet request rejected', {
+        event: 'wallet.request.rejected', operation, requestId: request.id,
+        reason: mapped.status === 413 ? 'payload_too_large' : 'invalid_payload',
+      });
+      return reply.code(mapped.status).send(mapped.body);
+    });
+
+    playerRoutes.get('/wallet', async (request, reply) => {
+      const player = await resolvePlayer(request, reply, deps.requireUser, deps.logger, 'balance');
+      if (!player) return reply;
+      if (!v.safeParse(walletQuerySchema, request.query).success) {
+        return reply.code(400).send(errorBody('VALIDATION_ERROR', 'Request is invalid'));
+      }
+      try {
+        const wallet = await deps.service.ensureWallet(player.id);
+        return reply.code(200).send({ balance: Number(wallet.balanceCents), currency: 'USD' });
+      } catch (error) {
+        return sendFinancialError(error, 'balance', request, reply, deps.logger);
+      }
+    });
+
+    playerRoutes.get('/wallet/transactions', async (request, reply) => {
+      const player = await resolvePlayer(request, reply, deps.requireUser, deps.logger, 'transactions');
+      if (!player) return reply;
+      const parsed = v.safeParse(walletHistoryQuerySchema, request.query);
+      if (!parsed.success) {
+        return reply.code(400).send(errorBody('VALIDATION_ERROR', 'Request is invalid'));
+      }
+      const limit = parsed.output.limit ?? 50;
+      const before = parsed.output.cursor ? decodeLedgerCursor(parsed.output.cursor) : undefined;
+      if (parsed.output.cursor && !before) {
+        return reply.code(400).send(errorBody('INVALID_CURSOR', 'Transaction cursor is invalid'));
+      }
+      try {
+        const page = await deps.service.listEntries(player.id, { limit, before });
+        const lastEntry = page.items.at(-1);
+        return reply.code(200).send({
+          items: page.items.map((entry) => ({
+            id: entry.id,
+            operationId: entry.operationId,
+            direction: entry.direction,
+            source: entry.source,
+            amountCents: Number(entry.amountCents),
+            balanceAfterCents: Number(entry.balanceAfterCents),
+            betId: entry.betId,
+            roundId: entry.roundId,
+            createdAt: entry.createdAt,
+            currency: 'USD',
+          })),
+          nextCursor: page.hasMore && lastEntry
+            ? encodeLedgerCursor({ createdAt: lastEntry.createdAt, id: lastEntry.id })
+            : null,
+        });
+      } catch (error) {
+        return sendFinancialError(error, 'transactions', request, reply, deps.logger);
+      }
+    });
+
+    if (deps.walletTestTopupEnabled) {
+      playerRoutes.post('/wallet/top-ups', { bodyLimit: MAX_PLAYER_BODY_BYTES }, async (request, reply) => {
+        const player = await resolvePlayer(request, reply, deps.requireUser, deps.logger, 'top_up');
+        if (!player) return reply;
+        const key = v.safeParse(idempotencyKeySchema, request.headers['idempotency-key']);
+        const body = v.safeParse(walletTopUpBodySchema, request.body);
+        if (!key.success || !body.success) {
+          return reply.code(400).send(errorBody('VALIDATION_ERROR', 'Request is invalid'));
+        }
+        try {
+          await deps.service.ensureWallet(player.id);
+          const result = await deps.service.topUp({
+            playerId: player.id,
+            amount: body.output.amount,
+            idempotencyKey: key.output,
+          });
+          if (result.outcome === 'balance_limit') {
+            deps.logger.warn('wallet test top-up declined', {
+              event: 'wallet.balance_limit.declined', operation: 'top_up', requestId: request.id,
+              reason: 'balance_limit', replayed: result.replayed,
+            });
+            return reply.code(422).send(errorBody('BALANCE_LIMIT', 'Wallet balance exceeds the supported range'));
+          }
+          deps.logger.info('wallet test top-up applied', {
+            event: 'wallet.test_top_up.applied', requestId: request.id, replayed: result.replayed,
+          });
+          return reply.code(201).send({
+            transactionId: result.operationId,
+            balance: Number(result.balanceCents),
+            currency: 'USD',
+          });
+        } catch (error) {
+          return sendFinancialError(error, 'top_up', request, reply, deps.logger);
+        }
+      });
+    }
+  });
+
   app.register(async (webhookRoutes) => {
     webhookRoutes.removeContentTypeParser('application/json');
     webhookRoutes.addContentTypeParser(
