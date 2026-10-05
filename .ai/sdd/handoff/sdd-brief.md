@@ -1,12 +1,12 @@
 # SDD Handoff Brief: Implementação em ordem de dependências — F02 → F03 → F04
 
 > Status: F02 e F03 implementation done; F04 implementation in progress (T1)
-> Readiness: F03 passou por testes PostgreSQL dedicados e fluxo Compose isolado com Crashsim. F04 T1 e T2 estão concluídas e verificadas.
+> Readiness: F03 passou por testes PostgreSQL dedicados e fluxo Compose isolado com Crashsim. F04 T1–T3 estão concluídas e verificadas.
 > Updated: 2026-10-05
 
 ## Metadata
 
-- **Feature atual:** F04 — `.ai/sdd/specs/004-crashsim-bet-cashout/` (T2)
+- **Feature atual:** F04 — `.ai/sdd/specs/004-crashsim-bet-cashout/` (T3)
 - **F02 aprovado:** `.ai/sdd/specs/002-database-auth/`
 - **F03 requirements:** `.ai/sdd/specs/003-financial-wallet-ledger/requirements.md` (approved)
 - **F03 design:** `.ai/sdd/specs/003-financial-wallet-ledger/design.md` (approved)
@@ -59,7 +59,9 @@
 - **Verificação F04 T1:** `bun run typecheck` e `bun run test:e2e` passaram; PostgreSQL temporário isolado executou 101 testes/514 expectativas. Cobertos candidato ausente/único/múltiplo, jogador/rodada/valor, débito anterior e no timestamp de reserva, outcomes aplicado/insuficiente, cashout pendente/creditado, ledger ausente e limite do saldo. O módulo game não importa arquivos privados de financial.
 - **F04 T2 concluída:** `game_commands` e `game_bets` com tipos/check constraints, idempotency key, reservas parciais para aposta/cashout, valores em inteiros e payout limitado ao inteiro JSON seguro. Migration Drizzle aditiva `0002_rich_gladiator` adiciona somente as tabelas/índices de game; o schema compartilhado e a prontidão incluem as tabelas. Nenhum `sessionId` é persistido.
 - **Verificação F04 T2:** `bun run typecheck` e `bun run test:e2e` passaram; PostgreSQL temporário isolado executou 104 testes/530 expectativas. A migration foi reaplicada e preservou comando/bet; testes concorrentes confirmaram uma única reserva de aposta e cashout, estados `unknown`/`accepted` mantêm a vaga, `rejected` libera nova tentativa e o limite de payout é imposto pelo banco.
-- **Próximo passo:** após o commit T2, iniciar T3 (cliente HTTP Crashsim concreto para sessão, bet e cashout). F04 adiciona reconciliação financeira; o MVP documenta o risco raro de débito persistido com bet rejeitado sem adicionar estorno automático.
+- **F04 T3 concluída:** o cliente Crashsim agora cria sessão, envia aposta, consulta bet e faz cashout; valida IDs, identidade quando retornada, status, multiplicador e payout. Erros tipados distinguem rejeição, conflito, indisponibilidade, bet ausente e resultado desconhecido. Apenas `404 session_not_found` estruturado e consistente é definitivo para renovação. Payout inseguro vira `payoutCents=null`/`precision=unsafe`; o cliente não repete comandos nem envia chave de idempotência não suportada.
+- **Verificação F04 T3:** `bun run typecheck` e `bun run test:e2e` passaram; PostgreSQL temporário isolado executou 111 testes/582 expectativas. Testes simulados cobrem os quatro endpoints, identidade divergente, sessão inválida, 402, conflitos, bet ausente, timeout, 5xx, JSON inválido, limites e ausência de valores sensíveis em erros.
+- **Próximo passo:** commitar F04 T3 antes de iniciar T4 (sessão autenticada, aposta, persistência e reconciliação com Financial/Crashsim). O MVP documenta o risco raro de débito persistido com bet rejeitado sem adicionar estorno automático.
 
 ## Dependências de roadmap ainda não especificadas
 
@@ -70,4 +72,4 @@
 
 - F02 requirements, design e tasks estão aprovados; implementação T1–T4 concluída e verificada.
 - F03 requirements, design e tasks estão aprovados; implementação e verificação PostgreSQL/Crashsim foram concluídas.
-- F04 requirements, design e tasks estão aprovados; T1 commitada e T2 concluída, próxima T3.
+- F04 requirements, design e tasks estão aprovados; T1–T2 commitadas e T3 concluída, próxima T4.

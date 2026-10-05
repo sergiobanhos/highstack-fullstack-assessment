@@ -148,20 +148,20 @@ T1 completa as duas consultas financeiras específicas que o design F04 precisa.
 
 ### Trabalho
 
-- [ ] Estender `crashsim-http.client.ts` com `createSession`, `placeBet`, `getBet` e `cashout`, usando `ENGINE_HTTP_URL` e `ENGINE_OPERATOR_KEY` somente no servidor.
-- [ ] Validar respostas relevantes da engine com Valibot, inclusive identidade da aposta, jogador/rodada quando retornados, status, multiplicador e payout.
-- [ ] Classificar `session_not_found` validado como recusa definitiva que permite uma renovação de sessão; timeout, desconexão, 5xx e JSON inválido após envio permanecem ambíguos.
-- [ ] Implementar timeout limitado e erros tipados para recusa, conflito, indisponibilidade e resultado desconhecido, sem retry automático genérico no cliente.
-- [ ] Preservar somente valores monetários JSON seguros; sinalizar precisão não representável sem arredondar nem fabricar resultado.
-- [ ] Adicionar testes do cliente para headers, payloads, validação de resposta, timeout, status HTTP e redação de credenciais.
+- [x] Estender `crashsim-http.client.ts` com `createSession`, `placeBet`, `getBet` e `cashout`, usando `ENGINE_HTTP_URL` e `ENGINE_OPERATOR_KEY` somente no servidor.
+- [x] Validar respostas relevantes da engine com Valibot, inclusive identidade da aposta, jogador/rodada quando retornados, status, multiplicador e payout.
+- [x] Classificar `session_not_found` validado como recusa definitiva que permite uma renovação de sessão; timeout, desconexão, 5xx e JSON inválido após envio permanecem ambíguos.
+- [x] Implementar timeout limitado e erros tipados para recusa, conflito, indisponibilidade e resultado desconhecido, sem retry automático genérico no cliente.
+- [x] Preservar somente valores monetários JSON seguros; sinalizar precisão não representável sem arredondar nem fabricar resultado.
+- [x] Adicionar testes do cliente para headers, payloads, validação de resposta, timeout, status HTTP e redação de credenciais.
 
 ### Critérios de aceite
 
-- [ ] Os quatro métodos usam o contrato atual do Crashsim e não alteram a engine.
-- [ ] Nenhuma chamada envia chave de idempotência fingindo suporte na engine, e cliente não implementa retry de `POST /bets` para timeout/5xx/JSON inválido.
-- [ ] `session_not_found` só é definitivo quando a resposta estruturada correspondente foi validada.
-- [ ] `ENGINE_OPERATOR_KEY`, `sessionId` e corpo sensível não aparecem em resposta de erro nem nos logs.
-- [ ] Payout fora de `Number.MAX_SAFE_INTEGER` não é arredondado ou aceito como valor financeiro.
+- [x] Os quatro métodos usam o contrato atual do Crashsim e não alteram a engine.
+- [x] Nenhuma chamada envia chave de idempotência fingindo suporte na engine, e cliente não implementa retry de `POST /bets` para timeout/5xx/JSON inválido.
+- [x] `session_not_found` só é definitivo quando a resposta estruturada correspondente foi validada.
+- [x] `ENGINE_OPERATOR_KEY`, `sessionId` e corpo sensível não aparecem em resposta de erro nem nos logs.
+- [x] Payout fora de `Number.MAX_SAFE_INTEGER` não é arredondado ou aceito como valor financeiro.
 
 ### Arquivos
 
@@ -170,9 +170,9 @@ T1 completa as duas consultas financeiras específicas que o design F04 precisa.
 
 ### Verificação
 
-- [ ] `cd operator && bun run typecheck && bun test`.
-- [ ] Executar testes simulados para respostas válidas/inválidas, `session_not_found`, 402, timeout, 5xx e payout inseguro.
-- [ ] Inspecionar logs/erros capturados e confirmar ausência de chave, session ID e body integral.
+- [x] `cd operator && bun run typecheck && bun run test:e2e` (suíte completa em PostgreSQL temporário dedicado).
+- [x] Executar testes simulados para respostas válidas/inválidas, `session_not_found`, 402, timeout, 5xx e payout inseguro.
+- [x] Inspecionar erros e requests capturados; chave, session ID e body cru não são devolvidos em erros nem registrados pelo cliente.
 
 ## Task T4: Implementar abertura de sessão, aposta e reconciliação
 
