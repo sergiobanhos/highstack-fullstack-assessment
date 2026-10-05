@@ -3,7 +3,12 @@ import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Logger } from '../../config';
 import type { OperatorDatabase } from '../../db';
 import type { FinancialModule } from '../financial/financial.module';
-import { CrashsimHttpClient, CrashsimHttpError, type CrashsimBet } from './crashsim-http.client';
+import {
+  CrashsimHttpClient,
+  CrashsimHttpError,
+  type CashoutResult,
+  type CrashsimBet,
+} from './crashsim-http.client';
 import { gameBets, gameCommands, type GameCommandStatus, type GameEngineBetStatus, type GameSettlementStatus } from './game.schema';
 import type { GameStreamService } from './game-stream.service';
 
@@ -21,6 +26,9 @@ export type GameCommandErrorCode =
   | 'ROUND_NOT_ACCEPTING_BETS'
   | 'BET_ALREADY_EXISTS'
   | 'BET_OUTCOME_UNKNOWN'
+  | 'BET_NOT_ACTIVE'
+  | 'ROUND_NOT_RUNNING'
+  | 'CASHOUT_OUTCOME_UNKNOWN'
   | 'INVALID_QUERY'
   | 'SERVICE_UNAVAILABLE';
 
@@ -32,6 +40,9 @@ const ERROR_MESSAGES: Record<GameCommandErrorCode, string> = {
   ROUND_NOT_ACCEPTING_BETS: 'The current round is not accepting bets',
   BET_ALREADY_EXISTS: 'A bet already exists for this player and round',
   BET_OUTCOME_UNKNOWN: 'A previous bet for this player and round is still being resolved',
+  BET_NOT_ACTIVE: 'Bet is no longer active',
+  ROUND_NOT_RUNNING: 'The bet round is not running',
+  CASHOUT_OUTCOME_UNKNOWN: 'A cashout for this bet is still being resolved',
   INVALID_QUERY: 'Game query is invalid',
   SERVICE_UNAVAILABLE: 'Game service is unavailable',
 };
@@ -49,6 +60,12 @@ export interface PlaceBetCommandInput {
   roundId: string;
   amount: number;
   autoCashout?: number;
+}
+
+export interface CashoutCommandInput {
+  playerId: string;
+  idempotencyKey: string;
+  betId: string;
 }
 
 export interface GameBetView {
@@ -88,6 +105,7 @@ export interface GetGameBetInput {
 export interface GameCommandService {
   createSession(playerId: string): Promise<{ status: 'ready' }>;
   placeBet(input: PlaceBetCommandInput): Promise<BetCommandResult>;
+  cashout(input: CashoutCommandInput): Promise<BetCommandResult | null>;
   listBets(input: ListBetsInput): Promise<BetCommandResult[]>;
   getCommand(input: GetGameCommandInput): Promise<BetCommandResult | null>;
   getBet(input: GetGameBetInput): Promise<BetCommandResult | null>;
@@ -96,7 +114,7 @@ export interface GameCommandService {
 export interface GameCommandServiceDeps {
   db: OperatorDatabase;
   financial: Pick<FinancialModule, 'ensureWallet' | 'findBetDebitForCommand' | 'getCashoutCreditStatus'>;
-  engine: Pick<CrashsimHttpClient, 'createSession' | 'placeBet' | 'getBet'>;
+  engine: Pick<CrashsimHttpClient, 'createSession' | 'placeBet' | 'getBet' | 'cashout'>;
   stream: Pick<GameStreamService, 'getSnapshot'>;
   logger: Logger;
 }
@@ -209,6 +227,8 @@ function unknownResult(command: StoredCommand, resultCode = 'outcome_unknown', b
 export function createGameCommandService({ db, financial, engine, stream, logger }: GameCommandServiceDeps): GameCommandService {
   const sessions = new Map<string, string>();
   const sessionCreations = new Map<string, Promise<string>>();
+  const cashoutRequests = new Map<string, Promise<BetCommandResult | null>>();
+  const cashoutInFlight = new Map<string, Promise<BetCommandResult>>();
 
   async function withStorageErrors<T>(run: () => Promise<T>): Promise<T> {
     try {
@@ -266,8 +286,12 @@ export function createGameCommandService({ db, financial, engine, stream, logger
     });
   }
 
-  function assertMatchingCommand(command: StoredCommand, requestHash: string): void {
-    if (command.commandType !== 'bet' || command.requestHash !== requestHash) {
+  function assertMatchingCommand(
+    command: StoredCommand,
+    commandType: 'bet' | 'cashout',
+    requestHash: string,
+  ): void {
+    if (command.commandType !== commandType || command.requestHash !== requestHash) {
       throw new GameCommandError('IDEMPOTENCY_KEY_REUSED');
     }
   }
@@ -303,7 +327,7 @@ export function createGameCommandService({ db, financial, engine, stream, logger
         ))
         .for('update');
       if (sameKey) {
-        assertMatchingCommand(sameKey, bet.requestHash);
+        assertMatchingCommand(sameKey, 'bet', bet.requestHash);
         return { command: sameKey, created: false };
       }
 
@@ -323,7 +347,57 @@ export function createGameCommandService({ db, financial, engine, stream, logger
     }));
   }
 
+  async function reserveCashoutCommand(
+    input: CashoutCommandInput,
+    requestHash: string,
+    roundId: string,
+  ): Promise<BetReservation> {
+    return withStorageErrors(() => db.transaction(async (tx) => {
+      const [inserted] = await tx
+        .insert(gameCommands)
+        .values({
+          playerId: input.playerId,
+          commandType: 'cashout',
+          idempotencyKey: input.idempotencyKey,
+          requestHash,
+          roundId,
+          betId: input.betId,
+          status: 'pending',
+        })
+        .onConflictDoNothing()
+        .returning(commandProjection);
+
+      if (inserted) return { command: inserted, created: true };
+
+      const [sameKey] = await tx
+        .select(commandProjection)
+        .from(gameCommands)
+        .where(and(
+          eq(gameCommands.playerId, input.playerId),
+          eq(gameCommands.idempotencyKey, input.idempotencyKey),
+        ))
+        .for('update');
+      if (sameKey) {
+        assertMatchingCommand(sameKey, 'cashout', requestHash);
+        return { command: sameKey, created: false };
+      }
+
+      const [betSlot] = await tx
+        .select(commandProjection)
+        .from(gameCommands)
+        .where(and(
+          eq(gameCommands.betId, input.betId),
+          eq(gameCommands.commandType, 'cashout'),
+          inArray(gameCommands.status, ['pending', 'unknown']),
+        ))
+        .for('update');
+      if (betSlot) throw new GameCommandError('CASHOUT_OUTCOME_UNKNOWN');
+      throw new GameCommandError('SERVICE_UNAVAILABLE');
+    }));
+  }
+
   async function resultForCommand(command: StoredCommand): Promise<BetCommandResult> {
+    if (command.commandType === 'cashout') return resultForCashoutCommand(command);
     const base = {
       commandId: command.id,
       roundId: command.roundId ?? '',
@@ -349,6 +423,41 @@ export function createGameCommandService({ db, financial, engine, stream, logger
       if (amountCents === null) return { ...base, betCommandStatus: 'unknown', resultCode: 'unsafe_stored_amount', bet: null };
       return {
         ...base,
+        bet: {
+          betId: bet.betId,
+          engineStatus: bet.engineStatus,
+          multiplierHundredths: safeNumber(bet.multiplierHundredths),
+          payoutCents: safeNumber(bet.payoutCents),
+          settlementStatus: bet.settlementStatus,
+        },
+      };
+    } catch {
+      return unknownResult(command, 'storage_unavailable');
+    }
+  }
+
+  async function resultForCashoutCommand(command: StoredCommand): Promise<BetCommandResult> {
+    if (!command.betId) return unknownResult(command, 'cashout_bet_missing');
+    try {
+      const [bet] = await db
+        .select()
+        .from(gameBets)
+        .where(and(
+          eq(gameBets.betId, command.betId),
+          eq(gameBets.playerId, command.playerId),
+        ))
+        .limit(1);
+      if (!bet) return unknownResult(command, 'cashout_bet_missing');
+      const amountCents = safeNumber(bet.amountCents);
+      if (amountCents === null) return unknownResult(command, 'unsafe_stored_amount');
+      return {
+        commandId: command.id,
+        roundId: bet.roundId,
+        amountCents,
+        autoCashoutHundredths: bet.autoCashoutHundredths,
+        betCommandStatus: command.status,
+        resultCode: command.resultCode,
+        betId: bet.betId,
         bet: {
           betId: bet.betId,
           engineStatus: bet.engineStatus,
@@ -395,8 +504,11 @@ export function createGameCommandService({ db, financial, engine, stream, logger
 
   async function getCommand(input: GetGameCommandInput): Promise<BetCommandResult | null> {
     const command = await currentCommand(input.playerId, input.commandId);
-    if (!command || command.commandType !== 'bet') return null;
+    if (!command) return null;
     if (command.status === 'pending' || command.status === 'unknown') {
+      if (command.commandType === 'cashout') {
+        return cashoutInFlight.get(command.id) ?? reconcileCashout(command);
+      }
       return reconcileUnknown(command);
     }
     return resultForCommand(command);
@@ -531,14 +643,21 @@ export function createGameCommandService({ db, financial, engine, stream, logger
       });
       if (!persisted) return unknownResult(command, 'storage_unavailable', betId);
       if (persisted.status !== 'unknown') return resultForCommand(persisted);
-      logger.warn('game.bet.unknown', {
+      logger.warn(persisted.commandType === 'cashout' ? 'game.cashout.unknown' : 'game.bet.unknown', {
         commandId: persisted.id,
         roundId: persisted.roundId,
+        betId: persisted.betId,
         reason: persisted.resultCode ?? resultCode,
       });
-      return unknownResult(persisted, persisted.resultCode ?? resultCode);
+      return resultForCommand(persisted);
     } catch {
-      logger.error('game.bet.outcome_persistence_failed', { commandId: command.id, category: 'unknown' });
+      logger.error(command.commandType === 'cashout'
+        ? 'game.cashout.outcome_persistence_failed'
+        : 'game.bet.outcome_persistence_failed', {
+        commandId: command.id,
+        betId,
+        category: 'unknown',
+      });
       return unknownResult(command, 'outcome_unknown', betId);
     }
   }
@@ -589,7 +708,10 @@ export function createGameCommandService({ db, financial, engine, stream, logger
 
   async function settlementFor(playerId: string, bet: BetToPersist): Promise<GameSettlementStatus> {
     if (bet.status !== 'cashed_out') return 'not_applicable';
-    if (bet.payoutPrecision === 'unsafe') return 'precision_incident';
+    if (bet.payoutPrecision === 'unsafe') {
+      logger.error('game.cashout.precision_incident', { betId: bet.betId, category: 'unsafe_payout' });
+      return 'precision_incident';
+    }
     try {
       const status = await financial.getCashoutCreditStatus({ playerId, betId: bet.betId });
       return status.status === 'credited' ? 'confirmed' : 'pending';
@@ -715,8 +837,262 @@ export function createGameCommandService({ db, financial, engine, stream, logger
     });
   }
 
+  async function persistCashoutOutcome(
+    command: StoredCommand,
+    commandStatus: 'accepted' | 'rejected',
+    resultCode: string | null,
+    currentBet?: BetToPersist,
+  ): Promise<BetCommandResult> {
+    const settlementStatus = currentBet
+      ? await settlementFor(command.playerId, currentBet)
+      : undefined;
+    try {
+      const persisted = await db.transaction(async (tx) => {
+        const [latest] = await tx
+          .select(commandProjection)
+          .from(gameCommands)
+          .where(eq(gameCommands.id, command.id))
+          .for('update');
+        if (!latest) return undefined;
+        if (latest.status !== 'pending' && latest.status !== 'unknown') return latest;
+
+        if (currentBet && latest.betId) {
+          const refreshableStatuses: GameEngineBetStatus[] = currentBet.status === 'active'
+            ? ['active']
+            : currentBet.status === 'lost'
+              ? ['active', 'lost']
+              : ['active', 'cashed_out'];
+          await tx
+            .update(gameBets)
+            .set({
+              engineStatus: currentBet.status,
+              multiplierHundredths: currentBet.multiplierHundredths === null
+                ? null
+                : BigInt(currentBet.multiplierHundredths),
+              payoutCents: currentBet.payoutCents === null ? null : BigInt(currentBet.payoutCents),
+              settlementStatus: settlementStatus ?? 'not_applicable',
+              updatedAt: new Date(),
+            })
+            .where(and(
+              eq(gameBets.betId, latest.betId),
+              eq(gameBets.playerId, latest.playerId),
+              inArray(gameBets.engineStatus, refreshableStatuses),
+            ));
+        }
+
+        await tx
+          .update(gameCommands)
+          .set({
+            status: commandStatus,
+            resultCode,
+            resolvedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(gameCommands.id, command.id));
+
+        const [updated] = await tx
+          .select(commandProjection)
+          .from(gameCommands)
+          .where(eq(gameCommands.id, command.id));
+        return updated;
+      });
+      if (!persisted) return unknownResult(command, 'storage_unavailable', command.betId);
+      if (persisted.status === 'accepted') {
+        logger.info('game.cashout.confirmed', {
+          commandId: persisted.id,
+          betId: persisted.betId,
+          roundId: command.roundId,
+        });
+      } else if (persisted.status === 'rejected') {
+        logger.info('game.cashout.rejected', {
+          commandId: persisted.id,
+          betId: persisted.betId,
+          reason: persisted.resultCode,
+        });
+      }
+      return resultForCommand(persisted);
+    } catch {
+      logger.error('game.cashout.outcome_persistence_failed', {
+        commandId: command.id,
+        category: commandStatus,
+      });
+      return persistUnknown(command, command.betId, 'cashout_result_persistence_failed');
+    }
+  }
+
+  async function reconcileCashout(
+    command: StoredCommand,
+    activeResultCode = 'cashout_not_applied',
+  ): Promise<BetCommandResult> {
+    if (!command.betId) return persistUnknown(command, null, 'cashout_bet_missing');
+    const bet = await withStorageErrors(async () => {
+      const [ownedBet] = await db
+        .select()
+        .from(gameBets)
+        .where(and(
+          eq(gameBets.betId, command.betId!),
+          eq(gameBets.playerId, command.playerId),
+        ))
+        .limit(1);
+      return ownedBet;
+    });
+    if (!bet) return persistUnknown(command, command.betId, 'cashout_bet_missing');
+
+    let current: CrashsimBet;
+    try {
+      current = await engine.getBet({
+        betId: bet.betId,
+        playerId: command.playerId,
+        roundId: bet.roundId,
+      });
+    } catch (error) {
+      if (error instanceof CrashsimHttpError && error.kind === 'not_found') {
+        return persistCashoutOutcome(command, 'rejected', 'bet_not_found');
+      }
+      logger.warn('game.cashout.reconciliation_incomplete', {
+        commandId: command.id,
+        stage: 'engine_lookup',
+      });
+      return persistUnknown(command, command.betId, 'engine_unavailable');
+    }
+
+    if (current.betId !== bet.betId || current.playerId !== command.playerId ||
+        current.roundId !== bet.roundId || current.amount !== safeNumber(bet.amountCents)) {
+      return persistUnknown(command, command.betId, 'bet_identity_mismatch');
+    }
+
+    if (current.status === 'cashed_out') {
+      return persistCashoutOutcome(command, 'accepted', null, {
+        betId: current.betId,
+        status: current.status,
+        multiplierHundredths: current.multiplierHundredths,
+        payoutCents: current.payoutCents,
+        payoutPrecision: current.payoutPrecision,
+      });
+    }
+    if (current.status === 'active') {
+      return persistCashoutOutcome(command, 'rejected', activeResultCode, {
+        betId: current.betId,
+        status: current.status,
+        multiplierHundredths: null,
+        payoutCents: null,
+        payoutPrecision: 'not_provided',
+      });
+    }
+    if (current.status === 'lost') {
+      return persistCashoutOutcome(command, 'rejected', 'bet_not_active', {
+        betId: current.betId,
+        status: current.status,
+        multiplierHundredths: null,
+        payoutCents: null,
+        payoutPrecision: 'not_provided',
+      });
+    }
+    return persistCashoutOutcome(command, 'rejected', 'bet_not_active');
+  }
+
+  async function postCashout(command: StoredCommand, bet: typeof gameBets.$inferSelect): Promise<BetCommandResult> {
+    try {
+      const result: CashoutResult = await engine.cashout({
+        betId: bet.betId,
+        playerId: command.playerId,
+        roundId: bet.roundId,
+      });
+      return persistCashoutOutcome(command, 'accepted', null, {
+        betId: result.betId,
+        status: result.status,
+        multiplierHundredths: result.multiplierHundredths,
+        payoutCents: result.payoutCents,
+        payoutPrecision: result.payoutPrecision,
+      });
+    } catch (error) {
+      const rejectionCode = error instanceof CrashsimHttpError
+        ? error.engineCode === 'bet_not_active' || error.engineCode === 'round_not_running'
+          ? error.engineCode
+          : error.kind === 'not_found'
+            ? 'bet_not_found'
+            : error.kind === 'rejected' || error.kind === 'conflict'
+              ? 'cashout_rejected'
+              : 'cashout_not_applied'
+        : 'cashout_not_applied';
+      return reconcileCashout(command, rejectionCode);
+    }
+  }
+
+  async function runCashout(input: CashoutCommandInput): Promise<BetCommandResult | null> {
+    const requestHash = createHash('sha256')
+      .update(JSON.stringify({ commandType: 'cashout', betId: input.betId }))
+      .digest('hex');
+    const existing = await loadByIdempotencyKey(input.playerId, input.idempotencyKey);
+    if (existing) {
+      assertMatchingCommand(existing, 'cashout', requestHash);
+      if (existing.status === 'pending' || existing.status === 'unknown') {
+        return cashoutInFlight.get(existing.id) ?? reconcileCashout(existing);
+      }
+      return resultForCommand(existing);
+    }
+
+    const bet = await withStorageErrors(async () => {
+      const [ownedBet] = await db
+        .select()
+        .from(gameBets)
+        .where(and(
+          eq(gameBets.betId, input.betId),
+          eq(gameBets.playerId, input.playerId),
+        ))
+        .limit(1);
+      return ownedBet;
+    });
+    if (!bet) return null;
+
+    const snapshot = stream.getSnapshot();
+    if (snapshot.connection !== 'connected') throw new GameCommandError('GAME_NOT_SYNCHRONIZED');
+    if (snapshot.state.state !== 'running' || snapshot.state.roundId !== bet.roundId) {
+      throw new GameCommandError('ROUND_NOT_RUNNING');
+    }
+    if (bet.engineStatus !== 'active') throw new GameCommandError('BET_NOT_ACTIVE');
+
+    const reservation = await reserveCashoutCommand(input, requestHash, bet.roundId);
+    if (!reservation.created) {
+      if (reservation.command.status === 'pending' || reservation.command.status === 'unknown') {
+        return cashoutInFlight.get(reservation.command.id) ?? reconcileCashout(reservation.command);
+      }
+      return resultForCommand(reservation.command);
+    }
+
+    const operation = postCashout(reservation.command, bet);
+    logger.info('game.cashout.requested', {
+      commandId: reservation.command.id,
+      betId: bet.betId,
+      roundId: bet.roundId,
+    });
+    cashoutInFlight.set(reservation.command.id, operation);
+    try {
+      return await operation;
+    } finally {
+      if (cashoutInFlight.get(reservation.command.id) === operation) {
+        cashoutInFlight.delete(reservation.command.id);
+      }
+    }
+  }
+
+  async function cashout(input: CashoutCommandInput): Promise<BetCommandResult | null> {
+    if (!UUID_PATTERN.test(input.idempotencyKey)) throw new GameCommandError('INVALID_IDEMPOTENCY_KEY');
+    if (!ENGINE_ID_PATTERN.test(input.betId)) throw new GameCommandError('INVALID_BET');
+    const requestKey = input.playerId + ':' + input.idempotencyKey;
+    const existing = cashoutRequests.get(requestKey);
+    if (existing) return existing;
+    const operation = runCashout(input);
+    cashoutRequests.set(requestKey, operation);
+    try {
+      return await operation;
+    } finally {
+      if (cashoutRequests.get(requestKey) === operation) cashoutRequests.delete(requestKey);
+    }
+  }
+
   async function replayOrReconcile(command: StoredCommand, requestHash: string): Promise<BetCommandResult> {
-    assertMatchingCommand(command, requestHash);
+    assertMatchingCommand(command, 'bet', requestHash);
     if (command.status === 'pending' || command.status === 'unknown') return reconcileUnknown(command);
     return resultForCommand(command);
   }
@@ -813,6 +1189,7 @@ export function createGameCommandService({ db, financial, engine, stream, logger
       if (!reservation.created) return replayOrReconcile(reservation.command, bet.requestHash);
       return postBet(reservation.command, sessionId, bet);
     },
+    cashout,
     listBets,
     getCommand,
     getBet,

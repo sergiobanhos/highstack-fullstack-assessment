@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createDatabase } from '../../db';
 import { createFinancialService } from '../financial/financial.service';
-import type { PlaceBetInput, PlaceBetResult, CrashsimBet } from './crashsim-http.client';
+import type { PlaceBetInput, PlaceBetResult, CashoutInput, CashoutResult, CrashsimBet } from './crashsim-http.client';
 import { CrashsimHttpError } from './crashsim-http.client';
 import { gameBets, gameCommands } from './game.schema';
 import { createGameCommandService } from './game-command.service';
@@ -40,6 +40,7 @@ if (!testDatabaseUrl) {
     createSession?: (playerId: string) => Promise<{ sessionId: string }>;
     placeBet?: (input: PlaceBetInput) => Promise<PlaceBetResult>;
     getBet?: (input: { betId: string; playerId?: string; roundId?: string }) => Promise<CrashsimBet>;
+    cashout?: (input: CashoutInput) => Promise<CashoutResult>;
   };
 
   function connectedSnapshot(roundId = 'round-current'): OperatorSnapshot {
@@ -59,11 +60,30 @@ if (!testDatabaseUrl) {
     };
   }
 
+  function runningSnapshot(roundId = 'round-current'): OperatorSnapshot {
+    return {
+      connection: 'connected',
+      state: {
+        roundId,
+        state: 'running',
+        seq: 13,
+        serverSeedHash: null,
+        bettingEndsAt: null,
+        startedAt: Date.now(),
+        multiplier: 1.5,
+        crashPoint: null,
+        serverSeed: null,
+      },
+    };
+  }
+
   function createHarness(overrides: EngineOverrides = {}, snapshot = connectedSnapshot()) {
     let createSessionCalls = 0;
     let placeBetCalls = 0;
     let getBetCalls = 0;
+    let cashoutCalls = 0;
     const postedInputs: PlaceBetInput[] = [];
+    const postedCashouts: CashoutInput[] = [];
     const engine = {
       async createSession(playerId: string) {
         createSessionCalls += 1;
@@ -90,6 +110,18 @@ if (!testDatabaseUrl) {
           payoutPrecision: 'not_provided' as const,
         };
       },
+      async cashout(input: CashoutInput) {
+        cashoutCalls += 1;
+        postedCashouts.push(input);
+        if (overrides.cashout) return overrides.cashout(input);
+        return {
+          betId: input.betId,
+          status: 'cashed_out' as const,
+          multiplierHundredths: 150,
+          payoutCents: 150,
+          payoutPrecision: 'safe' as const,
+        };
+      },
     };
     const service = createGameCommandService({
       db: connection.db,
@@ -100,8 +132,18 @@ if (!testDatabaseUrl) {
     });
     return {
       service,
-      engineStats: () => ({ createSessionCalls, placeBetCalls, getBetCalls, postedInputs }),
+      engineStats: () => ({ createSessionCalls, placeBetCalls, getBetCalls, cashoutCalls, postedInputs, postedCashouts }),
     };
+  }
+
+  async function createOwnedBet(playerId: string): Promise<{ betId: string; commandId: string }> {
+    const created = await createHarness().service.placeBet({
+      playerId,
+      idempotencyKey: randomUUID(),
+      roundId: 'round-current',
+      amount: 100,
+    });
+    return { betId: created.betId!, commandId: created.commandId };
   }
 
   async function cleanPlayer(playerId: string): Promise<void> {
@@ -602,6 +644,226 @@ if (!testDatabaseUrl) {
           payoutCents: 720,
           settlementStatus: 'confirmed',
         });
+      });
+    });
+
+    test('cashout records the game result separately from the delayed financial credit', async () => {
+      await withPlayer(async (playerId) => {
+        const { betId } = await createOwnedBet(playerId);
+        const engineBet: CrashsimBet = {
+          betId,
+          playerId,
+          roundId: 'round-current',
+          amount: 100,
+          status: 'cashed_out',
+          multiplierHundredths: 150,
+          payoutCents: 150,
+          payoutPrecision: 'safe',
+        };
+        const harness = createHarness({ getBet: async () => engineBet }, runningSnapshot());
+        const input = { playerId, idempotencyKey: randomUUID(), betId };
+
+        const result = await harness.service.cashout(input);
+        expect(result).toMatchObject({
+          betCommandStatus: 'accepted',
+          resultCode: null,
+          betId,
+          bet: {
+            engineStatus: 'cashed_out',
+            multiplierHundredths: 150,
+            payoutCents: 150,
+            settlementStatus: 'pending',
+          },
+        });
+        expect(await harness.service.cashout(input)).toEqual(result);
+        await expect(harness.service.cashout({ ...input, betId: 'different-bet' }))
+          .rejects.toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED' });
+        expect(harness.engineStats()).toMatchObject({ cashoutCalls: 1, getBetCalls: 0 });
+        expect(await financial.getBalance(playerId)).toEqual({ playerId, balanceCents: 0n });
+
+        await financial.creditCashoutOnce({
+          txId: randomUUID(), playerId, amount: 150, betId, roundId: 'round-current', source: 'engine',
+        });
+        const refreshed = await harness.service.getBet({ playerId, betId });
+        expect(refreshed?.bet).toMatchObject({ engineStatus: 'cashed_out', payoutCents: 150, settlementStatus: 'confirmed' });
+        expect(await harness.service.getCommand({ playerId, commandId: result!.commandId }))
+          .toMatchObject({ betCommandStatus: 'accepted', bet: { settlementStatus: 'confirmed' } });
+      });
+    });
+
+    test('reconciles ambiguous cashout as cashed_out or active before deciding the command result', async () => {
+      await withPlayer(async (playerId) => {
+        const { betId } = await createOwnedBet(playerId);
+        const cashedOut: CrashsimBet = {
+          betId, playerId, roundId: 'round-current', amount: 100, status: 'cashed_out',
+          multiplierHundredths: 220, payoutCents: 220, payoutPrecision: 'safe',
+        };
+        const acceptedHarness = createHarness({
+          async cashout() { throw new CrashsimHttpError('unknown'); },
+          async getBet() { return cashedOut; },
+        }, runningSnapshot());
+        const accepted = await acceptedHarness.service.cashout({
+          playerId, idempotencyKey: randomUUID(), betId,
+        });
+        expect(accepted).toMatchObject({
+          betCommandStatus: 'accepted',
+          bet: { engineStatus: 'cashed_out', multiplierHundredths: 220, payoutCents: 220, settlementStatus: 'pending' },
+        });
+        expect(acceptedHarness.engineStats()).toMatchObject({ cashoutCalls: 1, getBetCalls: 1 });
+      });
+
+      await withPlayer(async (playerId) => {
+        const { betId } = await createOwnedBet(playerId);
+        let postCalls = 0;
+        const active: CrashsimBet = {
+          betId, playerId, roundId: 'round-current', amount: 100, status: 'active',
+          multiplierHundredths: null, payoutCents: null, payoutPrecision: 'not_provided',
+        };
+        const harness = createHarness({
+          async cashout() {
+            postCalls += 1;
+            if (postCalls === 1) throw new CrashsimHttpError('unknown');
+            return { betId, status: 'cashed_out', multiplierHundredths: 180, payoutCents: 180, payoutPrecision: 'safe' };
+          },
+          async getBet() { return active; },
+        }, runningSnapshot());
+        const firstKey = randomUUID();
+        const rejected = await harness.service.cashout({ playerId, idempotencyKey: firstKey, betId });
+        expect(rejected).toMatchObject({ betCommandStatus: 'rejected', resultCode: 'cashout_not_applied' });
+        expect((await harness.service.cashout({ playerId, idempotencyKey: firstKey, betId }))?.betCommandStatus)
+          .toBe('rejected');
+
+        const retried = await harness.service.cashout({ playerId, idempotencyKey: randomUUID(), betId });
+        expect(retried).toMatchObject({ betCommandStatus: 'accepted', bet: { engineStatus: 'cashed_out' } });
+        expect(harness.engineStats()).toMatchObject({ cashoutCalls: 2, getBetCalls: 1 });
+      });
+    });
+
+    test('keeps cashout unknown when reconciliation is unavailable and blocks a new key', async () => {
+      await withPlayer(async (playerId) => {
+        const { betId } = await createOwnedBet(playerId);
+        const harness = createHarness({
+          async cashout() { throw new CrashsimHttpError('unknown'); },
+          async getBet() { throw new CrashsimHttpError('unavailable'); },
+        }, runningSnapshot());
+        const first = await harness.service.cashout({ playerId, idempotencyKey: randomUUID(), betId });
+        expect(first).toMatchObject({
+          betCommandStatus: 'unknown',
+          bet: { betId, engineStatus: 'active', settlementStatus: 'not_applicable' },
+        });
+        const retriedRead = await harness.service.getCommand({ playerId, commandId: first!.commandId });
+        expect(retriedRead).toMatchObject({ betCommandStatus: 'unknown', resultCode: 'engine_unavailable' });
+        await expect(harness.service.cashout({ playerId, idempotencyKey: randomUUID(), betId }))
+          .rejects.toMatchObject({ code: 'CASHOUT_OUTCOME_UNKNOWN' });
+        expect(harness.engineStats()).toMatchObject({ cashoutCalls: 1, getBetCalls: 2 });
+      });
+    });
+
+    test('reconciles a persisted unknown cashout after recreating the game service without another POST', async () => {
+      await withPlayer(async (playerId) => {
+        const { betId } = await createOwnedBet(playerId);
+        const firstProcess = createHarness({
+          async cashout() { throw new CrashsimHttpError('unknown'); },
+          async getBet() { throw new CrashsimHttpError('unavailable'); },
+        }, runningSnapshot());
+        const unknown = await firstProcess.service.cashout({
+          playerId, idempotencyKey: randomUUID(), betId,
+        });
+        expect(unknown?.betCommandStatus).toBe('unknown');
+
+        const cashedOut: CrashsimBet = {
+          betId, playerId, roundId: 'round-current', amount: 100, status: 'cashed_out',
+          multiplierHundredths: 165, payoutCents: 165, payoutPrecision: 'safe',
+        };
+        const restarted = createHarness({
+          async cashout() { throw new Error('cashout POST must not be repeated by reconciliation'); },
+          async getBet() { return cashedOut; },
+        }, runningSnapshot());
+        const reconciled = await restarted.service.getCommand({ playerId, commandId: unknown!.commandId });
+        expect(reconciled).toMatchObject({
+          betCommandStatus: 'accepted',
+          bet: { engineStatus: 'cashed_out', payoutCents: 165, settlementStatus: 'pending' },
+        });
+        expect(restarted.engineStats()).toMatchObject({ cashoutCalls: 0, getBetCalls: 1 });
+      });
+    });
+
+    test('checks cashout ownership, synchronized running state, and active bet status before Crashsim', async () => {
+      await withPlayer(async (playerId) => {
+        const { betId } = await createOwnedBet(playerId);
+        const otherPlayerId = randomUUID();
+        try {
+          const outsider = createHarness({}, runningSnapshot());
+          expect(await outsider.service.cashout({
+            playerId: otherPlayerId, idempotencyKey: randomUUID(), betId,
+          })).toBeNull();
+          expect(outsider.engineStats()).toMatchObject({ cashoutCalls: 0, getBetCalls: 0 });
+        } finally {
+          await cleanPlayer(otherPlayerId);
+        }
+
+        const disconnected = runningSnapshot();
+        disconnected.connection = 'reconnecting';
+        await expect(createHarness({}, disconnected).service.cashout({
+          playerId, idempotencyKey: randomUUID(), betId,
+        })).rejects.toMatchObject({ code: 'GAME_NOT_SYNCHRONIZED' });
+
+        await expect(createHarness({}, connectedSnapshot()).service.cashout({
+          playerId, idempotencyKey: randomUUID(), betId,
+        })).rejects.toMatchObject({ code: 'ROUND_NOT_RUNNING' });
+
+        await connection.db.update(gameBets).set({ engineStatus: 'lost' }).where(eq(gameBets.betId, betId));
+        const inactive = createHarness({}, runningSnapshot());
+        await expect(inactive.service.cashout({ playerId, idempotencyKey: randomUUID(), betId }))
+          .rejects.toMatchObject({ code: 'BET_NOT_ACTIVE' });
+        expect(inactive.engineStats()).toMatchObject({ cashoutCalls: 0, getBetCalls: 0 });
+      });
+    });
+
+    test('deduplicates the same cashout key and serializes different keys for one bet', async () => {
+      await withPlayer(async (playerId) => {
+        const { betId } = await createOwnedBet(playerId);
+        let signalEntered: () => void = () => {};
+        let releaseCashout: () => void = () => {};
+        const entered = new Promise<void>((resolve) => { signalEntered = resolve; });
+        const cashoutGate = new Promise<void>((resolve) => { releaseCashout = resolve; });
+        const harness = createHarness({
+          async cashout() {
+            signalEntered();
+            await cashoutGate;
+            return { betId, status: 'cashed_out', multiplierHundredths: 175, payoutCents: 175, payoutPrecision: 'safe' };
+          },
+        }, runningSnapshot());
+        const request = { playerId, idempotencyKey: randomUUID(), betId };
+        const first = harness.service.cashout(request);
+        await entered;
+        const replay = harness.service.cashout(request);
+        await expect(harness.service.cashout({ ...request, idempotencyKey: randomUUID() }))
+          .rejects.toMatchObject({ code: 'CASHOUT_OUTCOME_UNKNOWN' });
+        releaseCashout();
+        const [firstResult, replayResult] = await Promise.all([first, replay]);
+        expect(replayResult).toEqual(firstResult);
+        expect(harness.engineStats().cashoutCalls).toBe(1);
+      });
+    });
+
+    test('does not persist an unsafe cashout payout as money or call the credit operation', async () => {
+      await withPlayer(async (playerId) => {
+        const { betId } = await createOwnedBet(playerId);
+        const harness = createHarness({
+          async cashout() {
+            return {
+              betId, status: 'cashed_out', multiplierHundredths: 200,
+              payoutCents: null, payoutPrecision: 'unsafe',
+            };
+          },
+        }, runningSnapshot());
+        const result = await harness.service.cashout({ playerId, idempotencyKey: randomUUID(), betId });
+        expect(result).toMatchObject({
+          betCommandStatus: 'accepted',
+          bet: { engineStatus: 'cashed_out', multiplierHundredths: 200, payoutCents: null, settlementStatus: 'precision_incident' },
+        });
+        expect(await financial.getBalance(playerId)).toEqual({ playerId, balanceCents: 0n });
       });
     });
 

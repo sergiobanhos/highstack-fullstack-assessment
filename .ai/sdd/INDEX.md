@@ -29,7 +29,7 @@
 | 001 | Crashsim real-time operator proxy | implementation:done | `.ai/sdd/specs/001-crashsim-realtime-proxy/requirements.md` (approved: single Crashsim scope) | `.ai/sdd/specs/001-crashsim-realtime-proxy/design.md` (approved: direct Crashsim integration) | `.ai/sdd/specs/001-crashsim-realtime-proxy/tasks.md` (approved; implementation complete) | pending |
 | 002 | Base de persistência e autenticação de jogadores | implementation:done | `.ai/sdd/specs/002-database-auth/requirements.md` (approved) | `.ai/sdd/specs/002-database-auth/design.md` (approved: REST) | `.ai/sdd/specs/002-database-auth/tasks.md` (approved; T1–T4 complete) | — |
 | 003 | Carteira, ledger e webhooks financeiros | implementation:done | `.ai/sdd/specs/003-financial-wallet-ledger/requirements.md` (approved; Q-001–Q-005 respondidos; D-009 definido) | `.ai/sdd/specs/003-financial-wallet-ledger/design.md` (approved) | `.ai/sdd/specs/003-financial-wallet-ledger/tasks.md` (T1–T5 concluídas e verificadas) | — |
-| 004 | Sessão Crashsim, aposta e cashout | implementation:in-progress | `.ai/sdd/specs/004-crashsim-bet-cashout/requirements.md` (approved; Q-001–Q-002 respondidos) | `.ai/sdd/specs/004-crashsim-bet-cashout/design.md` (approved; risco residual de débito sem estorno no MVP) | `.ai/sdd/specs/004-crashsim-bet-cashout/tasks.md` (approved; T1–T5 complete) | — |
+| 004 | Sessão Crashsim, aposta e cashout | implementation:in-progress | `.ai/sdd/specs/004-crashsim-bet-cashout/requirements.md` (approved; Q-001–Q-002 respondidos) | `.ai/sdd/specs/004-crashsim-bet-cashout/design.md` (approved; risco residual de débito sem estorno no MVP) | `.ai/sdd/specs/004-crashsim-bet-cashout/tasks.md` (approved; T1–T6 service implementation complete; live Crashsim flow in T7) | — |
 
 ## Handoff
 

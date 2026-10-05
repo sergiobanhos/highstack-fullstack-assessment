@@ -261,22 +261,22 @@ T1 completa as duas consultas financeiras específicas que o design F04 precisa.
 
 ### Trabalho
 
-- [ ] Exigir bet persistido pertencente ao jogador, engine status `active`, rodada atual `running` e stream sincronizado antes de reservar ou chamar Crashsim.
-- [ ] Reservar comando/idempotency key e slot do `betId` em transação curta; enviar um único `POST /bets/:id/cashout` para aquela tentativa.
-- [ ] Persistir status, multiplicador e payout validados; manter `settlementStatus=pending` até `financial.getCashoutCreditStatus` confirmar crédito pelo mesmo jogador e `betId`.
-- [ ] Em timeout, erro ou resposta inválida, consultar `GET /bets/:id`: `cashed_out` confirma resultado do jogo, `active` permite tentativa futura com chave nova e validações renovadas; indisponibilidade mantém `unknown`.
-- [ ] Deduplicar a mesma chave/fingerprint, rejeitar reuso divergente e impedir cashouts concorrentes enquanto exista operação `pending`/`unknown`.
-- [ ] Não chamar `creditCashoutOnce` no fluxo do jogador; webhook/F06 seguem responsáveis pelo crédito idempotente.
-- [ ] Testar cashout normal, timeout com leitura `active`/`cashed_out`, estado unknown, propriedade, concorrência, precisão e webhook de crédito pendente/tardio.
+- [x] Exigir bet persistido pertencente ao jogador, engine status `active`, rodada atual `running` e stream sincronizado antes de reservar ou chamar Crashsim.
+- [x] Reservar comando/idempotency key e slot do `betId` em transação curta; enviar um único `POST /bets/:id/cashout` para aquela tentativa.
+- [x] Persistir status, multiplicador e payout validados; manter `settlementStatus=pending` até `financial.getCashoutCreditStatus` confirmar crédito pelo mesmo jogador e `betId`.
+- [x] Em timeout, erro ou resposta inválida, consultar `GET /bets/:id`: `cashed_out` confirma resultado do jogo, `active` permite tentativa futura com chave nova e validações renovadas; indisponibilidade mantém `unknown`.
+- [x] Deduplicar a mesma chave/fingerprint, rejeitar reuso divergente e impedir cashouts concorrentes enquanto exista operação `pending`/`unknown`.
+- [x] Não chamar `creditCashoutOnce` no fluxo do jogador; webhook/F06 seguem responsáveis pelo crédito idempotente.
+- [x] Testar cashout normal, timeout com leitura `active`/`cashed_out`, estado unknown, propriedade, concorrência, precisão e webhook de crédito pendente/tardio usando o contrato Crashsim simulado.
 
 ### Critérios de aceite
 
-- [ ] Conta que não possui o bet não aciona `POST /cashout` nem altera estado financeiro.
-- [ ] Estado não sincronizado, rodada não `running` ou aposta resolvida impede comando à engine.
-- [ ] Timeout de cashout nunca vira falha definitiva antes de GET autoritativo; consulta indisponível mantém `unknown`.
-- [ ] `cashed_out` do jogo e confirmação do crédito são campos/estados distintos; saldo só é descrito como creditado após confirmação do financial.
-- [ ] Payout fora do limite seguro não é aproximado, persistido como valor financeiro ou apresentado como crédito confirmado.
-- [ ] Constraint e transação impedem duas chamadas concorrentes incertas para o mesmo `betId`.
+- [x] Conta que não possui o bet não aciona `POST /cashout` nem altera estado financeiro.
+- [x] Estado não sincronizado, rodada não `running` ou aposta resolvida impede comando à engine.
+- [x] Timeout de cashout nunca vira falha definitiva antes de GET autoritativo; consulta indisponível mantém `unknown`.
+- [x] `cashed_out` do jogo e confirmação do crédito são campos/estados distintos; saldo só é descrito como creditado após confirmação do financial.
+- [x] Payout fora do limite seguro não é aproximado, persistido como valor financeiro ou apresentado como crédito confirmado; o incidente é registrado.
+- [x] Constraint e transação impedem duas chamadas concorrentes incertas para o mesmo `betId`.
 
 ### Arquivos
 
@@ -287,10 +287,10 @@ T1 completa as duas consultas financeiras específicas que o design F04 precisa.
 
 ### Verificação
 
-- [ ] `cd operator && bun run typecheck && bun test`.
-- [ ] Com PostgreSQL dedicado e Crashsim, testar cashout normal e flag `CASHOUT_TIMEOUT=1`, consultas que retornam `active` e `cashed_out`, além de GET indisponível.
-- [ ] Confirmar corrida de duas chaves no mesmo bet e replay da mesma chave sem segundo efeito.
-- [ ] Confirmar estados de crédito pending/confirmed e ausência de crédito iniciado pela API game.
+- [x] `cd operator && bun run typecheck && bun run test:e2e` — typecheck e suíte Bun completa passaram em PostgreSQL temporário isolado (133 testes/688 expectativas).
+- [ ] Com PostgreSQL dedicado e Crashsim real, testar cashout normal e flag `CASHOUT_TIMEOUT=1`, consultas que retornam `active` e `cashed_out`, além de GET indisponível. **Adiado para T7**, quando a composição REST permitirá validar o fluxo integrado sem iniciar o Compose root nesta tarefa.
+- [x] Confirmar corrida de duas chaves no mesmo bet e replay da mesma chave sem segundo efeito, por testes de serviço/PostgreSQL.
+- [x] Confirmar estados de crédito pending/confirmed e ausência de crédito iniciado pela API game, por teste de integração do serviço com financial.
 
 ## Task T7: Expor REST autenticada e integrar o módulo game
 
