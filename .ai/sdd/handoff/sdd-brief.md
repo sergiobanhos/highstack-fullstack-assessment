@@ -1,6 +1,6 @@
 # SDD Handoff Brief: Implementação por dependência — F02 → F03 → F04 → F05
 
-> Status: F02/F03 concluídas; F04 implementada com smoke test real pendente; F05 aprovada para implementação
+> Status: F02/F03 concluídas; F04 implementada com smoke test real pendente; F05 implementação em andamento
 > Readiness: F05 pronta para implementação; F04 mantém a verificação manual com Crashsim real como pendência separada.
 > Updated: 2026-10-05
 
@@ -88,7 +88,7 @@
 
 - **Spec ID:** `005-payout`
 - **Spec Path:** `.ai/sdd/specs/005-payout/`
-- **Current `.status`:** `tasks:approved`
+- **Current `.status`:** `implementation:in-progress`
 - **Source Inputs:** `.ai/sdd/PLAN.md`; strategy handoff: N/A
 - **Requirements:** `.ai/sdd/specs/005-payout/requirements.md` (approved)
 - **Design:** `.ai/sdd/specs/005-payout/design.md` (approved)
@@ -136,4 +136,5 @@ Testes PostgreSQL devem usar banco de teste dedicado e migrado; não apontar com
 - **Ready for QA:** no
 - **Ready for Release:** no
 - **Blockers:** N/A para iniciar; a verificação PostgreSQL requer banco dedicado de teste.
-- **Recommended Next Action:** executar T1–T5 na ordem aprovada; atualizar este brief e `.status` com evidência após cada etapa.
+- **Progress:** T1 (schema, migration, database readiness) concluída; T2–T5 pendentes.
+- **Recommended Next Action:** executar T2, o comando financeiro idempotente, e atualizar este brief com a evidência.

@@ -56,17 +56,17 @@
 
 ### Trabalho
 
-- [ ] Adicionar `payouts` ao schema Drizzle com FK/PK para `financial_operations.id`, estados `processing`/`done`, datas de conclusão e vencimento, checks de consistência e índice parcial para itens vencidos.
-- [ ] Estender os tipos e constraints de `financial_operations` e `wallet_ledger_entries` para aceitar `source='payout'` somente em débito, sem alterar as combinações já existentes.
-- [ ] Gerar e revisar a migration aditiva `0003_local_payouts` e atualizar snapshot/journal Drizzle.
-- [ ] Incluir `payouts` na validação de prontidão de schema em `checkSchema()`.
+- [x] Adicionar `payouts` ao schema Drizzle com FK/PK para `financial_operations.id`, estados `processing`/`done`, datas de conclusão e vencimento, checks de consistência e índice parcial para itens vencidos.
+- [x] Estender os tipos e constraints de `financial_operations` e `wallet_ledger_entries` para aceitar `source='payout'` somente em débito, sem alterar as combinações já existentes.
+- [x] Gerar e revisar a migration aditiva `0003_local_payouts` e atualizar snapshot/journal Drizzle.
+- [x] Incluir `payouts` na validação de prontidão de schema em `checkSchema()`.
 
 ### Critérios de aceitação
 
-- [ ] A migration parte de um banco no schema `0002` e cria a tabela, índice e constraints sem reescrever operações existentes.
-- [ ] A chave primária da linha `payouts` referencia uma operação financeira; status e timestamps inválidos são rejeitados pelo banco.
-- [ ] Origem `payout` fica disponível para operação/ledger de débito sem liberar combinações de origem e tipo não previstas no design.
-- [ ] `checkSchema()` falha se a tabela `payouts` estiver ausente e passa após a migration.
+- [x] A migration parte de um banco no schema `0002` e cria a tabela, índice e constraints sem reescrever operações existentes.
+- [x] A chave primária da linha `payouts` referencia uma operação financeira; status e timestamps inválidos são rejeitados pelo banco.
+- [x] Origem `payout` fica disponível para operação/ledger de débito sem liberar combinações de origem e tipo não previstas no design.
+- [x] `checkSchema()` falha se a tabela `payouts` estiver ausente e passa após a migration.
 
 ### Arquivos
 
@@ -78,9 +78,9 @@
 
 ### Verificação
 
-- [ ] `cd operator && bun run db:generate` gera a migration esperada; revisar SQL e snapshot antes de aplicar.
-- [ ] Com `DATABASE_URL` apontando para um PostgreSQL dedicado de teste no schema `0002`, `cd operator && bun run db:migrate` aplica a migration e `checkSchema()` reconhece o schema atualizado.
-- [ ] `cd operator && bun run typecheck` passa.
+- [x] `cd operator && bun run db:generate` gera a migration esperada; revisar SQL e snapshot antes de aplicar.
+- [x] Com `DATABASE_URL` apontando para um PostgreSQL dedicado de teste no schema `0002`, `cd operator && bun run db:migrate` aplica a migration e `checkSchema()` reconhece o schema atualizado.
+- [x] `cd operator && bun run typecheck` passa.
 
 ## T2 — Solicitar payout com débito transacional e idempotência
 

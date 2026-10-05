@@ -55,11 +55,11 @@ export const financialOperations = pgTable(
     ),
     check(
       'financial_operations_source_check',
-      sql`${table.source} IN ('engine', 'reconciliation', 'test')`,
+      sql`${table.source} IN ('engine', 'reconciliation', 'test', 'payout')`,
     ),
     check(
       'financial_operations_kind_source_check',
-      sql`(${table.source} = 'engine' AND ${table.kind} IN ('debit', 'credit')) OR (${table.source} = 'reconciliation' AND ${table.kind} = 'credit') OR (${table.source} = 'test' AND ${table.kind} = 'test_top_up')`,
+      sql`(${table.source} = 'engine' AND ${table.kind} IN ('debit', 'credit')) OR (${table.source} = 'reconciliation' AND ${table.kind} = 'credit') OR (${table.source} = 'test' AND ${table.kind} = 'test_top_up') OR (${table.source} = 'payout' AND ${table.kind} = 'debit')`,
     ),
     check(
       'financial_operations_amount_cents_range',
@@ -90,6 +90,29 @@ export const financialOperations = pgTable(
   ],
 );
 
+/** Durable state for local-only wallet payout simulations. */
+export const payouts = pgTable(
+  'payouts',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .references(() => financialOperations.id),
+    status: varchar('status', { length: 16 }).notNull(),
+    completeAfter: timestamp('complete_after', { withTimezone: true, mode: 'date' }).notNull(),
+    completedAt: timestamp('completed_at', { withTimezone: true, mode: 'date' }),
+  },
+  (table) => [
+    check('payouts_status_check', sql`${table.status} IN ('processing', 'done')`),
+    check(
+      'payouts_status_timestamps_check',
+      sql`(${table.status} = 'processing' AND ${table.completedAt} IS NULL) OR (${table.status} = 'done' AND ${table.completedAt} IS NOT NULL)`,
+    ),
+    index('payouts_processing_complete_after_id_idx')
+      .on(table.completeAfter, table.id)
+      .where(sql`${table.status} = 'processing'`),
+  ],
+);
+
 export const walletLedgerEntries = pgTable(
   'wallet_ledger_entries',
   {
@@ -112,7 +135,11 @@ export const walletLedgerEntries = pgTable(
     check('wallet_ledger_entries_direction_check', sql`${table.direction} IN ('debit', 'credit')`),
     check(
       'wallet_ledger_entries_source_check',
-      sql`${table.source} IN ('engine', 'reconciliation', 'test')`,
+      sql`${table.source} IN ('engine', 'reconciliation', 'test', 'payout')`,
+    ),
+    check(
+      'wallet_ledger_entries_source_direction_check',
+      sql`${table.source} <> 'payout' OR ${table.direction} = 'debit'`,
     ),
     check(
       'wallet_ledger_entries_amount_cents_range',

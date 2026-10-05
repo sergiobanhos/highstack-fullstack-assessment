@@ -59,6 +59,7 @@ export function createDatabase(databaseUrl: string): DatabaseConnection {
         await client`select 1 from wallets limit 0`;
         await client`select 1 from financial_operations limit 0`;
         await client`select 1 from wallet_ledger_entries limit 0`;
+        await client`select 1 from payouts limit 0`;
         await client`select 1 from game_commands limit 0`;
         await client`select 1 from game_bets limit 0`;
       } catch {
