@@ -3,7 +3,7 @@
 @password = dev-password-123
 @name = API Test
 # Depois do login, cole o token retornado aqui para chamar /auth/me e /auth/logout.
-@token = cole-o-token-do-login-aqui
+@token = cole-o-token-aqui
 
 ### Criar jogador (email deve ser único)
 POST {{baseUrl}}/auth/register

@@ -1,7 +1,53 @@
 @baseUrl = http://localhost:3000
+# Rotas autenticadas para o fluxo de jogo Crashsim; use o token de auth.http.
+# Copie o token de auth.http e os IDs retornados pelas respostas.
+@token = cole-o-token-aqui
+@roundId = cole_o_roundId_do_snapshot
+@commandId = 123e4567-e89b-42d3-a456-426614174000
+@betId = cole_o_betId_da_aposta
+# Use uma chave nova para cada comando; em retries, mantenha a mesma chave.
+@betIdempotencyKey = 4fa85f64-5717-4562-b3fc-2c963f66afa6
+@cashoutIdempotencyKey = 4fa85f64-5717-4562-b3fc-2c963f66afa7
 
-### Fluxo atual do game: SSE com snapshot inicial e eventos da rodada
-# A conexão fica aberta enquanto o stream estiver ativo.
+### Acompanhar estado e eventos da rodada
 GET {{baseUrl}}/game/events
 Accept: text/event-stream
 Cache-Control: no-cache
+
+### Abrir sessão Crashsim
+POST {{baseUrl}}/game/session
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### Fazer aposta na rodada do snapshot
+POST {{baseUrl}}/game/bets
+Authorization: Bearer {{token}}
+Idempotency-Key: {{betIdempotencyKey}}
+Content-Type: application/json
+
+{
+  "roundId": "{{roundId}}",
+  "amount": 1000,
+  "autoCashout": 2.00
+}
+
+### Listar minhas apostas recentes
+GET {{baseUrl}}/game/bets?limit=10
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### Consultar comando de aposta
+GET {{baseUrl}}/game/commands/{{commandId}}
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### Consultar aposta e liquidação
+GET {{baseUrl}}/game/bets/{{betId}}
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### Solicitar cashout
+POST {{baseUrl}}/game/bets/{{betId}}/cashout
+Authorization: Bearer {{token}}
+Idempotency-Key: {{cashoutIdempotencyKey}}
+Accept: application/json

@@ -1,25 +1,23 @@
 @baseUrl = http://localhost:3000
-# F03: GET /wallet, /wallet/transactions e /wallet/top-ups ainda aguardam controller.
-# Os webhooks /wallet/debit e /wallet/credit aguardam o financial entrar no server.ts.
-# Cole um token obtido em auth.http para os endpoints de carteira.
-@token = cole-o-token-do-login-aqui
-# Use o UUID real do jogador autenticado ao enviar webhooks assinados.
+# Cole aqui o token retornado por auth.http.
+@token = cole-o-token-aqui
+# Use o UUID de um jogador com carteira criada.
 @playerId = 00000000-0000-4000-8000-000000000001
 @webhookTimestamp = {{$timestamp}}
-# Gere a assinatura HMAC-SHA256 descrita abaixo e cole o digest hexadecimal.
+# Webhooks exigem HMAC-SHA256 de `${timestamp}.${body}` com ENGINE_WEBHOOK_SECRET.
 @webhookSignature = cole-a-assinatura-hmac-aqui
 
-### F03 previsto: consultar ou provisionar a própria carteira
+### Consultar carteira
 GET {{baseUrl}}/wallet
 Authorization: Bearer {{token}}
 Accept: application/json
 
-### F03 previsto: listar lançamentos mais recentes da própria carteira
+### Consultar lançamentos
 GET {{baseUrl}}/wallet/transactions?limit=20
 Authorization: Bearer {{token}}
 Accept: application/json
 
-### F03 previsto: crédito de teste local; repetir com o mesmo Idempotency-Key deve ser idempotente
+### Adicionar saldo de teste (local)
 POST {{baseUrl}}/wallet/top-ups
 Authorization: Bearer {{token}}
 Idempotency-Key: 4503bbfc-944c-4931-a3d4-b48b90b8a9e2
@@ -29,12 +27,8 @@ Content-Type: application/json
   "amount": 10000
 }
 
-### Webhook debit do Crashsim
-# Assinatura: HMAC-SHA256(ENGINE_WEBHOOK_SECRET, `${timestamp}.${body}`), em hex.
-# Assine os bytes exatos do JSON enviado abaixo; o timestamp precisa ter até 60s.
-# O webhook exige uma carteira existente para @playerId.
-# Exemplo local (WEBHOOK_SECRET é dev-webhook-secret por padrão no Compose):
-# printf '%s.%s' "$timestamp" "$body" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET"
+### Debitar aposta (webhook Crashsim)
+# Assine o timestamp e o JSON exatos desta requisição.
 POST {{baseUrl}}/wallet/debit
 Content-Type: application/json
 x-timestamp: {{webhookTimestamp}}
@@ -42,8 +36,8 @@ x-signature: {{webhookSignature}}
 
 {"txId":"3a50c6c6-18fa-487e-893f-5f2d41d34d58","playerId":"{{playerId}}","amount":500,"betId":"http-test-bet-1","roundId":"http-test-round-1"}
 
-### Webhook credit do Crashsim
-# Gere outra assinatura para o timestamp e body abaixo.
+### Creditar cashout (webhook Crashsim)
+# Gere a assinatura para o JSON desta requisição.
 POST {{baseUrl}}/wallet/credit
 Content-Type: application/json
 x-timestamp: {{webhookTimestamp}}
