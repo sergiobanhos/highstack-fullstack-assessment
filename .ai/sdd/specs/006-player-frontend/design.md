@@ -179,7 +179,7 @@ O painel “Diagnóstico da stream” fica recolhido por padrão. No ambiente lo
 
 ### TD-001: Usar Mantine no client React
 
-**Decisão proposta:** instalar `@mantine/core`, `@mantine/hooks`, `@mantine/form` e `@mantine/notifications`, mantendo os componentes visuais simples e usando a biblioteca para campos, botões, alertas, tabelas, navegação e estados de carregamento.
+**Decisão:** instalar `@mantine/core`, `@mantine/hooks`, `@mantine/form` e `@mantine/notifications`, mantendo os componentes visuais simples e usando a biblioteca para campos, botões, alertas, tabelas, navegação e estados de carregamento.
 
 **Motivo:** Mantine documenta Vite como opção recomendada para SPA, oferece pacotes separados para componentes, forms e notifications, e o resolver de formulário aceita Valibot pelo padrão Standard Schema. Isso reduz CSS/componentes próprios sem exigir um trabalho de design visual nesta etapa. Manter as versões dos pacotes `@mantine/*` alinhadas.
 
@@ -193,7 +193,7 @@ O painel “Diagnóstico da stream” fica recolhido por padrão. No ambiente lo
 
 Fontes oficiais consultadas: [Mantine com Vite](https://mantine.dev/getting-started/?g=vite), [validação de formulários com Standard Schema e Valibot](https://mantine.dev/form/schema-validation/), [instalação e suporte do MUI a React 19](https://mui.com/material-ui/getting-started/installation/).
 
-**Implementação:** adicionar os pacotes quando os tasks F06 forem aprovados; importar os estilos no ponto de entrada e envolver o client em `MantineProvider`. Não adicionar Tailwind nem adotar um segundo sistema de componentes.
+**Implementação:** adicionar os pacotes após a aprovação das tasks F06; importar os estilos no ponto de entrada e envolver o client em `MantineProvider`. Não adicionar Tailwind nem adotar um segundo sistema de componentes.
 
 ## 5. Estrutura do client e ownership de estado
 
@@ -337,6 +337,6 @@ Testes do client cobrem parsing de dinheiro, status do formulário, reaproveitam
 
 **O payout deve parecer instantâneo?** Não. Mostrar `processing` e depois `done` conforme API F05; explicitar que é local/simulado.
 
-**Podemos instalar Mantine antes de concluir a spec?** A decisão proposta fica neste design; adicionar dependências e implementar somente após approval de design e tasks F06.
+**Podemos instalar Mantine antes das tasks F06 serem aprovadas?** Não; adicionar dependências e implementar somente após aprovação das tasks.
 
 **A página precisa de Redux, WebSocket ou outro jogo?** Não. O estado do React e a SSE existente bastam para esta tela; o client fala com um único operador/Crashsim.
