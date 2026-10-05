@@ -30,8 +30,10 @@ const silentLogger = () =>
 describe('createGameModule', () => {
   test('exposes only the Crashsim lifecycle and registers /game/events', async () => {
     const sockets: InertSocket[] = [];
+    const app = Fastify({ logger: false });
     const game = createGameModule({
-      config: loadConfig({}),
+      app,
+      config: loadConfig({ DATABASE_URL: 'postgres://operator:local-password@127.0.0.1:5432/operator_test' }),
       logger: silentLogger(),
       socketFactory: () => {
         const socket = new InertSocket();
@@ -39,10 +41,7 @@ describe('createGameModule', () => {
         return socket;
       },
     });
-    const app = Fastify({ logger: false });
-
-    expect(Object.keys(game).sort()).toEqual(['registerRoutes', 'start', 'stop']);
-    game.registerRoutes(app);
+    expect(Object.keys(game).sort()).toEqual(['start', 'stop']);
     await app.ready();
     expect(app.hasRoute({ method: 'GET', url: GAME_EVENTS_ROUTE })).toBe(true);
     expect(sockets).toHaveLength(0);

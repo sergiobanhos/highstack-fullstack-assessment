@@ -6,6 +6,7 @@ import { registerGameEventsRoute } from './game-events.controller';
 import { createGameStreamService } from './game-stream.service';
 
 export interface GameModuleDeps {
+  app: FastifyInstance;
   config: OperatorConfig;
   logger: Logger;
   /** Test seams for the concrete Crashsim clients and retry timers. */
@@ -18,18 +19,17 @@ export interface GameModuleDeps {
 }
 
 export interface GameModule {
-  registerRoutes(app: FastifyInstance): void;
   start(): void;
   stop(): Promise<void>;
 }
 
 /** Wires the one Crashsim stream and the downstream SSE route. */
-export function createGameModule(deps: GameModuleDeps): GameModule {
+export function createGameModule({ app, ...deps }: GameModuleDeps): GameModule {
   const hub = new GameEventHub();
   const stream = createGameStreamService({ ...deps, hub });
+  registerGameEventsRoute(app, { hub, stream, logger: deps.logger });
 
   return {
-    registerRoutes: (app) => registerGameEventsRoute(app, { hub, stream, logger: deps.logger }),
     start: () => stream.start(),
     stop: () => stream.stop(),
   };

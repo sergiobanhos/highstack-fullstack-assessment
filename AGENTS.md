@@ -7,6 +7,7 @@ This repository is building an operator for a third-party crash game engine. Tre
 Before changing product behavior, read the relevant `.ai/steering/` files and the active spec under `.ai/sdd/specs/`. SDD artifacts live under `.ai/`; Codex skills are in `.agents/skills/`, and Claude originals are retained in `.claude/skills/`.
 
 Use `$sdd-*` skills for the corresponding SDD stages. Keep feature status in `.status` accurate; a draft is not approval to implement. An explicit user instruction authorizes the requested artifact or code change, so do not ask again for permission already given.
+- Commit each completed implementation or SDD stage before starting a new feature or stage. Keep each commit focused on the finished work and update its status/artifacts before moving on.
 
 ## Operator Boundaries
 

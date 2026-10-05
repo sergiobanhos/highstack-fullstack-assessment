@@ -8,14 +8,20 @@
     "dev": "bun run --watch src/server.ts",
     "start": "bun run src/server.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "bun run src/migrate.ts"
   },
   "dependencies": {
+    "@fastify/rate-limit": "^11.2.0",
+    "drizzle-orm": "^0.45.3",
     "fastify": "^5.12.5",
+    "postgres": "^3.4.9",
     "valibot": "^1.5.0"
   },
   "devDependencies": {
     "@types/bun": "^1.2.19",
+    "drizzle-kit": "^0.31.11",
     "typescript": "^5.9.2"
   }
 }

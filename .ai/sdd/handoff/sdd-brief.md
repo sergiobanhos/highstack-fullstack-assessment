@@ -1,19 +1,19 @@
 # SDD Handoff Brief: Implementação em ordem de dependências — F02 → F03 → F04
 
-> Status: F02, F03 e F04 tasks aprovadas; implementação autorizada
-> Readiness: iniciar F02 T1. F03 depende de F02; F04 depende de F02 e F03 concluídas e verificadas.
+> Status: F02 implementation done; F03 e F04 tasks aprovadas
+> Readiness: começar F03 T1. F04 depende de F02 e F03 concluídas e verificadas.
 > Updated: 2026-10-05
 
 ## Metadata
 
-- **Feature atual:** F03 — `.ai/sdd/specs/003-financial-wallet-ledger/`
+- **Feature atual:** F02 — `.ai/sdd/specs/002-database-auth/`
 - **F02 aprovado:** `.ai/sdd/specs/002-database-auth/`
 - **F03 requirements:** `.ai/sdd/specs/003-financial-wallet-ledger/requirements.md` (approved)
 - **F03 design:** `.ai/sdd/specs/003-financial-wallet-ledger/design.md` (approved)
 - **F03 tasks:** `.ai/sdd/specs/003-financial-wallet-ledger/tasks.md` (approved)
 - **F03 `.status`:** `.ai/sdd/specs/003-financial-wallet-ledger/.status` (`tasks:approved`)
 - **F04 `.status`:** `.ai/sdd/specs/004-crashsim-bet-cashout/.status` (`tasks:approved`)
-- **F02 `.status`:** `tasks:approved`
+- **F02 `.status`:** `implementation:done`
 - **F02 requirements:** `.ai/sdd/specs/002-database-auth/requirements.md` (approved)
 - **F02 design:** `.ai/sdd/specs/002-database-auth/design.md` (approved; REST)
 - **F02 tasks:** `.ai/sdd/specs/002-database-auth/tasks.md` (approved)
@@ -32,8 +32,8 @@
 - **Escopo:** PostgreSQL/Drizzle, migrations, módulo `auth` e API REST. Sessões do operador opacas, com token original retornado uma vez e hash armazenado; senha derivada com Argon2id.
 - **Rotas:** `POST /auth/register`, `POST /auth/login`, `GET /auth/me`, `POST /auth/logout`.
 - **Contrato entre módulos:** `requireUser(request)` retorna identidade confiável isolada por solicitação. O ID da conta é o `playerId` usado futuramente por game e financial.
-- **Próxima implementação quando autorizada:** T1 banco/schema/migrations → T2 fluxos auth → T3 rotas REST/contrato público → T4 composição, Compose, readiness e documentação.
-- **Verificação planejada:** `cd operator && bun run typecheck && bun test`; `docker compose config`; integração com PostgreSQL dedicado, restart/revogação e regressão SSE.
+- **Implementação concluída:** T1 banco/schema/migrations, T2 fluxos auth, T3 rotas REST/contrato público e T4 composição/Compose/readiness/documentação.
+- **Verificação:** typecheck aprovado; `bun test` passou com 69 testes e 258 expectativas; `docker compose config` passou; Compose executou migration antes do operator; readiness, indisponibilidade e recuperação do banco, login/logout e persistência de sessões após restart passaram; SSE entregou snapshot durante logins concorrentes; imagem de produção contém migrations e não instala `drizzle-kit`.
 
 ## F03 aprovado: requirements, design e tasks
 
@@ -45,7 +45,7 @@
 - Decisão F03 D-009: não alterar a engine; o operador rejeita `amount` fora de `Number.MAX_SAFE_INTEGER` antes do banco e emite incidente. Se valor seguro ultrapassaria o saldo máximo, registra recusa idempotente sem alterar carteira/ledger. Como a engine encerra retries em 4xx e o GET da aposta usa o mesmo contrato numérico, F06 não credita payout aproximado nem declara o caso automaticamente recuperado.
 - **Ordem aprovada:** T1 configuração/schema/migration → T2 serviço financeiro transacional → T3 webhooks HMAC → T4 API autenticada de saldo/histórico/top-up → T5 composição, Compose e documentação.
 - **Verificação planejada:** `cd operator && bun run typecheck && bun test`; `cd operator && bun run db:migrate` em PostgreSQL dedicado; `docker compose config`; fluxo manual com Crashsim e testes de concorrência/retry.
-- **Próximo passo:** implementar F02 T1–T4, depois F03 T1–T5, e então F04 T1–T7. F04 tasks adicionam os contratos públicos financeiros para localizar débito de aposta e consultar liquidação de cashout. O MVP documenta o risco raro de débito persistido com bet rejeitado sem adicionar estorno automático.
+- **Próximo passo:** implementar F03 T1–T5 e então F04 T1–T7. F04 tasks adicionam os contratos públicos financeiros para localizar débito de aposta e consultar liquidação de cashout. O MVP documenta o risco raro de débito persistido com bet rejeitado sem adicionar estorno automático.
 
 ## Dependências de roadmap ainda não especificadas
 
@@ -54,7 +54,6 @@
 
 ## Prontidão
 
-- F02 requirements, design e tasks estão aprovados; a implementação autorizada começa em T1.
-- F03 requirements, design e tasks estão aprovados; implementar depois de F02 T1–T4.
+- F02 requirements, design e tasks estão aprovados; implementação T1–T4 concluída e verificada.
+- F03 requirements, design e tasks estão aprovados; F02 foi concluída, então a implementação F03 pode começar.
 - F04 requirements, design e tasks estão aprovados; implementar depois de F02/F03 e verificar as consultas financeiras públicas usadas pela reconciliação.
-- O ambiente não conseguiu acessar o daemon Docker durante uma consulta; validações que dependem dele devem ser tentadas quando F02 for implementada.

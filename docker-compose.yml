@@ -2,17 +2,25 @@ services:
   engine:
     build: ./engine
     ports:
-      - "4000:4000"
+      - "127.0.0.1:4000:4000"
     environment:
       PORT: "4000"
-      OPERATOR_URL: ${OPERATOR_URL:-http://host.docker.internal:3000}
+      OPERATOR_URL: http://operator:3000
       OPERATOR_KEY: dev-operator-key
       WEBHOOK_SECRET: dev-webhook-secret
       LOG_LEVEL: ${LOG_LEVEL:-info}
       DROP_WS_EVERY: ${DROP_WS_EVERY:-0}
       REORDER: ${REORDER:-0}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+
+  operator-migrate:
+    build: ./operator
+    command: ["bun", "run", "src/migrate.ts"]
+    restart: "no"
+    environment:
+      DATABASE_URL: postgres://operator:operator@postgres:5432/operator
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   operator:
     build: ./operator
@@ -26,8 +34,13 @@ services:
       ENGINE_HTTP_URL: http://engine:4000
       ENGINE_STREAM_URL: ws://engine:4000/stream
       ENGINE_OPERATOR_KEY: dev-operator-key
+      DATABASE_URL: postgres://operator:operator@postgres:5432/operator
+      AUTH_SESSION_TTL_SECONDS: ${AUTH_SESSION_TTL_SECONDS:-86400}
     depends_on:
-      - engine
+      engine:
+        condition: service_started
+      operator-migrate:
+        condition: service_completed_successfully
 
   # Local-only diagnostic page for the Crashsim operator stream. No player
   # auth exists yet, so the host binding stays on loopback.
@@ -41,9 +54,9 @@ services:
       - operator
 
   postgres:
-    image: postgres:16
+    image: postgres:16-alpine
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_USER: operator
       POSTGRES_PASSWORD: operator

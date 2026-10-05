@@ -27,13 +27,13 @@
 | ID | Feature | Status | Requirements | Design | Tasks | Review |
 |----|---------|--------|--------------|--------|-------|--------|
 | 001 | Crashsim real-time operator proxy | implementation:done | `.ai/sdd/specs/001-crashsim-realtime-proxy/requirements.md` (approved: single Crashsim scope) | `.ai/sdd/specs/001-crashsim-realtime-proxy/design.md` (approved: direct Crashsim integration) | `.ai/sdd/specs/001-crashsim-realtime-proxy/tasks.md` (approved; implementation complete) | pending |
-| 002 | Base de persistência e autenticação de jogadores | tasks:approved | `.ai/sdd/specs/002-database-auth/requirements.md` (approved) | `.ai/sdd/specs/002-database-auth/design.md` (approved: REST) | `.ai/sdd/specs/002-database-auth/tasks.md` (approved) | — |
+| 002 | Base de persistência e autenticação de jogadores | implementation:done | `.ai/sdd/specs/002-database-auth/requirements.md` (approved) | `.ai/sdd/specs/002-database-auth/design.md` (approved: REST) | `.ai/sdd/specs/002-database-auth/tasks.md` (approved; T1–T4 complete) | — |
 | 003 | Carteira, ledger e webhooks financeiros | tasks:approved | `.ai/sdd/specs/003-financial-wallet-ledger/requirements.md` (approved; Q-001–Q-005 respondidos; D-009 definido) | `.ai/sdd/specs/003-financial-wallet-ledger/design.md` (approved) | `.ai/sdd/specs/003-financial-wallet-ledger/tasks.md` (approved; execução após implementação de F02) | — |
 | 004 | Sessão Crashsim, aposta e cashout | tasks:approved | `.ai/sdd/specs/004-crashsim-bet-cashout/requirements.md` (approved; Q-001–Q-002 respondidos) | `.ai/sdd/specs/004-crashsim-bet-cashout/design.md` (approved; risco residual de débito sem estorno no MVP) | `.ai/sdd/specs/004-crashsim-bet-cashout/tasks.md` (approved; implementação após F02/F03) | — |
 
 ## Handoff
 
-- `.ai/sdd/handoff/sdd-brief.md`: available (F03 tasks aprovadas; implementação aguarda F02; F04 design em draft)
+- `.ai/sdd/handoff/sdd-brief.md`: available (F02 implementation done; F03 is next; F04 tasks approved)
 
 ## Next Actions
 
@@ -51,6 +51,8 @@
 - [x] Create tasks for spec 002
 - [x] Approve tasks for spec 002
 - [x] Defer F02 implementation at user request
+- [x] Implement F02 T1–T4
+- [ ] Implement F03 T1–T5, then F04 T1–T7 in dependency order
 - [x] Create F03 requirements draft
 - [x] Resolve F03 questions
 - [x] Approve F03 requirements

@@ -26,6 +26,9 @@ export interface Redactor {
 
 export function createRedactor(secrets: readonly string[]): Redactor {
   const active = secrets.filter((secret) => secret.length > 0);
+  const sensitiveField = /(?:authorization|password|token|secret|email|database.?url|headers|request.?body)/i;
+  const isSensitiveField = (key: string): boolean =>
+    sensitiveField.test(key) || key.toLowerCase() === 'name' || key.toLowerCase() === 'body';
 
   const scrubText = (text: string): string => {
     let result = text;
@@ -33,8 +36,9 @@ export function createRedactor(secrets: readonly string[]): Redactor {
     return result;
   };
 
-  const scrubValue = (value: unknown, depth = 0): unknown => {
+  const scrubValue = (value: unknown, depth = 0, key?: string): unknown => {
     if (depth > 8) return REDACTED;
+    if (key && isSensitiveField(key)) return REDACTED;
     if (typeof value === 'string') return scrubText(value);
     if (Array.isArray(value)) return value.map((item) => scrubValue(item, depth + 1));
     if (value instanceof Error) {
@@ -42,7 +46,7 @@ export function createRedactor(secrets: readonly string[]): Redactor {
     }
     if (value !== null && typeof value === 'object') {
       const scrubbed: Record<string, unknown> = {};
-      for (const [key, item] of Object.entries(value)) scrubbed[key] = scrubValue(item, depth + 1);
+      for (const [field, item] of Object.entries(value)) scrubbed[field] = scrubValue(item, depth + 1, field);
       return scrubbed;
     }
     return value;
@@ -107,6 +111,8 @@ export interface OperatorConfig {
   port: number;
   host: string;
   logLevel: LogLevel;
+  databaseUrl: string;
+  authSessionTtlSeconds: number;
   engine: EngineConfig;
 }
 
@@ -121,10 +127,25 @@ const isUrl = (value: string): boolean => {
   }
 };
 
+const isPostgresUrl = (value: string): boolean => {
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === 'postgres:' || url.protocol === 'postgresql:') &&
+      url.hostname.length > 0 &&
+      url.pathname.length > 1
+    );
+  } catch {
+    return false;
+  }
+};
+
 const configSchema = v.object({
   port: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65535)),
   host: v.pipe(v.string(), v.minLength(1)),
   logLevel: v.picklist(LOG_LEVELS),
+  databaseUrl: v.pipe(v.string(), v.trim(), v.check(isPostgresUrl, 'must be a valid PostgreSQL URL')),
+  authSessionTtlSeconds: v.pipe(v.number(), v.integer(), v.minValue(60), v.maxValue(604_800)),
   engine: v.object({
     httpUrl: v.pipe(v.string(), v.check(isUrl, 'must be a valid URL')),
     streamUrl: v.pipe(v.string(), v.check(isUrl, 'must be a valid URL')),
@@ -146,6 +167,8 @@ export function loadConfig(env: EnvSource): OperatorConfig {
     port: toPort(env.PORT),
     host: env.HOST ?? '0.0.0.0',
     logLevel: env.LOG_LEVEL ?? 'info',
+    databaseUrl: env.DATABASE_URL,
+    authSessionTtlSeconds: Number(env.AUTH_SESSION_TTL_SECONDS ?? 86_400),
     engine: {
       httpUrl: stripTrailingSlash(env.ENGINE_HTTP_URL ?? 'http://localhost:4000'),
       streamUrl: env.ENGINE_STREAM_URL ?? 'ws://localhost:4000/stream',
@@ -166,5 +189,5 @@ export function loadConfig(env: EnvSource): OperatorConfig {
 
 /** Secret values that must be scrubbed from logs for a given configuration. */
 export function operatorSecrets(config: OperatorConfig): string[] {
-  return [config.engine.operatorKey];
+  return [config.engine.operatorKey, config.databaseUrl];
 }

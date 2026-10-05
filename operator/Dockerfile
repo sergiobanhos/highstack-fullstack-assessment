@@ -7,6 +7,7 @@ RUN bun install --frozen-lockfile --production
 
 COPY tsconfig.json ./
 COPY src ./src
+COPY drizzle ./drizzle
 # Keep the original smoke script available as a temporary diagnostic.
 COPY stream-smoke.ts ./stream-smoke.ts
 

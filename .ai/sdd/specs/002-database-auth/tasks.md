@@ -49,18 +49,18 @@
 
 ### Trabalho
 
-- [ ] Adicionar `drizzle-orm`, `postgres` e ferramentas de desenvolvimento `drizzle-kit`; atualizar `package.json` e `bun.lock` com versões estáveis compatíveis com Bun.
-- [ ] Criar `src/db.ts` com cliente Postgres, pool e fechamento explícitos, sem regra de negócio.
-- [ ] Criar `drizzle.config.ts`, scripts `db:generate`/`db:migrate` e `src/migrate.ts`; executar migrations versionadas, sem schema push no startup.
-- [ ] Criar `src/modules/auth/auth.schema.ts` com `players` e `auth_sessions`, índices e constraints descritos no design, incluindo unicidade nomeada para email.
-- [ ] Gerar e revisar a migration inicial, garantindo que ela só crie a estrutura de auth e não remova ou recrie dados existentes.
+- [x] Adicionar `drizzle-orm`, `postgres` e ferramentas de desenvolvimento `drizzle-kit`; atualizar `package.json` e `bun.lock` com versões estáveis compatíveis com Bun.
+- [x] Criar `src/db.ts` com cliente Postgres, pool e fechamento explícitos, sem regra de negócio.
+- [x] Criar `drizzle.config.ts`, scripts `db:generate`/`db:migrate` e `src/migrate.ts`; executar migrations versionadas, sem schema push no startup.
+- [x] Criar `src/modules/auth/auth.schema.ts` com `players` e `auth_sessions`, índices e constraints descritos no design, incluindo unicidade nomeada para email.
+- [x] Gerar e revisar a migration inicial, garantindo que ela só crie a estrutura de auth e não remova ou recrie dados existentes.
 
 ### Critérios de aceite
 
-- [ ] Uma base PostgreSQL de teste vazia recebe as tabelas e constraints esperadas.
-- [ ] Rodar o migrador outra vez não apaga registros existentes nem reaplica migrations concluídas.
-- [ ] Duas linhas com email canônico igual não podem coexistir; sessão não pode referenciar jogador inexistente.
-- [ ] A conexão PostgreSQL fecha seus recursos quando solicitada e erros não imprimem a `DATABASE_URL`.
+- [x] Uma base PostgreSQL de teste vazia recebe as tabelas e constraints esperadas.
+- [x] Rodar o migrador outra vez não apaga registros existentes nem reaplica migrations concluídas.
+- [x] Duas linhas com email canônico igual não podem coexistir; sessão não pode referenciar jogador inexistente.
+- [x] A conexão PostgreSQL fecha seus recursos quando solicitada e erros não imprimem a `DATABASE_URL`.
 
 ### Arquivos prováveis
 
@@ -75,9 +75,9 @@
 
 ### Verificação
 
-- [ ] `cd operator && bun run typecheck && bun test`.
-- [ ] Com `TEST_DATABASE_URL` apontando para banco dedicado, executar `bun run db:migrate` duas vezes e confirmar que dados de uma execução de teste permanecem.
-- [ ] Não apontar comandos de teste/migração destrutiva para o banco local de desenvolvimento.
+- [x] `cd operator && bun run typecheck && bun test` — typecheck passou; suite passou com 44 testes e `TEST_DATABASE_URL` dedicado.
+- [x] Com `TEST_DATABASE_URL` apontando para banco dedicado, executar `bun run db:migrate` duas vezes e confirmar que dados de uma execução de teste permanecem.
+- [x] Não apontar comandos de teste/migração destrutiva para o banco local de desenvolvimento; verificações usaram apenas o container efêmero `operator_test`.
 
 ## Task T2: Fluxos de autenticação e identidade persistida
 
@@ -88,22 +88,22 @@
 
 ### Trabalho
 
-- [ ] Criar em `auth.service.ts` os fluxos `register`, `login`, `logout` e `resolveSession`, usando Drizzle e retornando somente o DTO público.
-- [ ] Normalizar email com trim/lowercase e mapear somente a violação da constraint `players_email_unique` para `EMAIL_IN_USE`.
-- [ ] Implementar derivação/verificação Argon2id com `Bun.password`, token opaco aleatório de 32 bytes e persistência exclusiva do hash SHA-256.
-- [ ] Validar duração finita e `AUTH_SESSION_TTL_SECONDS`; resolver sessões por hash, jogador associado, expiração e revogação persistida.
-- [ ] Tornar logout uma atualização condicional idempotente; erro de banco deve impedir resposta de sucesso.
-- [ ] Aplicar teto de duas operações de hash/verificação simultâneas e executar verificação dummy para email inexistente, liberando slots mesmo se houver exceção.
-- [ ] Adicionar unit tests para normalização, hash/token, expiração, erro genérico de login, DTO público e falhas de storage; usar PostgreSQL dedicado para concorrência e persistência.
+- [x] Criar em `auth.service.ts` os fluxos `register`, `login`, `logout` e `resolveSession`, usando Drizzle e retornando somente o DTO público.
+- [x] Normalizar email com trim/lowercase e mapear somente a violação da constraint `players_email_unique` para `EMAIL_IN_USE`.
+- [x] Implementar derivação/verificação Argon2id com `Bun.password`, token opaco aleatório de 32 bytes e persistência exclusiva do hash SHA-256.
+- [x] Validar duração finita e `AUTH_SESSION_TTL_SECONDS`; resolver sessões por hash, jogador associado, expiração e revogação persistida.
+- [x] Tornar logout uma atualização condicional idempotente; erro de banco deve impedir resposta de sucesso.
+- [x] Aplicar teto de duas operações de hash/verificação simultâneas e executar verificação dummy para email inexistente, liberando slots mesmo se houver exceção.
+- [x] Adicionar unit tests para normalização, hash/token, expiração, erro genérico de login, DTO público e falhas de storage; usar PostgreSQL dedicado para concorrência e persistência.
 
 ### Critérios de aceite
 
-- [ ] Cadastros concorrentes com variações de caixa/espaços do mesmo email produzem exatamente um jogador.
-- [ ] Email inexistente e senha incorreta retornam a mesma categoria `INVALID_CREDENTIALS`, sem sessão.
-- [ ] Tokens não podem ser previstos, o valor original não é gravado e jogador/sessão continuam após recriar o serviço.
-- [ ] Sessões expiradas ou revogadas não resolvem identidade após reiniciar o processo.
-- [ ] Logout repetido ou de token desconhecido não reativa sessão; indisponibilidade durante revogação é erro, não sucesso.
-- [ ] Falhas de persistência nunca autenticam por cache ou fallback.
+- [x] Cadastros concorrentes com variações de caixa/espaços do mesmo email produzem exatamente um jogador.
+- [x] Email inexistente e senha incorreta retornam a mesma categoria `INVALID_CREDENTIALS`, sem sessão.
+- [x] Tokens não podem ser previstos, o valor original não é gravado e jogador/sessão continuam após recriar o serviço.
+- [x] Sessões expiradas ou revogadas não resolvem identidade após recriar o serviço.
+- [x] Logout repetido ou de token desconhecido não reativa sessão; indisponibilidade durante revogação é erro, não sucesso.
+- [x] Falhas de persistência nunca autenticam por cache ou fallback.
 
 ### Arquivos prováveis
 
@@ -113,9 +113,9 @@
 
 ### Verificação
 
-- [ ] `cd operator && bun run typecheck && bun test`.
-- [ ] Testes de integração executados contra PostgreSQL exclusivo e verificam concorrência, restart/revogação e indisponibilidade.
-- [ ] Confirmar nos testes de logs e retornos que senha, hash e token não aparecem.
+- [x] `cd operator && bun run typecheck && bun test` — typecheck passou; suite passou com 50 testes e `TEST_DATABASE_URL` dedicado.
+- [x] Testes de integração executados contra PostgreSQL exclusivo e verificam concorrência, recriação do serviço, expiração/revogação e indisponibilidade.
+- [x] Confirmar nos testes de retornos que senha/hash não são expostos e que a sessão grava somente tokenHash; o service não escreve logs.
 
 ## Task T3: Endpoints REST e contrato público `requireUser`
 
@@ -126,20 +126,20 @@
 
 ### Trabalho
 
-- [ ] Criar `auth.controller.ts` com `POST /auth/register`, `POST /auth/login`, `GET /auth/me` e `POST /auth/logout`, seguindo corpos, status e códigos de erro do design.
-- [ ] Validar inputs e header Bearer com Valibot; rejeitar campos/tamanhos inválidos sem refletir valores recebidos.
-- [ ] Configurar `@fastify/rate-limit` compatível com Fastify 5 para limites independentes de login e cadastro antes de hashing.
-- [ ] Criar `auth.module.ts` para compor controller/service e exportar `requireUser(request)` sem expor schema, hashes ou token interno.
-- [ ] Isolar resolução da identidade no request atual; não usar variável global ou aceitar `playerId` enviado pelo cliente.
-- [ ] Adicionar testes Fastify `inject` cobrindo rotas, códigos HTTP/headers, requests concorrentes com jogadores distintos e uma rota protegida de teste que consuma o contrato público.
+- [x] Criar `auth.controller.ts` com `POST /auth/register`, `POST /auth/login`, `GET /auth/me` e `POST /auth/logout`, seguindo corpos, status e códigos de erro do design.
+- [x] Validar inputs e header Bearer com Valibot; rejeitar campos/tamanhos inválidos sem refletir valores recebidos.
+- [x] Configurar `@fastify/rate-limit` compatível com Fastify 5 para limites independentes de login e cadastro antes de hashing.
+- [x] Criar `auth.module.ts` para compor controller/service e exportar `requireUser(request)` sem expor schema, hashes ou token interno.
+- [x] Isolar resolução da identidade no request atual; não usar variável global ou aceitar `playerId` enviado pelo cliente.
+- [x] Adicionar testes Fastify `inject` cobrindo rotas, códigos HTTP/headers, requests concorrentes com jogadores distintos e uma rota protegida de teste que consuma o contrato público.
 
 ### Critérios de aceite
 
-- [ ] Os quatro endpoints retornam os status e formatos definidos; respostas auth incluem `Cache-Control: no-store`.
-- [ ] `GET /auth/me` e rota protegida de teste só recebem identidade da sessão Bearer validada.
-- [ ] Logout com token sintaticamente correto é idempotente inclusive após revogação; falha real do banco retorna erro controlado.
-- [ ] Campos privados, tokens e erros do banco não são expostos; tentativas inválidas também consomem rate limit.
-- [ ] A rota de teste protegida só existe na suite e não fica registrada no servidor real.
+- [x] Os quatro endpoints retornam os status e formatos definidos; respostas auth incluem `Cache-Control: no-store`.
+- [x] `GET /auth/me` e rota protegida de teste só recebem identidade da sessão Bearer validada.
+- [x] Logout com token sintaticamente correto é idempotente inclusive após revogação; falha real do banco retorna erro controlado.
+- [x] Campos privados, tokens e erros do banco não são expostos; tentativas inválidas também consomem rate limit.
+- [x] A rota de teste protegida só existe na suite e não fica registrada no servidor real.
 
 ### Arquivos prováveis
 
@@ -151,9 +151,9 @@
 
 ### Verificação
 
-- [ ] `cd operator && bun run typecheck && bun test`.
-- [ ] Cobrir 400/401/409/429/503 conforme aplicável e 201/200/204 nos sucessos.
-- [ ] Confirmar que um `playerId` falso no body não muda o jogador retornado por `requireUser`.
+- [x] `cd operator && bun run typecheck && bun test` — typecheck passou; suite PostgreSQL dedicada passou com 61 testes e 234 expectativas.
+- [x] Cobrir 400/401/409/429/503 conforme aplicável e 201/200/204 nos sucessos.
+- [x] Confirmar que um `playerId` falso no body não muda o jogador retornado por `requireUser`.
 
 ## Task T4: Inicialização, Compose, logs e instruções operacionais
 
@@ -164,21 +164,21 @@
 
 ### Trabalho
 
-- [ ] Adicionar `DATABASE_URL` e `AUTH_SESSION_TTL_SECONDS` à validação de config, sem incluir valores sensíveis em erros.
-- [ ] Integrar banco e auth em `server.ts`; verificar banco/schema antes de listen, adicionar `/ready` separado do liveness `/health`, e fechar game/banco em shutdown ou erro de inicialização.
-- [ ] Atualizar Dockerfile para carregar migrations e entry point do migrador sem instalar `drizzle-kit` na imagem de produção.
-- [ ] Atualizar Compose com `operator-migrate` one-shot após Postgres saudável e fazer operator esperar conclusão bem-sucedida; preservar o volume Postgres atual e expor portas somente em loopback.
-- [ ] Ampliar proteção dos logs/config para `DATABASE_URL`, Authorization e campos de auth; não repassar erros brutos do driver.
-- [ ] Documentar configuração, migrations, endpoints REST, exemplos fictícios, status, readiness e procedimento seguro de operação no README.
-- [ ] Executar revisão integrada: suite/tipos existentes, fluxo Docker, indisponibilidade de banco, restart, SSE existente e carga limitada de hashing sem regressão visível de eventos.
+- [x] Adicionar `DATABASE_URL` e `AUTH_SESSION_TTL_SECONDS` à validação de config, sem incluir valores sensíveis em erros.
+- [x] Integrar banco e auth em `server.ts`; verificar banco/schema antes de listen, adicionar `/ready` separado do liveness `/health`, e fechar game/banco em shutdown ou erro de inicialização.
+- [x] Atualizar Dockerfile para carregar migrations e entry point do migrador sem instalar `drizzle-kit` na imagem de produção.
+- [x] Atualizar Compose com `operator-migrate` one-shot após Postgres saudável e fazer operator esperar conclusão bem-sucedida; preservar o volume Postgres atual e expor portas somente em loopback.
+- [x] Ampliar proteção dos logs/config para `DATABASE_URL`, Authorization e campos de auth; não repassar erros brutos do driver.
+- [x] Documentar configuração, migrations, endpoints REST, exemplos fictícios, status, readiness e procedimento seguro de operação no README.
+- [x] Executar revisão integrada: suite/tipos existentes, fluxo Docker, indisponibilidade de banco, restart, SSE existente e carga limitada de hashing sem regressão visível de eventos.
 
 ### Critérios de aceite
 
-- [ ] Banco ausente, migration incompleta ou falha de inicialização impede a API de anunciar prontidão.
-- [ ] `/health` mede liveness e `/ready` retorna 503 quando schema/banco não está disponível.
-- [ ] `docker compose up --build` aplica migration antes de iniciar operator; reiniciar mantém contas e sessões válidas/revogadas.
-- [ ] Logs e respostas não contêm credenciais, `DATABASE_URL`, senha, hash ou token; rotas existentes de SSE continuam com o comportamento anterior.
-- [ ] README permite a outra pessoa preparar banco, aplicar migrations e chamar auth sem consultar código.
+- [x] Banco ausente, migration incompleta ou falha de inicialização impede a API de anunciar prontidão.
+- [x] `/health` mede liveness e `/ready` retorna 503 quando schema/banco não está disponível.
+- [x] `docker compose up --build` aplica migration antes de iniciar operator; reiniciar mantém contas e sessões válidas/revogadas.
+- [x] Logs e respostas não contêm credenciais, `DATABASE_URL`, senha, hash ou token; rotas existentes de SSE continuam com o comportamento anterior.
+- [x] README permite a outra pessoa preparar banco, aplicar migrations e chamar auth sem consultar código.
 
 ### Arquivos prováveis
 
@@ -191,8 +191,8 @@
 
 ### Verificação
 
-- [ ] `cd operator && bun run typecheck && bun test`.
-- [ ] `docker compose config`.
-- [ ] Teste manual com banco de teste: inicialização/migração, login, restart, `me`, logout e rejeição posterior.
-- [ ] Parar o banco durante execução e confirmar readiness 503, erro de auth seguro e recuperação quando ele volta.
-- [ ] Confirmar funcionamento do SSE existente durante casos normais e carga de autenticação limitada.
+- [x] `cd operator && bun run typecheck && bun test` — typecheck passou; suite PostgreSQL dedicada passou com 69 testes e 258 expectativas.
+- [x] `docker compose config` — exit 0; portas host aparecem em loopback e operator depende da conclusão de `operator-migrate`.
+- [x] Teste manual com banco de teste: `docker compose up --build -d` aplicou migration antes do operator; login, `me`, logout e rejeição após reiniciar confirmados.
+- [x] Parar o banco durante execução e confirmar readiness 503, erro de auth seguro e recuperação quando ele volta.
+- [x] Confirmar funcionamento do SSE existente durante casos normais e carga de autenticação limitada: SSE retornou 200/snapshot enquanto logins concorrentes tiveram sucesso ou `429` do limite de hash.

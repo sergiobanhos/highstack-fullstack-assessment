@@ -6,7 +6,7 @@
 
 ## Pré-requisito para implementação
 
-A F02 (.ai/sdd/specs/002-database-auth/) está em tasks:approved, mas sua implementação foi adiada. Começar estas tasks somente depois de concluir e verificar F02 T1–T4, incluindo db.ts, migrações Drizzle, PostgreSQL no ciclo de vida do operador e o contrato público auth.requireUser(request). Este plano não repete nem substitui trabalho da F02.
+A F02 (.ai/sdd/specs/002-database-auth/) está em implementation:done e foi verificada. O pré-requisito F02 T1–T4 está concluído: `db.ts`, migrações Drizzle, PostgreSQL no ciclo de vida do operador e o contrato público `auth.requireUser(request)` estão disponíveis. Este plano não repete nem substitui trabalho da F02.
 
 ## Cobertura dos requisitos
 
@@ -36,7 +36,7 @@ A F02 (.ai/sdd/specs/002-database-auth/) está em tasks:approved, mas sua implem
 | Perguntas críticas respondidas | Pass | Q-001–Q-005 estão respondidas; D-009 e a exceção de precisão foram aceitas. |
 | Tasks têm dependências, critérios, arquivos e verificação | Pass | Cada task lista esses campos e inclui os casos críticos junto da implementação correspondente. |
 | Comandos de verificação conhecidos ou identificados como manuais | Pass | cd operator && bun run typecheck && bun test; cd operator && bun run db:migrate em PostgreSQL dedicado; docker compose config e fluxo manual com Crashsim. db:migrate será criado pela F02. |
-| Pré-requisito para iniciar a implementação | Pendente | F02 ainda não foi implementada; F03 pode ter suas tasks aprovadas, mas sua execução começa depois de F02 T1–T4. |
+| Pré-requisito para iniciar a implementação | Completo | F02 T1–T4 está em `implementation:done` e passou por typecheck, testes PostgreSQL, Compose, restart/revogação e regressão SSE. |
 | Lacunas de design que bloqueiam este plano | Nenhuma | Compatibilidade real das dependências Bun/Drizzle é verificada durante a implementação, conforme o plano da F02. |
 
 ## Fatias de implementação

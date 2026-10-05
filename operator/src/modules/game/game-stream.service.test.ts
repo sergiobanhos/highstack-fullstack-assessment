@@ -129,7 +129,11 @@ function createHarness(snapshotBodies: unknown[] = [
   collector.activate((message) => messages.push(message));
 
   const service = createGameStreamService({
-    config: loadConfig({ ENGINE_OPERATOR_KEY: OPERATOR_KEY, ENGINE_STREAM_URL: STREAM_URL }),
+    config: loadConfig({
+      DATABASE_URL: 'postgres://operator:local-password@127.0.0.1:5432/operator_test',
+      ENGINE_OPERATOR_KEY: OPERATOR_KEY,
+      ENGINE_STREAM_URL: STREAM_URL,
+    }),
     logger,
     hub,
     scheduler,

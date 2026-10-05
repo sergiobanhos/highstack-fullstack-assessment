@@ -7,6 +7,8 @@ import {
   type Logger,
   type OperatorConfig,
 } from './config';
+import { createDatabase, type DatabaseConnection } from './db';
+import { createAuthModule, type AuthModule } from './modules/auth/auth.module';
 import { createGameModule, type GameModule, type GameModuleDeps } from './modules/game/game.module';
 
 export interface OperatorApp {
@@ -14,9 +16,13 @@ export interface OperatorApp {
   config: OperatorConfig;
   logger: Logger;
   game: GameModule;
+  auth: AuthModule;
+  database: DatabaseConnection;
 }
 
-export type OperatorAppOverrides = Omit<GameModuleDeps, 'config' | 'logger'>;
+export type OperatorAppOverrides = Omit<GameModuleDeps, 'app' | 'config' | 'logger'> & {
+  databaseConnection?: DatabaseConnection;
+};
 
 /**
  * Composition root: builds the Fastify instance and wires module composition
@@ -30,49 +36,97 @@ export function buildOperatorApp(config: OperatorConfig, overrides: OperatorAppO
   });
 
   const app = Fastify({ logger: false });
-  const game = createGameModule({ config, logger, ...overrides });
-
-  app.get('/health', async () => ({ status: 'ok' }));
-  game.registerRoutes(app);
-
-  // Closing the HTTP server also releases the upstream engine stream.
-  app.addHook('onClose', async () => {
-    await game.stop();
+  const { databaseConnection, ...gameOverrides } = overrides;
+  const database = databaseConnection ?? createDatabase(config.databaseUrl);
+  const game = createGameModule({ app, config, logger, ...gameOverrides });
+  const auth = createAuthModule({
+    app,
+    db: database.db,
+    sessionTtlSeconds: config.authSessionTtlSeconds,
+    logger,
   });
 
-  return { app, config, logger, game };
+  app.get('/health', async () => ({ status: 'ok' }));
+  app.get('/ready', async (_request, reply) => {
+    try {
+      await checkOperatorReadiness({ database });
+      return { status: 'ready' };
+    } catch {
+      return reply.code(503).send({ status: 'not_ready' });
+    }
+  });
+  // Closing the HTTP server also releases the game stream and database pool.
+  app.addHook('onClose', async () => {
+    try {
+      await game.stop();
+    } finally {
+      await database.close();
+    }
+  });
+
+  return { app, config, logger, game, auth, database };
+}
+
+export async function checkOperatorReadiness({ database }: Pick<OperatorApp, 'database'>): Promise<void> {
+  await database.check();
+  await database.checkSchema();
 }
 
 async function main(): Promise<void> {
-  const config = loadConfig(process.env);
-  const { app, game, logger } = buildOperatorApp(config);
-
-  let shuttingDown = false;
-  const shutdown = async (signal: string): Promise<void> => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    logger.info('operator shutting down', { signal });
-    try {
-      await app.close();
-      process.exit(0);
-    } catch (error) {
-      logger.error('operator shutdown failed', { error });
-      process.exit(1);
-    }
-  };
-
-  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-    process.on(signal, () => void shutdown(signal));
-  }
-
+  let operator: OperatorApp | undefined;
+  let stage = 'configuration';
   try {
+    const config = loadConfig(process.env);
+    operator = buildOperatorApp(config);
+    const { app, game, logger } = operator;
+
+    let shuttingDown = false;
+    const shutdown = async (signal: string): Promise<void> => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+      logger.info('operator shutting down', { signal });
+      try {
+        await app.close();
+      } catch {
+        logger.error('operator shutdown failed');
+        process.exitCode = 1;
+      }
+    };
+
+    for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+      process.on(signal, () => void shutdown(signal));
+    }
+
+    stage = 'route-registration';
+    await app.ready();
+    stage = 'database-readiness';
+    await checkOperatorReadiness(operator);
+    stage = 'http-listen';
     await app.listen({ port: config.port, host: config.host });
     logger.info('operator listening', { port: config.port, host: config.host });
     game.start();
   } catch (error) {
-    logger.error('operator failed to start', { error });
-    process.exit(1);
+    if (operator) {
+      operator.logger.error('operator failed to start', { stage });
+      try {
+        await operator.app.close();
+      } catch {
+        operator.logger.error('operator startup cleanup failed', { stage });
+      }
+    } else {
+      if (error instanceof Error && error.message.startsWith('Invalid operator configuration at: ')) {
+        console.error(error.message);
+      } else {
+        console.error('Operator configuration is invalid. Check the required environment variables.');
+      }
+    }
+    process.exitCode = 1;
   }
 }
 
-if (import.meta.main) void main();
+if (import.meta.main) {
+  void main().catch(() => {
+    console.error('Operator startup failed. Check configuration and database readiness.');
+    process.exitCode = 1;
+  });
+}
