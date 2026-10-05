@@ -73,15 +73,14 @@ flowchart LR
 |------|--------|------------|
 | Repeated or concurrent debit webhooks change balance more than once or below zero | High | Unique `txId`, same-transaction ledger and balance mutation, atomic conditional debit, and concurrent-request tests. |
 | Engine accepts a bet/cashout but the operator times out before receiving the response | High | Persist command state and reconcile by engine bet ID; add request idempotency for bet creation if the engine contract supports it. |
-| Cashout is reported successful before the asynchronous credit webhook commits | High | Model bet outcome separately from wallet settlement; define pending-credit recovery and reconciliation before exposing final balance. |
+| Cashout is reported successful before the asynchronous credit webhook commits | High | F04 persists the cashout outcome; F06 reconciles engine bet state against the financial ledger, with one credit per `betId` even if the original webhook arrives late. |
 | Invalid/replayed webhook reaches wallet endpoints | High | Verify HMAC against the raw body, compare signatures safely, and enforce timestamp freshness. |
 
 ## Open Decisions
 
-- F02 requirements specify self-registration, email/password login, logout and current user; its approved REST design defines session policy and persistence structure.
-- Confirm wallet currency scope and how rejected debit attempts are recorded in F03 requirements.
+- F02 requirements, REST design, and tasks are approved; implementation is deferred at the user's request.
+- F03 requirements, design, and tasks are approved in `.ai/sdd/specs/003-financial-wallet-ledger/`. F03 implementation depends on F02 and is deferred while the user proceeds to F04 requirements. The design defines USD-only currency, local test top-up, stable `402` replay, persist-before-`200` webhook acknowledgement, and F04/F06 cashout recovery. The user chose an operator-side `Number.MAX_SAFE_INTEGER` limit: unsafe payouts are rejected without mutation, logged as precision incidents, and cannot be automatically recovered by F06 through the current numeric engine contract.
 - Confirm whether the engine can accept a stable idempotency key for `POST /bets` in F04 requirements.
-- Define how delayed/failed cashout credit webhooks are reconciled in F03/F04 requirements.
 
 ## Next Actions
 
@@ -99,4 +98,12 @@ flowchart LR
 - [x] Approve F02 REST design
 - [x] Create F02 tasks
 - [x] Approve F02 tasks
-- [ ] Implement F02 when scheduled
+- [x] Defer F02 implementation at user request
+- [x] Create F03 requirements draft
+- [x] Resolve F03 questions
+- [x] Approve F03 requirements
+- [x] Create F03 design draft
+- [x] Approve F03 design
+- [x] Create F03 tasks
+- [x] Approve F03 tasks
+- [ ] Create F04 requirements draft: Crashsim bet and cashout commands

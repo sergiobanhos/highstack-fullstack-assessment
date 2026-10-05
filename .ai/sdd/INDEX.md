@@ -19,7 +19,7 @@
 
 | Field | Value | Notes |
 |-------|-------|-------|
-| Next Feature ID | 003 | Recompute from filesystem before creating a new spec |
+| Next Feature ID | 004 | Recompute from filesystem before creating a new spec |
 | Numbering Issues | none | duplicate prefix / invalid status / non-canonical directory |
 
 ## Specs
@@ -28,10 +28,11 @@
 |----|---------|--------|--------------|--------|-------|--------|
 | 001 | Crashsim real-time operator proxy | implementation:done | `.ai/sdd/specs/001-crashsim-realtime-proxy/requirements.md` (approved: single Crashsim scope) | `.ai/sdd/specs/001-crashsim-realtime-proxy/design.md` (approved: direct Crashsim integration) | `.ai/sdd/specs/001-crashsim-realtime-proxy/tasks.md` (approved; implementation complete) | pending |
 | 002 | Base de persistência e autenticação de jogadores | tasks:approved | `.ai/sdd/specs/002-database-auth/requirements.md` (approved) | `.ai/sdd/specs/002-database-auth/design.md` (approved: REST) | `.ai/sdd/specs/002-database-auth/tasks.md` (approved) | — |
+| 003 | Carteira, ledger e webhooks financeiros | tasks:approved | `.ai/sdd/specs/003-financial-wallet-ledger/requirements.md` (approved; Q-001–Q-005 respondidos; D-009 definido) | `.ai/sdd/specs/003-financial-wallet-ledger/design.md` (approved) | `.ai/sdd/specs/003-financial-wallet-ledger/tasks.md` (approved; execução após implementação de F02) | — |
 
 ## Handoff
 
-- `.ai/sdd/handoff/sdd-brief.md`: available (spec 002, tasks approved; implementation not started)
+- `.ai/sdd/handoff/sdd-brief.md`: available (F03 tasks aprovadas; implementação aguarda F02; próxima spec: F04)
 
 ## Next Actions
 
@@ -48,4 +49,12 @@
 - [x] Approve the REST design for spec 002
 - [x] Create tasks for spec 002
 - [x] Approve tasks for spec 002
-- [ ] F02 implementation deferred; proceed with F03 requirements
+- [x] Defer F02 implementation at user request
+- [x] Create F03 requirements draft
+- [x] Resolve F03 questions
+- [x] Approve F03 requirements
+- [x] Create F03 design draft
+- [x] Approve F03 design
+- [x] Create F03 tasks
+- [x] Approve F03 tasks
+- [ ] Create F04 requirements draft: Crashsim bet and cashout commands
