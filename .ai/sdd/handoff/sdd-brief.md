@@ -67,7 +67,9 @@
 - **Verificação F04 T5:** `bun run typecheck && bun run test:e2e` passou em PostgreSQL Compose isolado com 126 testes/657 expectativas. Cobertos serviço recriado, ordenação/limites, isolamento de jogador, unknown sem novo POST ou alteração de saldo pela leitura, settlement pending/confirmed, ownership antes de chamar Crashsim e fallback para estado persistido quando o Crashsim não encontra o bet.
 - **F04 T6 concluída:** `game-command.service.ts` autoriza cashout apenas para bet próprio/ativo com stream sincronizado e rodada `running`; reserva comando idempotente e slot único por `betId`; persiste estado de jogo separado do crédito; após resposta ambígua consulta a engine e mantém `unknown` se o GET falhar. A leitura de `commandId` também retenta reconciliação. Payout inseguro não é persistido como dinheiro e gera evento de incidente. O fluxo não chama `creditCashoutOnce`.
 - **Verificação F04 T6:** `bun run typecheck && bun run test:e2e` passou; PostgreSQL temporário isolado executou 133 testes/688 expectativas. Cobertos cashout normal, replay e conflito de chave, concorrência de chaves, timeout com GET `active`/`cashed_out`, consulta indisponível, recuperação de unknown após recriar o serviço sem novo POST, ownership, stream/fase/status, settlement pendente/confirmado e payout inseguro. O teste com Crashsim real e `CASHOUT_TIMEOUT=1` fica para T7 após a composição REST.
-- **Próximo passo:** T7 (expor as rotas REST autenticadas e integrar o fluxo completo com Crashsim).
+- **F04 T7 implementada:** REST autenticada para sessão, apostas, leituras e cashout; `server.ts` monta `auth` e `financial` antes de injetar seus contratos públicos em `game.module.ts`. `GET /game/bets/:betId` também retoma a reconciliação de cashout desconhecido após reload, sem novo POST. O README agora documenta o fluxo REST, unknown, cashout, settle e limites do MVP.
+- **Verificação F04 T7:** `bun run typecheck`, `bun run test:e2e` e `docker compose config --quiet` passaram. O PostgreSQL temporário isolado executou 141 testes/774 expectativas; a integração cobre cadastro/login, top-up, sessão sem expor `sessionId`, aposta/débito, replay idempotente, resposta de cashout perdida após mutação, GET autoritativo, crédito financeiro atrasado, reload e saldo final correto. O HTTP Crashsim e o stream foram simulados pelo contrato; o smoke test com o processo Crashsim real ainda está pendente.
+- **Próximo passo:** executar o smoke test manual com Crashsim real registrado em T6/T7; depois disso, revisar e marcar F04 completa.
 
 ## Dependências de roadmap ainda não especificadas
 
@@ -78,4 +80,4 @@
 
 - F02 requirements, design e tasks estão aprovados; implementação T1–T4 concluída e verificada.
 - F03 requirements, design e tasks estão aprovados; implementação e verificação PostgreSQL/Crashsim foram concluídas.
-- F04 requirements, design e tasks estão aprovados; T1–T6 implementadas/verificadas com PostgreSQL isolado. A verificação do fluxo Crashsim real está registrada para T7; depois de T7, concluir F04.
+- F04 requirements, design e tasks estão aprovados; T1–T7 implementadas e verificadas com PostgreSQL isolado e contrato Crashsim simulado. A verificação pendente é executar a integração com o processo Crashsim real e suas flags de falha antes de marcar F04 concluída.

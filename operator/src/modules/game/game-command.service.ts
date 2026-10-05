@@ -528,6 +528,23 @@ export function createGameCommandService({ db, financial, engine, stream, logger
     });
     if (!bet) return null;
 
+    const unresolvedCashout = await withStorageErrors(async () => {
+      const [command] = await db
+        .select(commandProjection)
+        .from(gameCommands)
+        .where(and(
+          eq(gameCommands.playerId, input.playerId),
+          eq(gameCommands.betId, input.betId),
+          eq(gameCommands.commandType, 'cashout'),
+          inArray(gameCommands.status, ['pending', 'unknown']),
+        ))
+        .limit(1);
+      return command;
+    });
+    if (unresolvedCashout) {
+      return cashoutInFlight.get(unresolvedCashout.id) ?? reconcileCashout(unresolvedCashout);
+    }
+
     const command = await currentCommand(input.playerId, bet.commandId);
     if (!command || command.status !== 'accepted' || command.commandType !== 'bet') {
       throw new GameCommandError('SERVICE_UNAVAILABLE');

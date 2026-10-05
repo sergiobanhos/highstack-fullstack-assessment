@@ -22,7 +22,10 @@ export interface OperatorApp {
   database: DatabaseConnection;
 }
 
-export type OperatorAppOverrides = Omit<GameModuleDeps, 'app' | 'config' | 'logger'> & {
+export type OperatorAppOverrides = Omit<
+  GameModuleDeps,
+  'app' | 'config' | 'logger' | 'db' | 'auth' | 'financial'
+> & {
   databaseConnection?: DatabaseConnection;
 };
 
@@ -40,7 +43,6 @@ export function buildOperatorApp(config: OperatorConfig, overrides: OperatorAppO
   const app = Fastify({ logger: false });
   const { databaseConnection, ...gameOverrides } = overrides;
   const database = databaseConnection ?? createDatabase(config.databaseUrl);
-  const game = createGameModule({ app, config, logger, ...gameOverrides });
   const auth = createAuthModule({
     app,
     db: database.db,
@@ -48,6 +50,15 @@ export function buildOperatorApp(config: OperatorConfig, overrides: OperatorAppO
     logger,
   });
   const financial = createFinancialModule({ app, db: database.db, config, logger, auth });
+  const game = createGameModule({
+    app,
+    db: database.db,
+    auth,
+    financial,
+    config,
+    logger,
+    ...gameOverrides,
+  });
 
   app.get('/health', async () => ({ status: 'ok' }));
   app.get('/ready', async (_request, reply) => {

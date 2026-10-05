@@ -288,7 +288,7 @@ T1 completa as duas consultas financeiras específicas que o design F04 precisa.
 ### Verificação
 
 - [x] `cd operator && bun run typecheck && bun run test:e2e` — typecheck e suíte Bun completa passaram em PostgreSQL temporário isolado (133 testes/688 expectativas).
-- [ ] Com PostgreSQL dedicado e Crashsim real, testar cashout normal e flag `CASHOUT_TIMEOUT=1`, consultas que retornam `active` e `cashed_out`, além de GET indisponível. **Adiado para T7**, quando a composição REST permitirá validar o fluxo integrado sem iniciar o Compose root nesta tarefa.
+- [ ] Com o processo Crashsim real, testar cashout normal e flag `CASHOUT_TIMEOUT=1`, consultas que retornam `active` e `cashed_out`, além de GET indisponível. O T7 validou o mesmo fluxo com o contrato HTTP simulado e resposta perdida após mutação; o smoke test com a engine real continua pendente.
 - [x] Confirmar corrida de duas chaves no mesmo bet e replay da mesma chave sem segundo efeito, por testes de serviço/PostgreSQL.
 - [x] Confirmar estados de crédito pending/confirmed e ausência de crédito iniciado pela API game, por teste de integração do serviço com financial.
 
@@ -301,24 +301,24 @@ T1 completa as duas consultas financeiras específicas que o design F04 precisa.
 
 ### Trabalho
 
-- [ ] Criar controller REST fino para `POST /game/session`, `POST /game/bets`, `GET /game/bets`, `GET /game/commands/:commandId`, `GET /game/bets/:betId` e `POST /game/bets/:betId/cashout`.
-- [ ] Usar `auth.requireUser(request)` em cada rota; validar body, query, UUID e `Idempotency-Key` com Valibot; nenhum input do browser escolhe `playerId`, `sessionId`, owner, status ou payout.
-- [ ] Mapear resultados e erros para os códigos/status REST aprovados, incluindo `401`, `404` uniforme, `402`, `409`, `202 unknown`, `503` e sucessos sem envelope inconsistente.
-- [ ] Manter controller responsável por transporte e mapeamento; concentrar sincronização, persistência, chamadas Crashsim e reconciliação no serviço game existente.
-- [ ] Injetar DB e contratos públicos de auth/financial em `game.module.ts` a partir de `server.ts`; registrar rotas apenas quando a composição completa estiver válida.
-- [ ] Preservar `/game/events`, health/readiness, lifecycle e uma conexão Crashsim compartilhada do F01; não criar worker, adapter genérico, módulo hipotético ou contrato privado entre módulos.
-- [ ] Adicionar testes Fastify `inject` para todas as rotas, autenticação, schemas, status, isolamento, respostas unknown e ausência de segredo/session na resposta/log.
-- [ ] Atualizar README com endpoints, fluxo de reload, idempotência, estados unknown, restrição de cashout, dependências e limites conhecidos do MVP.
+- [x] Criar controller REST fino para `POST /game/session`, `POST /game/bets`, `GET /game/bets`, `GET /game/commands/:commandId`, `GET /game/bets/:betId` e `POST /game/bets/:betId/cashout`.
+- [x] Usar `auth.requireUser(request)` em cada rota; validar body, query, UUID e `Idempotency-Key` com Valibot; nenhum input do browser escolhe `playerId`, `sessionId`, owner, status ou payout.
+- [x] Mapear resultados e erros para os códigos/status REST aprovados, incluindo `401`, `404` uniforme, `402`, `409`, `202 unknown`, `503` e sucessos sem envelope inconsistente.
+- [x] Manter controller responsável por transporte e mapeamento; concentrar sincronização, persistência, chamadas Crashsim e reconciliação no serviço game existente.
+- [x] Injetar DB e contratos públicos de auth/financial em `game.module.ts` a partir de `server.ts`; registrar rotas apenas quando a composição completa estiver válida.
+- [x] Preservar `/game/events`, health/readiness, lifecycle e uma conexão Crashsim compartilhada do F01; não criar worker, adapter genérico, módulo hipotético ou contrato privado entre módulos.
+- [x] Adicionar testes Fastify `inject` para todas as rotas, autenticação, schemas, status, isolamento, respostas unknown e ausência de segredo/session na resposta/log.
+- [x] Atualizar README com endpoints, fluxo de reload, idempotência, estados unknown, restrição de cashout, dependências e limites conhecidos do MVP.
 
 ### Critérios de aceite
 
-- [ ] Todas as seis rotas exigem autenticação e usam somente o jogador retornado por `requireUser`.
-- [ ] `GET /game/bets?limit=10` restaura bets/comandos do jogador; comando unknown pode ser consultado sem repetir mutação.
-- [ ] Respostas e erros diferenciam recusa definitiva, conflito, indisponibilidade e estado desconhecido conforme o design.
-- [ ] `sessionId`, `ENGINE_OPERATOR_KEY`, segredo de webhook e payload upstream integral não aparecem no browser ou nos logs.
-- [ ] F01 SSE, reducer, reconnect e snapshot continuam funcionando; durante reconnect/synchronizing aposta e cashout são recusados antes de qualquer chamada de engine.
-- [ ] O fluxo local completa cadastro/login → sessão → aposta/débito → cashout → confirmação financeira → recuperação da aposta após reload sem saldo divergente.
-- [ ] README registra o limite de não compensar automaticamente bet rejeitado após débito confirmado e a recuperação de cashout pendente atribuída a F06.
+- [x] Todas as seis rotas exigem autenticação e usam somente o jogador retornado por `requireUser`.
+- [x] `GET /game/bets?limit=10` restaura bets/comandos do jogador; comando unknown pode ser consultado sem repetir mutação.
+- [x] Respostas e erros diferenciam recusa definitiva, conflito, indisponibilidade e estado desconhecido conforme o design.
+- [x] `sessionId`, `ENGINE_OPERATOR_KEY`, segredo de webhook e payload upstream integral não aparecem no browser ou nos logs.
+- [x] F01 SSE, reducer, reconnect e snapshot continuam funcionando; durante reconnect/synchronizing aposta e cashout são recusados antes de qualquer chamada de engine.
+- [x] O fluxo integrado com protocolo Crashsim simulado completa cadastro/login → sessão → aposta/débito → timeout de cashout → confirmação financeira → recuperação da aposta após reload, sem saldo divergente.
+- [x] README registra o limite de não compensar automaticamente bet rejeitado após débito confirmado e a recuperação de cashout pendente atribuída a F06.
 
 ### Arquivos
 
@@ -331,8 +331,8 @@ T1 completa as duas consultas financeiras específicas que o design F04 precisa.
 
 ### Verificação
 
-- [ ] `cd operator && bun run typecheck && bun test`.
-- [ ] `docker compose config`.
-- [ ] Com PostgreSQL de teste dedicado, aplicar todas as migrations e executar integração sem apontar operações destrutivas para banco de desenvolvimento.
-- [ ] Fazer fluxo manual com Compose e Crashsim, incluindo reload, reconnect/reorder, 402 + nova chave, timeout de bet e timeout de cashout.
-- [ ] Conferir logs e respostas para ausência de credenciais; confirmar que `/game/events` e readiness permanecem disponíveis.
+- [x] `cd operator && bun run typecheck && bun run test:e2e` — typecheck e suíte Bun completa passaram em PostgreSQL temporário isolado (141 testes/774 expectativas).
+- [x] `docker compose config --quiet`.
+- [x] Com PostgreSQL de teste dedicado, aplicar todas as migrations e executar integração sem apontar operações destrutivas para banco de desenvolvimento.
+- [ ] Fazer fluxo manual com Compose e Crashsim real, incluindo `CASHOUT_TIMEOUT=1`, reconnect/reorder e timeout real de bet/cashout. A jornada equivalente foi exercitada com o protocolo HTTP simulado; o teste com serviços reais não foi executado.
+- [x] Conferir logs e respostas para ausência de credenciais; confirmar que `/game/events` e readiness permanecem disponíveis.

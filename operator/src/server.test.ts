@@ -47,10 +47,18 @@ describe('operator composition and readiness', () => {
       expect(operator.app.hasRoute({ method: 'POST', url: '/wallet/top-ups' })).toBe(false);
       expect(operator.app.hasRoute({ method: 'POST', url: '/wallet/debit' })).toBe(true);
       expect(operator.app.hasRoute({ method: 'GET', url: '/game/events' })).toBe(true);
+      expect(operator.app.hasRoute({ method: 'POST', url: '/game/session' })).toBe(true);
+      expect(operator.app.hasRoute({ method: 'POST', url: '/game/bets' })).toBe(true);
+      expect(operator.app.hasRoute({ method: 'GET', url: '/game/bets' })).toBe(true);
+      expect(operator.app.hasRoute({ method: 'GET', url: '/game/commands/:commandId' })).toBe(true);
+      expect(operator.app.hasRoute({ method: 'GET', url: '/game/bets/:betId' })).toBe(true);
+      expect(operator.app.hasRoute({ method: 'POST', url: '/game/bets/:betId/cashout' })).toBe(true);
       expect(typeof operator.financial.ensureWallet).toBe('function');
       expect(typeof operator.financial.creditCashoutOnce).toBe('function');
       const unauthorizedWallet = await operator.app.inject({ method: 'GET', url: '/wallet' });
       expect(unauthorizedWallet.statusCode).toBe(401);
+      const unauthorizedGameCommand = await operator.app.inject({ method: 'POST', url: '/game/session' });
+      expect(unauthorizedGameCommand.statusCode).toBe(401);
     } finally {
       await operator.app.close();
     }

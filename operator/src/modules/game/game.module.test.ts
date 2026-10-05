@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import Fastify from 'fastify';
 import { createLogger, loadConfig, type LoggerSink } from '../../config';
+import type { OperatorDatabase } from '../../db';
+import { UnauthenticatedError, type AuthModule } from '../auth/auth.module';
+import type { FinancialModule } from '../financial/financial.module';
 import { createGameModule } from './game.module';
 import { GAME_EVENTS_ROUTE } from './game-events.controller';
 import type { UpstreamSocket } from './crashsim-stream.client';
@@ -28,11 +31,16 @@ const silentLogger = () =>
   });
 
 describe('createGameModule', () => {
-  test('exposes only the Crashsim lifecycle and registers /game/events', async () => {
+  test('composes authenticated game commands and the Crashsim SSE route', async () => {
     const sockets: InertSocket[] = [];
     const app = Fastify({ logger: false });
     const game = createGameModule({
       app,
+      db: {} as OperatorDatabase,
+      auth: {
+        async requireUser() { throw new UnauthenticatedError(); },
+      } satisfies Pick<AuthModule, 'requireUser'>,
+      financial: {} as FinancialModule,
       config: loadConfig({
         DATABASE_URL: 'postgres://operator:local-password@127.0.0.1:5432/operator_test',
         APP_ENV: 'test',
@@ -48,6 +56,14 @@ describe('createGameModule', () => {
     expect(Object.keys(game).sort()).toEqual(['start', 'stop']);
     await app.ready();
     expect(app.hasRoute({ method: 'GET', url: GAME_EVENTS_ROUTE })).toBe(true);
+    expect(app.hasRoute({ method: 'POST', url: '/game/session' })).toBe(true);
+    expect(app.hasRoute({ method: 'POST', url: '/game/bets' })).toBe(true);
+    expect(app.hasRoute({ method: 'GET', url: '/game/bets' })).toBe(true);
+    expect(app.hasRoute({ method: 'GET', url: '/game/commands/:commandId' })).toBe(true);
+    expect(app.hasRoute({ method: 'GET', url: '/game/bets/:betId' })).toBe(true);
+    expect(app.hasRoute({ method: 'POST', url: '/game/bets/:betId/cashout' })).toBe(true);
+    const unauthorized = await app.inject({ method: 'POST', url: '/game/session' });
+    expect(unauthorized.statusCode).toBe(401);
     expect(sockets).toHaveLength(0);
 
     game.start();

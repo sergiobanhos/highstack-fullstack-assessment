@@ -788,6 +788,43 @@ if (!testDatabaseUrl) {
       });
     });
 
+    test('reconciles a lost cashout command through the owned bet ID after a page reload', async () => {
+      await withPlayer(async (playerId) => {
+        const { betId } = await createOwnedBet(playerId);
+        const firstProcess = createHarness({
+          async cashout() { throw new CrashsimHttpError('unknown'); },
+          async getBet() { throw new CrashsimHttpError('unavailable'); },
+        }, runningSnapshot());
+        const unknown = await firstProcess.service.cashout({
+          playerId, idempotencyKey: randomUUID(), betId,
+        });
+        expect(unknown?.betCommandStatus).toBe('unknown');
+
+        const active: CrashsimBet = {
+          betId, playerId, roundId: 'round-current', amount: 100, status: 'active',
+          multiplierHundredths: null, payoutCents: null, payoutPrecision: 'not_provided',
+        };
+        const restarted = createHarness({
+          async cashout() {
+            return { betId, status: 'cashed_out', multiplierHundredths: 180, payoutCents: 180, payoutPrecision: 'safe' };
+          },
+          async getBet() { return active; },
+        }, runningSnapshot());
+        const reconciled = await restarted.service.getBet({ playerId, betId });
+        expect(reconciled).toMatchObject({
+          commandId: unknown!.commandId,
+          betCommandStatus: 'rejected',
+          resultCode: 'cashout_not_applied',
+          bet: { betId, engineStatus: 'active' },
+        });
+        expect(restarted.engineStats()).toMatchObject({ cashoutCalls: 0, getBetCalls: 1 });
+
+        const retry = await restarted.service.cashout({ playerId, idempotencyKey: randomUUID(), betId });
+        expect(retry).toMatchObject({ betCommandStatus: 'accepted', bet: { engineStatus: 'cashed_out' } });
+        expect(restarted.engineStats().cashoutCalls).toBe(1);
+      });
+    });
+
     test('checks cashout ownership, synchronized running state, and active bet status before Crashsim', async () => {
       await withPlayer(async (playerId) => {
         const { betId } = await createOwnedBet(playerId);
