@@ -8,7 +8,11 @@ import {
 } from './config';
 import { buildOperatorApp } from './server';
 
-const testEnv = { DATABASE_URL: 'postgres://operator:local-password@127.0.0.1:5432/operator_test' };
+const testEnv = {
+  DATABASE_URL: 'postgres://operator:local-password@127.0.0.1:5432/operator_test',
+  APP_ENV: 'test',
+  ENGINE_WEBHOOK_SECRET: 'test-webhook-secret',
+};
 
 const capturingSink = (lines: string[]): LoggerSink => ({
   debug: (line) => lines.push(line),
@@ -23,10 +27,37 @@ describe('loadConfig', () => {
     expect(config.port).toBe(3000);
     expect(config.host).toBe('0.0.0.0');
     expect(config.logLevel).toBe('info');
+    expect(config.appEnv).toBe('test');
+    expect(config.walletTestTopupEnabled).toBe(false);
     expect(config.engine.httpUrl).toBe('http://localhost:4000');
     expect(config.engine.streamUrl).toBe('ws://localhost:4000/stream');
     expect(config.databaseUrl).toBe(testEnv.DATABASE_URL);
     expect(config.authSessionTtlSeconds).toBe(86_400);
+  });
+
+  test('enables test top-up only with an explicit local setting', () => {
+    const config = loadConfig({ ...testEnv, APP_ENV: 'local', WALLET_TEST_TOPUP_ENABLED: 'true' });
+    expect(config.walletTestTopupEnabled).toBe(true);
+    expect(config.appEnv).toBe('local');
+    expect(loadConfig({ ...testEnv, APP_ENV: 'local' }).walletTestTopupEnabled).toBe(false);
+  });
+
+  test('rejects top-up outside local and invalid environment/flag values', () => {
+    expect(() => loadConfig({ ...testEnv, APP_ENV: 'test', WALLET_TEST_TOPUP_ENABLED: 'true' }))
+      .toThrow('walletTestTopupEnabled');
+    expect(() => loadConfig({ ...testEnv, APP_ENV: 'production', WALLET_TEST_TOPUP_ENABLED: 'true' }))
+      .toThrow('walletTestTopupEnabled');
+    expect(() => loadConfig({ ...testEnv, APP_ENV: 'staging' })).toThrow('appEnv');
+    expect(() => loadConfig({ ...testEnv, WALLET_TEST_TOPUP_ENABLED: 'yes' }))
+      .toThrow('walletTestTopupEnabled');
+    expect(() => loadConfig({ ...testEnv, APP_ENV: undefined })).toThrow('appEnv');
+    expect(loadConfig({ ...testEnv, APP_ENV: 'production', WALLET_TEST_TOPUP_ENABLED: 'false' })
+      .walletTestTopupEnabled).toBe(false);
+  });
+
+  test('requires an explicit Crashsim webhook secret without echoing it', () => {
+    expect(() => loadConfig({ ...testEnv, ENGINE_WEBHOOK_SECRET: undefined })).toThrow('engine.webhookSecret');
+    expect(() => loadConfig({ ...testEnv, ENGINE_WEBHOOK_SECRET: '' })).toThrow('engine.webhookSecret');
   });
 
   test('strips trailing slashes from the engine HTTP URL', () => {
@@ -114,6 +145,25 @@ describe('logger redaction', () => {
 
     expect(lines).toHaveLength(1);
     expect(lines[0]).not.toContain('top-secret-key');
+    expect(lines[0]).toContain('[redacted]');
+  });
+
+  test('never writes the Crashsim webhook secret to logs', () => {
+    const config = loadConfig({ ...testEnv, ENGINE_WEBHOOK_SECRET: 'private-crashsim-hmac' });
+    const lines: string[] = [];
+    const logger = createLogger({
+      level: 'debug',
+      redactor: createRedactor(operatorSecrets(config)),
+      sink: capturingSink(lines),
+    });
+
+    logger.error('webhook validation failed', {
+      secret: config.engine.webhookSecret,
+      error: new Error(`bad signature ${config.engine.webhookSecret}`),
+    });
+
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).not.toContain('private-crashsim-hmac');
     expect(lines[0]).toContain('[redacted]');
   });
 

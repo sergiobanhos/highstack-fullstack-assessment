@@ -57,19 +57,19 @@ A F02 (.ai/sdd/specs/002-database-auth/) está em implementation:done e foi veri
 
 ### Trabalho
 
-- [ ] Estender a configuração validada com ENGINE_WEBHOOK_SECRET, APP_ENV (local, test ou production) e WALLET_TEST_TOPUP_ENABLED, com default fechado; nunca usar segredo padrão no operador.
-- [ ] Fazer a inicialização falhar se top-up estiver habilitado fora de APP_ENV=local; incluir o segredo Crashsim na redação do logger/configuração.
-- [ ] Criar financial.schema.ts com wallets, financial_operations e wallet_ledger_entries, usando centavos inteiros, PostgreSQL BIGINT, checks de faixa, FKs, timestamps e índices do design.
-- [ ] Definir unicidade parcial para engine_tx_id e business_key, incluindo a chave de cashout cashout:<betId> e as chaves de top-up por jogador.
-- [ ] Integrar o schema ao drizzle.config.ts e ao fluxo de migrations criado pela F02; gerar e revisar uma migration aditiva posterior à migration de auth.
-- [ ] Cobrir validação de configuração, redação de segredo, constraints, indexes e migração/reexecução sem remover dados existentes.
+- [x] Estender a configuração validada com ENGINE_WEBHOOK_SECRET, APP_ENV (local, test ou production) e WALLET_TEST_TOPUP_ENABLED, com default fechado; nunca usar segredo padrão no operador.
+- [x] Fazer a inicialização falhar se top-up estiver habilitado fora de APP_ENV=local; incluir o segredo Crashsim na redação do logger/configuração.
+- [x] Criar financial.schema.ts com wallets, financial_operations e wallet_ledger_entries, usando centavos inteiros, PostgreSQL BIGINT, checks de faixa, FKs, timestamps e índices do design.
+- [x] Definir unicidade parcial para engine_tx_id e business_key, incluindo a chave de cashout cashout:<betId> e as chaves de top-up por jogador.
+- [x] Integrar o schema ao drizzle.config.ts e ao fluxo de migrations criado pela F02; gerar e revisar uma migration aditiva posterior à migration de auth.
+- [x] Cobrir validação de configuração, redação de segredo, constraints, indexes e migração/reexecução sem remover dados existentes.
 
 ### Critérios de aceite
 
-- [ ] A migration cria somente as tabelas e constraints financeiras, pode ser reexecutada pelo migrador e preserva jogadores/sessões da F02.
-- [ ] O banco impede saldo negativo ou acima de Number.MAX_SAFE_INTEGER, valores financeiros fora da faixa e duas operações com a mesma chave única.
-- [ ] APP_ENV inválido é rejeitado; a flag local defaulta para false; combinação habilitada fora de local impede startup.
-- [ ] ENGINE_WEBHOOK_SECRET e DATABASE_URL não aparecem em erros de configuração nem logs.
+- [x] A migration cria somente as tabelas e constraints financeiras, pode ser reexecutada pelo migrador e preserva jogadores/sessões da F02.
+- [x] O banco impede saldo negativo ou acima de Number.MAX_SAFE_INTEGER, valores financeiros fora da faixa e duas operações com a mesma chave única.
+- [x] APP_ENV inválido é rejeitado; a flag local defaulta para false; combinação habilitada fora de local impede startup.
+- [x] ENGINE_WEBHOOK_SECRET e DATABASE_URL não aparecem em erros de configuração nem logs.
 
 ### Arquivos
 
@@ -82,9 +82,9 @@ A F02 (.ai/sdd/specs/002-database-auth/) está em implementation:done e foi veri
 
 ### Verificação
 
-- [ ] cd operator && bun run typecheck && bun test.
-- [ ] Aplicar bun run db:migrate duas vezes com DATABASE_URL apontando para PostgreSQL exclusivo de teste; confirmar tabelas, constraints e preservação dos registros de auth.
-- [ ] Testar config com top-up ausente, habilitado em local, habilitado fora de local e segredo ausente/inválido; inspecionar logs capturados para garantir redação.
+- [x] `cd operator && bun run typecheck` — exit 0; `bun test` com `TEST_DATABASE_URL` dedicado — 73 pass, 0 fail, 293 expectations.
+- [x] Executar `bun run db:migrate` duas vezes contra PostgreSQL dedicado `operator_financial_test`; migração repetida dentro do teste preservou player, sessão, wallet, operations e ledger.
+- [x] Testar top-up ausente (false), habilitado em local, habilitado fora de local, `APP_ENV` inválido e segredo ausente/vazio; logger capturado não contém o webhook secret.
 
 ## Task T2: Serviço financeiro transacional e contrato público
 

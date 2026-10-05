@@ -1,17 +1,17 @@
 # SDD Handoff Brief: Implementação em ordem de dependências — F02 → F03 → F04
 
-> Status: F02 implementation done; F03 e F04 tasks aprovadas
-> Readiness: começar F03 T1. F04 depende de F02 e F03 concluídas e verificadas.
+> Status: F02 implementation done; F03 T1 concluída e verificada; F04 tasks aprovadas
+> Readiness: comitar F03 T1 antes de iniciar T2. F04 depende de F02 e F03 concluídas e verificadas.
 > Updated: 2026-10-05
 
 ## Metadata
 
-- **Feature atual:** F02 — `.ai/sdd/specs/002-database-auth/`
+- **Feature atual:** F03 — `.ai/sdd/specs/003-financial-wallet-ledger/`
 - **F02 aprovado:** `.ai/sdd/specs/002-database-auth/`
 - **F03 requirements:** `.ai/sdd/specs/003-financial-wallet-ledger/requirements.md` (approved)
 - **F03 design:** `.ai/sdd/specs/003-financial-wallet-ledger/design.md` (approved)
 - **F03 tasks:** `.ai/sdd/specs/003-financial-wallet-ledger/tasks.md` (approved)
-- **F03 `.status`:** `.ai/sdd/specs/003-financial-wallet-ledger/.status` (`tasks:approved`)
+- **F03 `.status`:** `.ai/sdd/specs/003-financial-wallet-ledger/.status` (`implementation:in-progress`; T1 complete)
 - **F04 `.status`:** `.ai/sdd/specs/004-crashsim-bet-cashout/.status` (`tasks:approved`)
 - **F02 `.status`:** `implementation:done`
 - **F02 requirements:** `.ai/sdd/specs/002-database-auth/requirements.md` (approved)
@@ -45,7 +45,9 @@
 - Decisão F03 D-009: não alterar a engine; o operador rejeita `amount` fora de `Number.MAX_SAFE_INTEGER` antes do banco e emite incidente. Se valor seguro ultrapassaria o saldo máximo, registra recusa idempotente sem alterar carteira/ledger. Como a engine encerra retries em 4xx e o GET da aposta usa o mesmo contrato numérico, F06 não credita payout aproximado nem declara o caso automaticamente recuperado.
 - **Ordem aprovada:** T1 configuração/schema/migration → T2 serviço financeiro transacional → T3 webhooks HMAC → T4 API autenticada de saldo/histórico/top-up → T5 composição, Compose e documentação.
 - **Verificação planejada:** `cd operator && bun run typecheck && bun test`; `cd operator && bun run db:migrate` em PostgreSQL dedicado; `docker compose config`; fluxo manual com Crashsim e testes de concorrência/retry.
-- **Próximo passo:** implementar F03 T1–T5 e então F04 T1–T7. F04 tasks adicionam os contratos públicos financeiros para localizar débito de aposta e consultar liquidação de cashout. O MVP documenta o risco raro de débito persistido com bet rejeitado sem adicionar estorno automático.
+- **F03 T1 concluída:** configuração fail-closed, webhook secret redigido, schema e migration financeira aditiva após auth, constraints e índices verificados.
+- **Verificação F03 T1:** `bun run typecheck` passou; `bun test` com PostgreSQL dedicado passou (73 testes/293 expectativas); `bun run db:migrate` passou duas vezes; `docker compose config` passou.
+- **Próximo passo:** comitar F03 T1 antes de implementar F03 T2. Depois seguir T2–T5 e então F04 T1–T7. F04 tasks adicionam os contratos públicos financeiros para localizar débito de aposta e consultar liquidação de cashout. O MVP documenta o risco raro de débito persistido com bet rejeitado sem adicionar estorno automático.
 
 ## Dependências de roadmap ainda não especificadas
 

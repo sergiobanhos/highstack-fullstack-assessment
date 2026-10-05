@@ -15,6 +15,8 @@ function makeDatabase(overrides: Partial<Pick<DatabaseConnection, 'check' | 'che
 function testConfig() {
   return loadConfig({
     DATABASE_URL: 'postgres://operator:private-test-password@127.0.0.1:5432/operator_test',
+    APP_ENV: 'test',
+    ENGINE_WEBHOOK_SECRET: 'test-webhook-secret',
   });
 }
 

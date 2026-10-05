@@ -131,6 +131,8 @@ function createHarness(snapshotBodies: unknown[] = [
   const service = createGameStreamService({
     config: loadConfig({
       DATABASE_URL: 'postgres://operator:local-password@127.0.0.1:5432/operator_test',
+      APP_ENV: 'test',
+      ENGINE_WEBHOOK_SECRET: 'test-webhook-secret',
       ENGINE_OPERATOR_KEY: OPERATOR_KEY,
       ENGINE_STREAM_URL: STREAM_URL,
     }),

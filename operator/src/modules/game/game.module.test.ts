@@ -33,7 +33,11 @@ describe('createGameModule', () => {
     const app = Fastify({ logger: false });
     const game = createGameModule({
       app,
-      config: loadConfig({ DATABASE_URL: 'postgres://operator:local-password@127.0.0.1:5432/operator_test' }),
+      config: loadConfig({
+        DATABASE_URL: 'postgres://operator:local-password@127.0.0.1:5432/operator_test',
+        APP_ENV: 'test',
+        ENGINE_WEBHOOK_SECRET: 'test-webhook-secret',
+      }),
       logger: silentLogger(),
       socketFactory: () => {
         const socket = new InertSocket();

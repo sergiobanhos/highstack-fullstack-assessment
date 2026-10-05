@@ -7,7 +7,7 @@ services:
       PORT: "4000"
       OPERATOR_URL: http://operator:3000
       OPERATOR_KEY: dev-operator-key
-      WEBHOOK_SECRET: dev-webhook-secret
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-dev-webhook-secret}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       DROP_WS_EVERY: ${DROP_WS_EVERY:-0}
       REORDER: ${REORDER:-0}
@@ -34,8 +34,11 @@ services:
       ENGINE_HTTP_URL: http://engine:4000
       ENGINE_STREAM_URL: ws://engine:4000/stream
       ENGINE_OPERATOR_KEY: dev-operator-key
+      ENGINE_WEBHOOK_SECRET: ${WEBHOOK_SECRET:-dev-webhook-secret}
       DATABASE_URL: postgres://operator:operator@postgres:5432/operator
       AUTH_SESSION_TTL_SECONDS: ${AUTH_SESSION_TTL_SECONDS:-86400}
+      APP_ENV: local
+      WALLET_TEST_TOPUP_ENABLED: "true"
     depends_on:
       engine:
         condition: service_started

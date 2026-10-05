@@ -2,6 +2,8 @@ import * as v from 'valibot';
 
 export const LOG_LEVELS = ['debug', 'info', 'warn', 'error'] as const;
 export type LogLevel = (typeof LOG_LEVELS)[number];
+export const APP_ENVS = ['local', 'test', 'production'] as const;
+export type AppEnv = (typeof APP_ENVS)[number];
 
 export type LogFields = Record<string, unknown>;
 
@@ -105,12 +107,16 @@ export interface EngineConfig {
   streamUrl: string;
   /** Server-only engine operator key. Never sent to clients or written to logs. */
   operatorKey: string;
+  /** Server-only HMAC secret used to authenticate Crashsim webhooks. */
+  webhookSecret: string;
 }
 
 export interface OperatorConfig {
   port: number;
   host: string;
   logLevel: LogLevel;
+  appEnv: AppEnv;
+  walletTestTopupEnabled: boolean;
   databaseUrl: string;
   authSessionTtlSeconds: number;
   engine: EngineConfig;
@@ -144,18 +150,28 @@ const configSchema = v.object({
   port: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65535)),
   host: v.pipe(v.string(), v.minLength(1)),
   logLevel: v.picklist(LOG_LEVELS),
+  appEnv: v.picklist(APP_ENVS),
+  walletTestTopupEnabled: v.boolean(),
   databaseUrl: v.pipe(v.string(), v.trim(), v.check(isPostgresUrl, 'must be a valid PostgreSQL URL')),
   authSessionTtlSeconds: v.pipe(v.number(), v.integer(), v.minValue(60), v.maxValue(604_800)),
   engine: v.object({
     httpUrl: v.pipe(v.string(), v.check(isUrl, 'must be a valid URL')),
     streamUrl: v.pipe(v.string(), v.check(isUrl, 'must be a valid URL')),
     operatorKey: v.pipe(v.string(), v.minLength(1)),
+    webhookSecret: v.pipe(v.string(), v.minLength(1)),
   }),
 });
 
 const stripTrailingSlash = (value: string): string => value.replace(/\/+$/, '');
 
 const toPort = (value: string | undefined): number => Number(value ?? 3000);
+
+const toBooleanFlag = (value: string | undefined): boolean | string => {
+  if (value === undefined) return false;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return value;
+};
 
 /**
  * Reads and validates operator configuration. Throws on invalid input with a
@@ -167,12 +183,15 @@ export function loadConfig(env: EnvSource): OperatorConfig {
     port: toPort(env.PORT),
     host: env.HOST ?? '0.0.0.0',
     logLevel: env.LOG_LEVEL ?? 'info',
+    appEnv: env.APP_ENV,
+    walletTestTopupEnabled: toBooleanFlag(env.WALLET_TEST_TOPUP_ENABLED),
     databaseUrl: env.DATABASE_URL,
     authSessionTtlSeconds: Number(env.AUTH_SESSION_TTL_SECONDS ?? 86_400),
     engine: {
       httpUrl: stripTrailingSlash(env.ENGINE_HTTP_URL ?? 'http://localhost:4000'),
       streamUrl: env.ENGINE_STREAM_URL ?? 'ws://localhost:4000/stream',
       operatorKey: env.ENGINE_OPERATOR_KEY ?? 'dev-operator-key',
+      webhookSecret: env.ENGINE_WEBHOOK_SECRET,
     },
   };
 
@@ -184,10 +203,14 @@ export function loadConfig(env: EnvSource): OperatorConfig {
     throw new Error(`Invalid operator configuration at: ${paths}`);
   }
 
+  if (result.output.walletTestTopupEnabled && result.output.appEnv !== 'local') {
+    throw new Error('Invalid operator configuration at: walletTestTopupEnabled');
+  }
+
   return result.output;
 }
 
 /** Secret values that must be scrubbed from logs for a given configuration. */
 export function operatorSecrets(config: OperatorConfig): string[] {
-  return [config.engine.operatorKey, config.databaseUrl];
+  return [config.engine.operatorKey, config.engine.webhookSecret, config.databaseUrl];
 }
