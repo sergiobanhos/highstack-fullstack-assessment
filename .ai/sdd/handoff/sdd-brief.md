@@ -1,6 +1,6 @@
 # SDD Handoff Brief: Implementação por dependência — F02 → F06
 
-> Status: F02/F03 concluídas; F04 com smoke test real pendente; F05 implementação concluída e verificada; F06 tasks aprovadas
+> Status: F02/F03 concluídas; F04 com smoke test real pendente; F05 revisada — aprovada com follow-up baixo; F06 tasks aprovadas
 > Readiness: F06 T1–T5 prontas para iniciar quando o usuário autorizar; T6 depende de F05 concluída. Implementação F06 ainda não iniciada conforme pedido do usuário.
 > Updated: 2026-10-05
 
@@ -88,11 +88,12 @@
 
 - **Spec ID:** `005-payout`
 - **Spec Path:** `.ai/sdd/specs/005-payout/`
-- **Current `.status`:** `implementation:done` (T1–T5 concluídas e verificadas)
+- **Current `.status`:** `review:done` (T1–T5 concluídas e verificadas)
 - **Source Inputs:** `.ai/sdd/PLAN.md`; strategy handoff: N/A
 - **Requirements:** `.ai/sdd/specs/005-payout/requirements.md` (approved)
 - **Design:** `.ai/sdd/specs/005-payout/design.md` (approved)
 - **Tasks:** `.ai/sdd/specs/005-payout/tasks.md` (approved)
+- **Review:** `.ai/sdd/specs/005-payout/review.md` (Approved with follow-ups; 1 achado baixo)
 - **Decisions:** `.ai/sdd/specs/005-payout/decisions.md` (N/A)
 
 ### Resumo e escopo
@@ -117,6 +118,7 @@ Jogador autenticado solicita saque parcial do próprio saldo em centavos e acomp
 - **T4:** processador local durável, restart, retry e lifecycle.
 - **T5:** rotas autenticadas, configuração, Compose e fluxo composto.
 - **Progresso:** T1–T5 concluídas e verificadas.
+- **Review:** requisitos e verificações aprovados; endurecer o override de `payoutMockEnabled` antes de outros compositores habilitarem o módulo fora do fluxo oficial.
 - **Arquivos prováveis:** `operator/src/modules/financial/*`, `operator/src/config.ts`, `operator/src/db.ts`, `operator/drizzle/*`, `operator/src/server.financial.integration.test.ts` e `docker-compose.yml`.
 
 ### Plano de verificação
@@ -133,13 +135,13 @@ Testes PostgreSQL devem usar banco de teste dedicado e migrado; não apontar com
 
 ### Handoff readiness
 
-- **Ready for Implementation:** no — F05 já está em andamento.
-- **Ready for QA:** no
-- **Ready for Release:** no
-- **Verificação F05 T5:** `bun run typecheck`, `bun run test:e2e` e `docker compose config --quiet` passaram. A suíte PostgreSQL temporária executou 153 testes/899 expectativas; a integração composta confirmou autenticação, top-up, débito do payout, `processing` → `done` após cinco segundos, histórico e saldo/ledger sem duplicata.
-- **Blockers:** N/A para implementação; QA/release seguem pendentes no processo do projeto.
-- **Progress:** T1–T5 concluídas e verificadas; `.status` atualizado para `implementation:done`.
-- **Recommended Next Action:** seguir a próxima atividade autorizada do roadmap; F06 pode consumir agora as rotas de payout implementadas.
+- **Ready for Implementation:** no — implementação e review F05 concluídas.
+- **Ready for QA:** yes
+- **Ready for Release:** no — fechar o follow-up baixo antes de permitir composição financeira alternativa.
+- **Verificação F05 T5/review:** `bun run typecheck`, `bun run test:e2e` e `docker compose config --quiet` passaram. A suíte PostgreSQL temporária executou 153 testes/899 expectativas; a integração composta confirmou autenticação, top-up, débito do payout, `processing` → `done` após cinco segundos, histórico e saldo/ledger sem duplicata.
+- **Blockers:** nenhum para QA da composição atual; um follow-up baixo cobre a opção programática de habilitar o mock.
+- **Progress:** T1–T5 concluídas e verificadas; `.status` atualizado para `review:done`.
+- **Recommended Next Action:** encaminhar F05 para QA e remover o override de teste ou reforçar seu guard antes de reutilizar o módulo em outro composition root.
 
 ## F06 aprovada: interface inicial do jogador
 
