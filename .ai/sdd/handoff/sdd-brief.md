@@ -1,7 +1,7 @@
-# SDD Handoff Brief: Implementação em ordem de dependências — F02 → F03 → F04
+# SDD Handoff Brief: Implementação por dependência — F02 → F03 → F04 → F05
 
-> Status: F02 e F03 implementation done; F04 implementation in progress (T5)
-> Readiness: F03 passou por testes PostgreSQL dedicados e fluxo Compose isolado com Crashsim. F04 T1–T5 estão concluídas e verificadas.
+> Status: F02/F03 concluídas; F04 implementada com smoke test real pendente; F05 aprovada para implementação
+> Readiness: F05 pronta para implementação; F04 mantém a verificação manual com Crashsim real como pendência separada.
 > Updated: 2026-10-05
 
 ## Metadata
@@ -81,3 +81,59 @@
 - F02 requirements, design e tasks estão aprovados; implementação T1–T4 concluída e verificada.
 - F03 requirements, design e tasks estão aprovados; implementação e verificação PostgreSQL/Crashsim foram concluídas.
 - F04 requirements, design e tasks estão aprovados; T1–T7 implementadas e verificadas com PostgreSQL isolado e contrato Crashsim simulado. A verificação pendente é executar a integração com o processo Crashsim real e suas flags de falha antes de marcar F04 concluída.
+
+## F05 aprovada: payout local de carteira
+
+### Metadata
+
+- **Spec ID:** `005-payout`
+- **Spec Path:** `.ai/sdd/specs/005-payout/`
+- **Current `.status`:** `tasks:approved`
+- **Source Inputs:** `.ai/sdd/PLAN.md`; strategy handoff: N/A
+- **Requirements:** `.ai/sdd/specs/005-payout/requirements.md` (approved)
+- **Design:** `.ai/sdd/specs/005-payout/design.md` (approved)
+- **Tasks:** `.ai/sdd/specs/005-payout/tasks.md` (approved)
+- **Decisions:** `.ai/sdd/specs/005-payout/decisions.md` (N/A)
+
+### Resumo e escopo
+
+Jogador autenticado solicita saque parcial do próprio saldo em centavos e acompanha status/histórico. A operação pertence a `operator/src/modules/financial`. `processing` avança para `done` após cinco segundos somente no mock local; `done` não representa transferência real. Não há provedor, UI completa, cancelamento ou cashout de aposta nesta feature.
+
+### Contrato aprovado
+
+- **Must Have:** `FR-001`–`FR-008`; segurança financeira e recuperação em `NFR-001`–`NFR-004`.
+- **Persistência:** `payouts` referencia `financial_operations`; pedido, débito, ledger e operação são confirmados na mesma transação. `business_key` torna o pedido idempotente.
+- **Processamento:** `complete_after` persistido, varredura imediata no startup e a cada 500 ms, atualização condicional monotônica para `done`.
+- **API:** `POST /payouts`, `GET /payouts/:payoutId`, `GET /payouts`; exige sessão, usa identidade autenticada, histórico keyset próprio e `simulated: true`.
+- **Configuração:** `PAYOUT_MOCK_ENABLED` default false e permitido como true somente com `APP_ENV=local`.
+- **Decisões:** D-001–D-005; perguntas críticas respondidas.
+
+### Plano de implementação
+
+- **Ordem:** `T1 → T2 → T3 → T4 → T5`.
+- **T1:** migration, schema, constraints e prontidão de banco.
+- **T2:** pedido transacional, débito único, replay/conflito e saldo insuficiente.
+- **T3:** consultas de status e histórico por proprietário.
+- **T4:** processador local durável, restart, retry e lifecycle.
+- **T5:** rotas autenticadas, configuração, Compose e fluxo composto.
+- **Arquivos prováveis:** `operator/src/modules/financial/*`, `operator/src/config.ts`, `operator/src/db.ts`, `operator/drizzle/*`, `operator/src/server.financial.integration.test.ts` e `docker-compose.yml`.
+
+### Plano de verificação
+
+```text
+cd operator && bun run typecheck
+cd operator && bun test
+cd operator && bun run db:generate
+cd operator && bun run db:migrate   # DATABASE_URL deve apontar para PostgreSQL dedicado de teste
+docker compose config
+```
+
+Testes PostgreSQL devem usar banco de teste dedicado e migrado; não apontar comandos de teste/migration para produção. A migration deve ser validada desde o schema `0002`.
+
+### Handoff readiness
+
+- **Ready for Implementation:** yes
+- **Ready for QA:** no
+- **Ready for Release:** no
+- **Blockers:** N/A para iniciar; a verificação PostgreSQL requer banco dedicado de teste.
+- **Recommended Next Action:** executar T1–T5 na ordem aprovada; atualizar este brief e `.status` com evidência após cada etapa.
