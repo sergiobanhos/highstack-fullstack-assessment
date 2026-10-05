@@ -1,7 +1,7 @@
 # SDD Handoff Brief: Implementação em ordem de dependências — F02 → F03 → F04
 
-> Status: F02 implementation done; F03 T1–T2 concluídas e verificadas; F04 tasks aprovadas
-> Readiness: comitar F03 T2 antes de iniciar T3. F04 depende de F02 e F03 concluídas e verificadas.
+> Status: F02 implementation done; F03 T1–T3 concluídas, T4 próxima; F04 tasks aprovadas
+> Readiness: F03 T3 verificada e pronta para commit; comitar antes de iniciar T4. F04 depende de F02 e F03 concluídas e verificadas.
 > Updated: 2026-10-05
 
 ## Metadata
@@ -11,7 +11,7 @@
 - **F03 requirements:** `.ai/sdd/specs/003-financial-wallet-ledger/requirements.md` (approved)
 - **F03 design:** `.ai/sdd/specs/003-financial-wallet-ledger/design.md` (approved)
 - **F03 tasks:** `.ai/sdd/specs/003-financial-wallet-ledger/tasks.md` (approved)
-- **F03 `.status`:** `.ai/sdd/specs/003-financial-wallet-ledger/.status` (`implementation:in-progress`; T1–T2 complete)
+- **F03 `.status`:** `.ai/sdd/specs/003-financial-wallet-ledger/.status` (`implementation:in-progress`; T1–T3 complete, T4 pending)
 - **F04 `.status`:** `.ai/sdd/specs/004-crashsim-bet-cashout/.status` (`tasks:approved`)
 - **F02 `.status`:** `implementation:done`
 - **F02 requirements:** `.ai/sdd/specs/002-database-auth/requirements.md` (approved)
@@ -49,7 +49,9 @@
 - **Verificação F03 T1:** `bun run typecheck` passou; `bun test` com PostgreSQL dedicado passou (73 testes/293 expectativas); `bun run db:migrate` passou duas vezes; `docker compose config` passou.
 - **F03 T2 concluída:** serviço financeiro e contrato público com idempotência, serialização por carteira, débito condicional, rejeições estáveis, reconciliação por `betId`, top-up e ledger paginado.
 - **Verificação F03 T2:** `bun run typecheck` passou; `bun test` com PostgreSQL dedicado passou (83 testes/362 expectativas), incluindo concorrência, resposta perdida/replay e rollback após falha ao gravar ledger.
-- **Próximo passo:** comitar F03 T2 antes de implementar F03 T3. Depois seguir T3–T5 e então F04 T1–T7. F04 tasks adicionam os contratos públicos financeiros para localizar débito de aposta e consultar liquidação de cashout. O MVP documenta o risco raro de débito persistido com bet rejeitado sem adicionar estorno automático.
+- **F03 T3 concluída:** validação HMAC específica de Crashsim antes de parsear o payload, parser JSON cru isolado com limite de 16 KiB, rotas de débito/crédito e respostas/logs sanitizados; `createFinancialModule` agora recebe o app e registra as próprias rotas, no mesmo padrão de Auth e Game.
+- **Verificação F03 T3:** `bun run typecheck`, `docker compose config --quiet` e suíte completa com PostgreSQL dedicado `operator_financial_test` passaram (93 testes/426 expectativas). Cobertos HMAC/bytes crus, timestamps, payload, limite de corpo, status, persistência/idempotência e sanitização dos logs.
+- **Próximo passo:** comitar F03 T3 antes de iniciar T4. Depois seguir T4–T5 e então F04 T1–T7. F04 tasks adicionam os contratos públicos financeiros para localizar débito de aposta e consultar liquidação de cashout. O MVP documenta o risco raro de débito persistido com bet rejeitado sem adicionar estorno automático.
 
 ## Dependências de roadmap ainda não especificadas
 

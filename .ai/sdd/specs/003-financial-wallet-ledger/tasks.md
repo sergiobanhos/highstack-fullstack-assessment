@@ -140,22 +140,22 @@ A F02 (.ai/sdd/specs/002-database-auth/) está em implementation:done e foi veri
 
 ### Trabalho
 
-- [ ] Criar crashsim-webhook-auth.ts para validar x-timestamp, x-signature, HMAC-SHA256 sobre o timestamp textual e bytes exatos do corpo e janela de frescor de ±60 segundos.
-- [ ] Comparar digests de tamanho igual em tempo constante; validar HMAC antes de parsear/validar payload e manter o segredo somente no servidor.
-- [ ] Registrar parser application/json baseado em Buffer em escopo Fastify encapsulado somente para webhooks Crashsim, com limite de 16 KiB.
-- [ ] Registrar POST /wallet/debit e POST /wallet/credit; validar estrutura com Valibot e chamar o serviço financeiro sem exigir sessão de navegador.
-- [ ] Mapear resultados para o contrato da engine: 200 { balance } somente após commit, 402 para débito recusado, 409 para conflito, 422 para faixa/limite, 404 para carteira inexistente, 401 para autenticação e 503 para falha de persistência.
-- [ ] Para payout inteiro mas inseguro, responder 422 antes de mutação e registrar wallet.cashout.precision_incident sem valor, corpo, assinatura, segredo ou dados pessoais.
-- [ ] Registrar eventos estruturados de aplicado, recusado, rejeitado, replay e conflito com categorias e correlação permitidas pelo design.
-- [ ] Adicionar testes Fastify inject para HMAC válido sobre bytes crus, corpo adulterado, timestamp antigo/futuro, headers ausentes/malformados, body acima do limite, payload inválido e respostas do engine.
+- [x] Criar crashsim-webhook-auth.ts para validar x-timestamp, x-signature, HMAC-SHA256 sobre o timestamp textual e bytes exatos do corpo e janela de frescor de ±60 segundos.
+- [x] Comparar digests de tamanho igual em tempo constante; validar HMAC antes de parsear/validar payload e manter o segredo somente no servidor.
+- [x] Registrar parser application/json baseado em Buffer em escopo Fastify encapsulado somente para webhooks Crashsim, com limite de 16 KiB.
+- [x] Registrar POST /wallet/debit e POST /wallet/credit; validar estrutura com Valibot e chamar o serviço financeiro sem exigir sessão de navegador.
+- [x] Mapear resultados para o contrato da engine: 200 { balance } somente após commit, 402 para débito recusado, 409 para conflito, 422 para faixa/limite, 404 para carteira inexistente, 401 para autenticação e 503 para falha de persistência.
+- [x] Para payout inteiro mas inseguro, responder 422 antes de mutação e registrar wallet.cashout.precision_incident sem valor, corpo, assinatura, segredo ou dados pessoais.
+- [x] Registrar eventos estruturados de aplicado, recusado, rejeitado, replay e conflito com categorias e correlação permitidas pelo design.
+- [x] Adicionar testes Fastify inject para HMAC válido sobre bytes crus, corpo adulterado, timestamp antigo/futuro, headers ausentes/malformados, body acima do limite, payload inválido e respostas do engine.
 
 ### Critérios de aceite
 
-- [ ] Alterar whitespace/bytes do body invalida assinatura quando os bytes assinados não correspondem; validação de assinatura acontece antes da operação financeira.
-- [ ] HMAC ausente, inválido ou fora da janela não chama o service nem altera banco; timestamp com skew de 90s continua sendo rejeitado.
-- [ ] Valor de cashout fora de Number.MAX_SAFE_INTEGER recebe 422, não cria operação/ledger e emite incidente sem registrar o valor aproximado.
-- [ ] A engine recebe 200 somente depois do commit; indisponibilidade ou resultado de commit não confirmado retorna erro não-success para retry com o mesmo txId.
-- [ ] Os webhooks não dependem de auth.requireUser; nenhum endpoint permite escolher uma identidade autenticada via browser.
+- [x] Alterar whitespace/bytes do body invalida assinatura quando os bytes assinados não correspondem; validação de assinatura acontece antes da operação financeira.
+- [x] HMAC ausente, inválido ou fora da janela não chama o service nem altera banco; timestamp com skew de 90s continua sendo rejeitado.
+- [x] Valor de cashout fora de Number.MAX_SAFE_INTEGER recebe 422, não cria operação/ledger e emite incidente sem registrar o valor aproximado.
+- [x] A engine recebe 200 somente depois do commit; indisponibilidade ou resultado de commit não confirmado retorna erro não-success para retry com o mesmo txId.
+- [x] Os webhooks não dependem de auth.requireUser; nenhum endpoint permite escolher uma identidade autenticada via browser.
 
 ### Arquivos
 
@@ -167,10 +167,10 @@ A F02 (.ai/sdd/specs/002-database-auth/) está em implementation:done e foi veri
 
 ### Verificação
 
-- [ ] cd operator && bun run typecheck && bun test.
-- [ ] Executar testes HTTP com body assinado e body alterado, assinatura ausente/incorreta, timestamp em ambos os lados da janela e body maior que 16 KiB.
-- [ ] Confirmar no banco de teste que requisições não autenticadas/inválidas não criam operações, não mudam saldo e não escrevem ledger.
-- [ ] Conferir logs capturados dos casos de precisão, assinatura e conflito; nenhum deve conter secret, signature, raw body, amount, balance ou Authorization.
+- [x] `cd operator && bun run typecheck && bun test` — typecheck passou; a suíte completa com `TEST_DATABASE_URL` dedicado passou com 93 testes e 426 expectativas.
+- [x] Executar testes HTTP com body assinado e body alterado, assinatura ausente/incorreta, timestamp antigo e futuro fora de ±60s e body acima de 16 KiB.
+- [x] Confirmar no banco `operator_financial_test` que requisições sem HMAC/inválidas não criam operações, não mudam saldo e não escrevem ledger.
+- [x] Conferir logs capturados de precisão, assinatura e conflito; os testes confirmam ausência de segredo, assinatura, raw body, amount, balance e dados pessoais.
 
 ## Task T4: API autenticada de saldo, histórico e top-up local
 
