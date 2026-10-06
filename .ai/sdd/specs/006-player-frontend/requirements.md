@@ -7,7 +7,7 @@
 
 Transformar o cliente React diagnóstico em uma primeira interface utilizável pelo jogador. A entrega cobre cadastro e login, jogo Crashsim em tempo real, carteira USD, adição local de saldo, histórico financeiro, aposta, cashout e acompanhamento de payout simulado.
 
-O foco é completar os fluxos e apresentar estados claros. Não se busca criar agora uma identidade visual elaborada, animações avançadas ou uma experiência de jogo de produção.
+Além de completar os fluxos com estados claros, a interface deve aplicar a identidade HighStack das referências visuais unitárias em `highstack-design-references/screens/`, com um sistema compartilhado de tokens e componentes primitivos. A atualização visual não altera contratos, fontes de verdade nem regras de jogo e carteira.
 
 ## Contexto
 
@@ -109,6 +109,19 @@ Payout local faz parte desta interface por decisão do usuário. O design aprova
 - [ ] Depois do crash, a prova mostra o seed revelado, o ponto de crash e os selos de compromisso e de recálculo.
 - [ ] O recálculo usa o mesmo algoritmo do engine e sinaliza divergência de forma visível, sem afirmar sucesso quando os dados ainda não foram revelados.
 - [ ] A prova continua disponível depois que a rodada seguinte começa.
+
+### US-009: Usar uma interface HighStack consistente
+
+**Como** jogador, **quero** que autenticação, jogo e carteira usem a mesma identidade visual e padrões de interação **para** reconhecer os fluxos e operar com clareza em desktop e celular.
+
+**Critérios de aceitação:**
+
+- [ ] Usar o logo oficial e os assets de fundo fornecidos, com cores, tipografia, espaçamento, superfícies, foco e estados derivados de tokens compartilhados.
+- [ ] Implementar primitives reutilizáveis para superfícies, botões, campos, status, cabeçalho e modal; telas compõem essas primitives em vez de duplicar estilo.
+- [ ] Cada arquivo em `highstack-design-references/screens/` é uma única referência de tela/estado e possui sua representação funcional correspondente, inclusive crash, cashout confirmado, cashout desconhecido/reconexão e estados de top-up/payout.
+- [ ] Add funds e payout abrem modais; sucesso, processamento, validação, indisponibilidade e resultado desconhecido comunicam o estado confirmado sem criar sucesso fictício.
+- [ ] A UI não inventa histórico ou dados de outros jogadores que a API não fornece; conteúdo de aposta/carteira continua limitado ao jogador autenticado e aos dados disponíveis do operador.
+- [ ] Layout responde a telas estreitas, tem foco visível, controles de pelo menos 44px, labels acessíveis e respeita `prefers-reduced-motion`.
 
 ## Requisitos funcionais
 
@@ -212,12 +225,19 @@ A prova é somente leitura: ela nunca decide se uma aposta, cashout ou crédito 
 - Top-up e payout são identificados como operações de teste local; payout não representa envio de dinheiro.
 - A aplicação inicial permanece para o ambiente local do assessment, não um cliente pronto para produção.
 
+### NFR-006: Consistência visual e acessibilidade
+
+- Cor, tipografia, radius, sombra, spacing e camadas de overlay usam tokens semânticos compartilhados; componentes de tela não repetem valores visuais arbitrários.
+- Marca oficial preserva proporção e contraste. A imagem de fundo é decorativa e não contém controles, dados dinâmicos ou texto de produto.
+- Os estados de sucesso, erro, loading, desabilitado, stale e desconhecido usam texto e ícone além de cor; o modal mantém navegação por teclado e saída acessível.
+- O visual permanece legível em viewport de 360px até desktop largo, sem rolagem horizontal.
+
 ## Fora do escopo
 
 - Integração com meios de pagamento reais, KYC, conversão de moedas ou saques reais.
 - Verificação de email, recuperação de senha, OAuth, MFA, edição de perfil ou área administrativa.
 - Outro jogo ou engine, aplicação nativa/QuickJS, WebSocket para o browser ou replay histórico da stream.
-- Gráficos/canvas avançados, animações elaboradas, tema visual de produção ou otimização para competição profissional.
+- Gráficos/canvas de produção, animações elaboradas ou otimização para competição profissional. O gráfico do mockup é uma visualização SVG local dos ticks recebidos, sem inventar histórico ausente.
 - Reconciliação operacional de payouts de cashout de aposta, coberta pela fase posterior F07.
 
 ## Dependências e limites

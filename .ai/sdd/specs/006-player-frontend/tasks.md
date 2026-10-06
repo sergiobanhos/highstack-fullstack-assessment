@@ -2,7 +2,7 @@
 
 > Requirements: @requirements.md
 > Design: @design.md
-> Status: Approved
+> Status: Approved (T1–T7 complete; T8–T11 authorized by user on 2026-10-06)
 
 ## Cobertura dos requisitos
 
@@ -24,13 +24,14 @@
 | NFR-003 | T1, T2, T4, T5, T6 | Mesmo origin via operador; sem segredos, tokens em URL/logs ou `playerId` escolhido pelo browser. |
 | NFR-004 | T2, T3, T4, T5, T6 | Rótulos, erros, loading, teclado, texto além de cor e viewport estreito. |
 | NFR-005 | T3, T6 | Top-up e payout identificados como operações locais de teste. |
+| US-009 / NFR-006 | T8, T9, T10, T11 | Identidade HighStack, primitives, estados de tela e modais acessíveis. |
 
 ## Verificação de prontidão para implementação
 
 | Verificação | Estado | Observações |
 |---|---|---|
-| Todos os requisitos Must Have têm tarefa | Pass | FR-001–FR-009 e NFR-001–NFR-005 estão mapeados. FR-010, Should Have, também tem cobertura. |
-| Requisitos estão cobertos pelo design | Pass | O design aprovado define telas, fluxos REST/SSE, erros, idempotência, recuperação, Mantine e ownership de estado. |
+| Todos os requisitos Must Have têm tarefa | Pass | FR-001–FR-009, US-009 e NFR-001–NFR-006 estão mapeados; FR-010/FR-011 também têm cobertura. |
+| Requisitos estão cobertos pelo design | Pass | Design F06 define fluxos REST/SSE, erros, idempotência, recuperação, Mantine, ownership e direção visual HighStack. |
 | Perguntas críticas estão respondidas | Pass | Q-001 está respondida; payout foi incluído e seu contrato está no design aprovado F05. |
 | Tarefas têm dependências, critérios, arquivos e verificação | Pass | T1–T6 listam cada item; T6 explicita a dependência externa de F05. |
 | Comandos de verificação são conhecidos | Pass | `client/package.json` já define `bun run typecheck`, `bun test` e `bun run build`; a validação completa com Compose é manual. |
@@ -335,3 +336,135 @@ Data: 2026-10-05. Stack: `docker compose` local (engine, operator, client em `:5
 - Correção vinda da revisão de F06: a chave idempotente só é liberada em recusas garantidamente pré-commit (`isTerminalRefusal`). `POST /payouts` grava o débito e relê a linha depois; falha nessa releitura vira 503 pós-commit, e a regra anterior (limpar a chave em qualquer erro HTTP) permitiria uma segunda solicitação com chave nova depois de um débito já efetivado.
 - Ajuste pós-UAT (auto-cashout): o auto-cashout do engine agora é registrado pelo operador no próprio webhook de crédito (`POST /wallet/credit` → contrato `game.recordCashoutCredit`), em vez de o browser dirigir `GET /game/bets/:betId`. O client passou a reler apenas a lista a cada 3s enquanto há bet ativa na rodada (máx. 40 leituras), sem nenhuma leitura no engine; se o registro falhar, o webhook responde 503 e o engine reenvia o evento idempotente.
 
+## F06 Visual — aplicar identidade e referências HighStack
+
+As tarefas a seguir completam visualmente o F06 com base nas telas unitárias em `highstack-design-references/screens/`. Preservam a separação atual em pages, features, hooks e `lib`; não alteram os contratos e regras funcionais já verificados.
+
+## T8 — Criar sistema visual e primitives
+
+**Prioridade:** P0  
+**Estimativa:** 2–3h  
+**Dependências:** T1–T7 (completas)  
+**Cobre:** US-009, NFR-004, NFR-006
+
+### Trabalho
+
+- [ ] Criar tokens semânticos HighStack de cor, tipografia, spacing, radius, elevação e z-index; configurar MantineProvider em dark mode usando o tema e as escalas compartilhadas.
+- [ ] Importar logo e background oficiais em `client/public/assets`; aplicar fundo decorativo sem afetar contraste, foco, legibilidade ou CLS.
+- [ ] Criar primitives acessíveis `BrandLogo`, `Surface`, `ActionButton`, `StatusBadge`, `AmountField` e `AppModal` em `client/src/components/ui/`.
+- [ ] Adicionar foco visível, reduced motion e classes/layout responsivos comuns; não adicionar uma segunda biblioteca de componentes.
+
+### Critérios de aceitação
+
+- [ ] As primitives usam tokens e não conhecem API, React Query, auth, wallet ou game.
+- [ ] Há um só tema escuro coerente com grafite/verde e acentos emerald/turquoise; controles têm estados hover/focus/pressed/disabled/loading.
+- [ ] Logo mantém proporção; background é decorativo e não contém conteúdo de interface.
+- [ ] Foco por teclado, contraste, target mínimo de 44px e `prefers-reduced-motion` são cobertos pelos padrões compartilhados.
+
+### Arquivos
+
+- `client/src/main.tsx`
+- `client/src/styles/tokens.css`, `client/src/styles/global.css`
+- `client/src/components/ui/*`
+- `client/public/assets/highstack-logo.png`, `client/public/assets/highstack-background.png`
+
+### Verificação
+
+- [ ] `cd client && bun run typecheck && bun run build`.
+- [ ] Revisar foco, contraste, reduced motion e tokens no auth e no shell em 360px, tablet e desktop.
+
+## T9 — Aplicar identidade à autenticação e ao shell
+
+**Prioridade:** P0  
+**Estimativa:** 1–2h  
+**Dependências:** T8  
+**Cobre:** US-001, US-009, NFR-004, NFR-006
+
+### Trabalho
+
+- [ ] Recriar login/cadastro conforme os PNGs unitários usando logo real, fundo, card, campos e botões compartilhados.
+- [ ] Reestilizar `PlayerShell` com navegação responsiva Jogo/Carteira, saldo e sessão sem alterar logout/reidratação.
+- [ ] Manter todos os erros, validações, loading e limites locais já existentes e traduzir os estados para o sistema visual.
+
+### Critérios de aceitação
+
+- [ ] Login e cadastro refletem suas referências individuais e preservam o mínimo de senha/validações reais.
+- [ ] Header usa o asset oficial; navegação e saldo permanecem acessíveis em mobile/desktop.
+- [ ] A autenticação e logout continuam usando os hooks e o contrato atual sem lógica financeira/HTTP nos componentes.
+
+### Arquivos
+
+- `client/src/pages/auth-page.tsx`
+- `client/src/app/player-shell.tsx`
+- `client/src/components/ui/*`, `client/src/styles/*`
+
+### Verificação
+
+- [ ] `cd client && bun run typecheck && bun run build`.
+- [ ] Revisar auth e shell contra PNGs, erros/loading, keyboard, 360px e desktop.
+
+## T10 — Aplicar identidade e estados ao jogo
+
+**Prioridade:** P0  
+**Estimativa:** 2–3h  
+**Dependências:** T8–T9  
+**Cobre:** US-002, US-003, US-004, US-007, US-008, US-009, FR-004, FR-005, NFR-002, NFR-006
+
+### Trabalho
+
+- [ ] Organizar rodada/gráfico, controles e bets próprias com layout responsivo; desenhar série SVG somente com ticks reais recebidos no buffer da rodada.
+- [ ] Reestilizar estado betting, running, crashed, cashout confirmado, cashout pendente/desconhecido e reconectando conforme suas imagens unitárias.
+- [ ] Apresentar cashout concluído e resultado ambíguo em modal; stale mostra dado congelado e mantém comandos desabilitados até snapshot sincronizado.
+- [ ] Reestilizar prova da rodada e diagnóstico recolhidos sem ampliar dados exibidos nem remover as proteções atuais.
+
+### Critérios de aceitação
+
+- [ ] Cada estado da referência de jogo tem a apresentação correspondente sem simular ticks, jogadores, bets ou settlement.
+- [ ] Muliplier e crash continuam derivados do estado autoritativo; tick tardio pós-crash continua sem reabrir a rodada.
+- [ ] Cashout confirmado separado de settlement pendente; resultado desconhecido só oferece consulta existente, nunca novo POST/chave.
+- [ ] Bet/cashout permanecem bloqueados enquanto stale/desconectado ou incompatível; estado final permanece legível em 360px.
+
+### Arquivos
+
+- `client/src/pages/game-page.tsx`
+- `client/src/features/game/components/*`
+- `client/src/features/game/hooks/use-game-page-model.ts` somente se o contrato já existente não expuser estado visual necessário
+- `client/src/styles/*`, `client/src/components/ui/*`
+
+### Verificação
+
+- [ ] `cd client && bun run typecheck && bun run build`.
+- [ ] Revisar cada estado de jogo contra seu PNG individual, incluindo crash, cashout, unknown e reconexão/stale.
+
+## T11 — Carteira com ações e estados em modais
+
+**Prioridade:** P0  
+**Estimativa:** 2–3h  
+**Dependências:** T8–T9  
+**Cobre:** US-005, US-006, US-009, FR-007, FR-008, NFR-001, NFR-005, NFR-006
+
+### Trabalho
+
+- [ ] Reorganizar saldo confirmado e histórico da carteira para corresponder à referência unitária.
+- [ ] Mover top-up e payout de painéis permanentes para modais `AppModal`; manter formulário, validação e ação de submit atuais.
+- [ ] Exibir nos próprios modais confirmação de top-up, processing/done de payout, validação/erro, indisponibilidade e resultado desconhecido.
+- [ ] Garantir que atualização de saldo/histórico venha só das respostas/consultas do operador; payout mantém indicação constante de simulação local.
+
+### Critérios de aceitação
+
+- [ ] Add funds e payout abrem modais; fechar/cancelar preserva ou descarta rascunho conforme comportamento atual e não envia comandos por acidente.
+- [ ] Estado unknown orienta consultar/recuperar a mesma operação; não mostra sucesso/fracasso final nem permite nova mutação com chave nova.
+- [ ] Saldo e histórico só exibem valores autoritativos; formatação usa centavos exatos e estados de erro não alteram o saldo confirmado.
+- [ ] Teclado, Escape, botão fechar, foco e leitor de tela são suportados; formulário cabe em 360px.
+
+### Arquivos
+
+- `client/src/pages/wallet-page.tsx`
+- `client/src/features/wallet/components/*`
+- `client/src/features/wallet/hooks/use-wallet-page-model.ts` somente se necessário para apresentar estado já existente
+- `client/src/components/ui/*`, `client/src/styles/*`
+
+### Verificação
+
+- [ ] `cd client && bun run typecheck && bun run build`.
+- [ ] Revisar referência da carteira e cada estado/modal individual em 360px, tablet e desktop.

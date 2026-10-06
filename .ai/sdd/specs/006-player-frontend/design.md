@@ -211,7 +211,7 @@ client/src/
   fairness.ts                     # prova da rodada (SHA-256/HMAC + aritmética do engine)
 ```
 
-Evitar Redux, cache framework, provider genérico de jogos e camadas de domínio no browser nesta etapa. Cada tela mantém apenas estado transitório de formulários/loading; snapshots REST/SSE são substituídos por respostas autoritativas do operador.
+React Query é o dono de cache, invalidation e reidratação de dados REST; hooks de feature concentram integração e estado derivado, enquanto `use-game-stream` mantém a lifecycle SSE. Evitar Redux, provider genérico de jogos e camadas de domínio no browser. Componentes visuais recebem modelos/props e não criam uma segunda fonte de verdade.
 
 | Dado | Fonte de verdade | Uso no client |
 |---|---|---|
@@ -373,3 +373,43 @@ Testes do client cobrem parsing de dinheiro, status do formulário, reaproveitam
 **Podemos instalar Mantine antes das tasks F06 serem aprovadas?** Não; adicionar dependências e implementar somente após aprovação das tasks.
 
 **A página precisa de Redux, WebSocket ou outro jogo?** Não. O estado do React e a SSE existente bastam para esta tela; o client fala com um único operador/Crashsim.
+
+## 14. Direção visual HighStack e implementação
+
+Esta etapa aplica ao client as referências unitárias entregues em `highstack-design-references/screens/`. Elas são contratos visuais por tela/estado, não imagens para colocar como screenshots no produto. A interface deve continuar composta de HTML/React acessível e dados vivos do operador.
+
+### 14.1 Tokens e primitives
+
+- Configurar `MantineProvider` em dark mode e um único tema HighStack. Definir tokens semânticos de background/surface, texto, borda, emerald/turquoise de ação, sucesso, aviso e erro; tipografia, spacing, radius, sombra e z-index seguem escalas consistentes.
+- `client/src/styles/tokens.css` contém valores CSS globais; `client/src/styles/global.css` aplica reset, fundo, foco, seleção e regras de motion. Não criar hex, sombra ou radius ad hoc nos módulos de feature.
+- Primitives sob `client/src/components/ui/`: `BrandLogo`, `Surface`, `ActionButton`, `StatusBadge`, `AmountField` e `AppModal`. Mantine continua sendo a base para controles, formulário e modal; wrappers padronizam o contrato visual e acessível.
+- `client/public/assets/highstack-logo.png` é a marca oficial; `highstack-background.png` é decorativo, com `alt=""`, tamanho reservado e uso controlado em layouts de autenticação/shell. Nunca rasterizar texto, gráfico, formulário ou estado dinâmico dentro de um asset.
+
+### 14.2 Shell e telas
+
+- `PlayerShell` fornece header responsivo com logo, navegação Jogo/Carteira, saldo e menu de sessão. Em telas estreitas, reduzir a navegação sem ocultar saldo, estado stale ou ação principal.
+- Auth usa o mesmo fundo, marca, campos e primitivos do produto em um card central; troca Login/Cadastro sem perder o estado de erros e segue os formulários atuais.
+- Jogo organiza rodada/gráfico e controles em duas áreas no desktop e uma coluna no mobile. O multiplier continua vindo do snapshot; SVG usa apenas sequência real de `round.tick` da rodada atual presente no buffer local, não gera histórico, odds ou resultado fictícios. Sem pontos suficientes, mostrar apenas o multiplier e eixos vazios discretos.
+- A lista de jogo é das bets do usuário retornadas pela API; não preencher com nomes ou ganhos fictícios do mockup.
+- Carteira exibe saldo confirmado e histórico autoritativo. “Add funds” e “Payout” disparam `AppModal`; modais usam a mesma largura, scrim, heading, close/cancel, formulário e CTA. Confirmado, processing, unknown, erro e validação mudam o conteúdo desse modal usando exclusivamente o estado já exposto pelo page model.
+- Estados de cashout/crash/reconnect são apresentados por modal/banner contextual conforme a referência. Cashout desconhecido não é erro terminal: oferece consulta/reconciliação existente e mantém bet/cashout bloqueados até dados sincronizados.
+
+### 14.3 Divisão e ownership
+
+- Manter composição de rotas em `client/src/pages`, estado e integração nos hooks React Query atuais e renderização específica em `features/<feature>/components`.
+- A camada `components/ui` não importa hooks de jogo, carteira ou operador. Page components recebem props/modelos já preparados; primitives não decidem transições financeiras.
+- Só mudar layout e apresentação. As chaves idempotentes, os gates stale, polling, erros tipados, status do operador e regras de autorização não são transferidos para componentes visuais.
+
+### 14.4 Requisitos e design
+
+| Requisito | Cobertura visual |
+|---|---|
+| US-009 / NFR-006 | §§ 14.1–14.3; tokens semânticos, logo oficial, primitives, layout responsivo, estados acessíveis e assets do client |
+| FR-004 / FR-005 | §§ 2.3, 2.5, 14.2–14.3; stale visível, ações bloqueadas e resultado desconhecido não-terminal |
+| FR-007 / FR-008 | §§ 2.4, 14.2–14.3; add funds/payout em modal, estado autoritativo e operações locais identificadas |
+
+### 14.5 Implementação e verificação
+
+- Executar as tarefas T8–T11 depois das tarefas funcionais F06; atualizar estado somente pela interface pública dos page models.
+- Verificação planejada: `cd client && bun run typecheck` e `cd client && bun run build`. Revisão visual manual em 360px, tablet e desktop contra cada PNG individual; conferir keyboard/focus, modal close/cancel, erro/loading/disabled e `prefers-reduced-motion`.
+- Não é objetivo desta etapa alterar os contratos API ou produzir gráfico/leaderboard sintético.
