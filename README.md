@@ -346,3 +346,200 @@ O jogo pode estar `cashed_out` enquanto o crédito ainda está pendente. O opera
 - Se o débito da aposta foi confirmado no financial, mas todas as respostas entre engine e operador se perderam e a engine depois indicar rejeição, F04 não cria uma compensação automática. O comando registra o conflito e o saldo continua dependendo de investigação; não se deve assumir que foi estornado.
 - Não há worker nesta entrega. Cashout `pending`/`unknown` é reconciliado por uma leitura posterior de comando ou aposta; recuperação operacional de um webhook de crédito que não chegou pertence a F06.
 - A integração atual suporta uma instância do operador e a engine Crashsim. Sessões Crashsim ficam em memória do processo; os comandos e apostas ficam no PostgreSQL.
+
+## Edge cases e recuperação
+
+Os diagramas abaixo mostram como o operador trata falhas sem afirmar um resultado que ainda não confirmou. A stream da engine não tem replay histórico; após uma queda, o snapshot restaura o estado atual, enquanto as leituras individuais de bet reconciliam resultados persistidos.
+
+### Queda da Engine e ressincronização da stream
+
+```mermaid
+sequenceDiagram
+  participant Engine as Crashsim Engine
+  participant Stream as Operator game-stream
+  participant Hub as Event hub
+  participant Client as Client SSE
+
+  Engine--xStream: WebSocket cai ou fica indisponível
+  Stream->>Hub: connection = reconnecting
+  Hub-->>Client: estado congelado + indicador de reconexão
+  Note over Client: Bloqueia bet e cashout enquanto o estado não está sincronizado
+
+  loop Backoff de reconexão
+    Stream->>Engine: Tenta abrir WebSocket
+  end
+  Engine-->>Stream: WebSocket conectado
+  Stream->>Hub: connection = synchronizing
+  Stream->>Engine: GET /rounds/current
+  alt Snapshot disponível
+    Engine-->>Stream: Estado atual + seq
+    Stream->>Stream: Substitui o baseline pelo snapshot
+    Note over Stream: Eventos perdidos não são reproduzidos
+    Stream->>Hub: snapshot sincronizado + connection = connected
+    Hub-->>Client: snapshot atual + connection = connected
+    Note over Client: Libera ações quando receber estado sincronizado
+  else Engine ainda indisponível ou snapshot falhou
+    Engine--xStream: Sem resposta utilizável
+    Stream->>Hub: Mantém reconnecting/synchronizing e agenda nova tentativa
+    Hub-->>Client: Mantém estado congelado
+  end
+```
+
+O mesmo snapshot também é solicitado quando há uma lacuna de sequência. `DROP_WS_EVERY=8` exercita as quedas; `REORDER=1` pode entregar ticks atrasados.
+
+### Queda e reconexão do SSE do navegador
+
+```mermaid
+sequenceDiagram
+  participant Client as Browser client
+  participant Controller as SSE controller
+  participant Hub as Event hub
+
+  Client-xController: Conexão SSE fecha
+  Controller->>Hub: Remove a inscrição encerrada
+  Client->>Controller: EventSource reconecta em GET /game/events
+  Controller->>Hub: Registra inscrição e captura snapshot atual
+  Hub-->>Controller: Snapshot + estado de conexão
+  Controller-->>Client: Envia snapshot primeiro
+  Controller->>Hub: Ativa entrega dos eventos concorrentes
+  Hub-->>Client: Envia updates acima do seq do snapshot
+  Note over Client,Hub: Não há replay do histórico perdido durante a desconexão
+```
+
+Se a stream da Engine estiver reconectando, o snapshot inicial do browser inclui o último estado conhecido e a saúde `reconnecting`/`synchronizing`; o client mantém esse estado congelado até a ressincronização.
+
+### Evento duplicado, atrasado ou fora de ordem
+
+```mermaid
+flowchart TD
+  Event[Evento validado recebido] --> Seq{seq <= seq atual?}
+  Seq -->|Sim: duplicado ou antigo| Ignore[Ignora sem alterar o estado]
+  Seq -->|Não| Gap{Há lacuna na sequência?}
+  Gap -->|Sim| Snapshot[Solicita GET /rounds/current]
+  Gap -->|Não| Crashed{Rodada atual já está crashed?}
+  Crashed -->|Sim, chegou tick da mesma rodada| Ignore
+  Crashed -->|Não| Round{Evento pertence à rodada atual?}
+  Round -->|Não| Ignore
+  Round -->|Sim: round.crashed| Terminal[Marca rodada como crashed]
+  Round -->|Sim: novo round.betting| Next[Inicia o estado da próxima rodada]
+  Round -->|Sim: evento válido| Apply[Aplica evento e avança seq]
+  Snapshot --> Current[Substitui o estado pelo snapshot atual]
+```
+
+Uma rodada `crashed` é terminal para o reducer: nem um tick com `seq` mais alto pode fazê-la voltar a `running`. Apenas um `round.betting` de outra rodada abre um novo estado.
+
+### Webhook financeiro duplicado ou repetido após timeout
+
+```mermaid
+flowchart TD
+  Engine[Crashsim envia POST /wallet/debit ou /wallet/credit] --> Auth{HMAC válido e timestamp recente?}
+  Auth -->|Não| Reject401[401; nenhuma mutação financeira]
+  Auth -->|Sim| Body{JSON e schema válidos?}
+  Body -->|Não| Reject400[400; nenhuma mutação financeira]
+  Body -->|Sim| Tx[Abre transação no PostgreSQL e reserva txId]
+  Tx --> Existing{txId já existe?}
+  Existing -->|Não| Check[Verifica o saldo com atualização condicional na mesma transação]
+  Check -->|Saldo suficiente| Apply[Atualiza saldo e grava operação + ledger]
+  Apply --> Commit{Commit confirmado?}
+  Commit -->|Sim| Success[200; retorna saldo atualizado]
+  Check -->|Saldo insuficiente| Insufficient[Persiste resultado insuficiente; sem alterar saldo ou ledger]
+  Insufficient --> InsufficientCommit{Commit confirmado?}
+  InsufficientCommit -->|Sim| Reject402[402; aposta recusada]
+  InsufficientCommit -->|Não ou resultado incerto| Retry503[503; Crashsim repete com o mesmo txId]
+  Commit -->|Não ou resultado incerto| Retry503
+  Existing -->|Sim, mesmo conteúdo| Replay[Retorna resultado idempotente persistido; sem novo movimento]
+  Replay --> StoredOutcome[Repete o status e saldo registrados]
+  Existing -->|Sim, conteúdo divergente| Conflict409[409; não aplica segundo movimento]
+  Retry503 --> Tx
+```
+
+O débito só permite a aposta depois da confirmação financeira. Se o Crashsim receber timeout ou `5xx`, repete o webhook usando o mesmo `txId`; a restrição única e a transação do banco impedem que a repetição crie outro lançamento.
+
+### Débitos concorrentes na mesma carteira
+
+```mermaid
+sequenceDiagram
+  participant EngineA as Webhook A
+  participant EngineB as Webhook B
+  participant Operator as Financial service
+  participant DB as PostgreSQL
+
+  par Débito A
+    EngineA->>Operator: debit(txId A, valor A)
+    Operator->>DB: Transação A + UPDATE condicional
+  and Débito B ao mesmo tempo
+    EngineB->>Operator: debit(txId B, valor B)
+    Operator->>DB: Transação B + UPDATE condicional
+  end
+  Note over DB: Atualização atômica da linha da carteira; saldo não pode ficar negativo
+  alt Saldo cobre as duas operações
+    DB-->>Operator: Cada débito aplicado em sua transação
+    Operator-->>EngineA: 200 após commit
+    Operator-->>EngineB: 200 após commit
+  else Saldo cobre somente uma operação
+    DB-->>Operator: Uma atualização aplicada; a outra não satisfaz a condição
+    Operator-->>EngineA: 200 para a operação aplicada
+    Operator-->>EngineB: 402 para saldo insuficiente (ou vice-versa)
+  end
+```
+
+Cada resultado, inclusive insuficiência de saldo, é persistido por chave idempotente. O webhook recusado não cria entrada de ledger nem permite saldo negativo.
+
+### Timeout de cashout com resultado desconhecido
+
+```mermaid
+flowchart TD
+  Client[Client solicita cashout com Idempotency-Key] --> Operator[Operator chama Crashsim]
+  Operator --> Timeout{Resposta conclusiva recebida?}
+  Timeout -->|Sim: cashed_out| GameConfirmed[Persiste resultado do jogo]
+  Timeout -->|Não: timeout ou conexão caiu| Unknown[Marca comando unknown; não dispara outro cashout]
+  Unknown --> Lookup[Consulta GET /bets/:id na Engine]
+  Lookup --> Result{Resultado da Engine}
+  Result -->|cashed_out| GameConfirmed
+  Result -->|active| Ready[A tentativa terminou sem cashout; retry futuro usa nova chave]
+  Result -->|Engine indisponível| StillUnknown[Mantém unknown e não repete a mutação]
+  StillUnknown --> ClientRetry[Client consulta novamente o mesmo comando]
+  ClientRetry --> Lookup
+  GameConfirmed --> Credit{Crédito aparece no ledger?}
+  Credit -->|Sim| Settled[settlementStatus = confirmed]
+  Credit -->|Ainda não| Pending[Estado do jogo cashed_out; liquidação continua pendente]
+  Pending --> Webhook[Engine repete webhook de crédito com o mesmo txId]
+  Webhook --> Credit
+```
+
+O status do jogo e o status da liquidação são independentes. Confirmar `cashed_out` pela leitura da Engine não significa que o saldo já foi creditado.
+
+### Resultado da aposta após crash ou snapshot
+
+```mermaid
+sequenceDiagram
+  participant Engine as Crashsim Engine
+  participant Stream as Operator game-stream
+  participant Game as Game command service
+  participant DB as PostgreSQL
+  participant Client as Client
+
+  opt Crash aplicado ou snapshot sincronizado
+    Stream->>Game: Solicita reconciliação das bets ativas da rodada encerrada
+  end
+  Game->>DB: Busca bets persistidas ainda active
+  DB-->>Game: Bets candidatas
+  loop Para cada bet candidata
+    Game->>Engine: GET /bets/:betId
+    alt Engine confirma lost ou cashed_out
+      Engine-->>Game: Status autoritativo da bet
+      Game->>DB: Atualiza resultado do jogo
+    else Engine ainda retorna active
+      Engine-->>Game: Bet continua active
+      Note over Game,DB: Mantém status ativo; nova reconciliação ocorre em outro snapshot ou consulta
+    else Leitura falha
+      Engine--xGame: Sem resultado conclusivo
+      Note over Game,DB: Mantém o resultado pendente para nova reconciliação
+    end
+  end
+  Client->>Game: GET /game/bets ou GET /game/bets/:betId
+  Game-->>Client: Status persistido; settlementStatus separado
+  Note over Client: Exibe Checking result enquanto a bet segue active numa rodada encerrada
+```
+
+O operador não deduz `lost` a partir do evento `round.crashed` e não cria crédito nessa reconciliação. Só a leitura autoritativa da Engine atualiza o resultado do jogo; o crédito continua sendo tratado pelo webhook financeiro e verificado no ledger.
