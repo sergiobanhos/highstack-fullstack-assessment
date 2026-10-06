@@ -12,8 +12,8 @@ import {
   Title,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
-import { OperatorApiError, type OperatorApi, type SessionInfo } from './operator-api';
-import { useAuthCommands } from './hooks/use-auth-commands';
+import { OperatorApiError, type OperatorApi, type SessionInfo } from '../lib/operator/operator-api';
+import { useAuthCommands } from '../features/auth/hooks/use-auth-commands';
 
 const MIN_PASSWORD_LENGTH = 12;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

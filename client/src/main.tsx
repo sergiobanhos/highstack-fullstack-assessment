@@ -5,8 +5,8 @@ import { Notifications } from '@mantine/notifications';
 import { QueryClientProvider } from '@tanstack/react-query';
 import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
-import { App } from './App';
-import { queryClient } from './query-client';
+import { App } from './app/App';
+import { queryClient } from './lib/query/query-client';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('missing #root element');

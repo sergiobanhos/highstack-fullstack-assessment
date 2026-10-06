@@ -1,17 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import {
-  Alert,
-  Badge,
-  Button,
-  Group,
-  Loader,
-  Paper,
   Stack,
   Tabs,
-  Text,
-  TextInput,
-  Title,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import {
@@ -21,12 +12,15 @@ import {
   OperatorApiError,
   type OperatorApi,
   type PayoutPage,
-} from './operator-api';
-import { formatCents, formatCentsInput, parseUsdToCents } from './money';
-import { upsertPayout } from './payouts';
-import { usePlayerPayoutLookup, usePlayerPayouts, usePlayerTransactions, usePlayerWallet, usePlayerWalletCommands } from './hooks/use-wallet-data';
-import { queryKeys } from './query-keys';
-import { PayoutHistory, WalletHistory, type PayoutView } from './components/wallet-history';
+} from '../lib/operator/operator-api';
+import { formatCents, parseUsdToCents } from '../lib/money/money';
+import { upsertPayout } from '../features/wallet/model/payouts';
+import { usePlayerPayoutLookup, usePlayerPayouts, usePlayerTransactions, usePlayerWallet, usePlayerWalletCommands } from '../features/wallet/hooks/use-wallet-data';
+import { queryKeys } from '../lib/query/query-keys';
+import { WalletHistory, type PayoutView } from '../features/wallet/components/wallet-history';
+import { WalletBalanceCard } from '../features/wallet/components/wallet-balance-card';
+import { TopUpPanel } from '../features/wallet/components/top-up-panel';
+import { PayoutPanel, type PayoutAvailability } from '../features/wallet/components/payout-panel';
 import {
   clearPendingPayout,
   clearPendingTopUp,
@@ -35,15 +29,9 @@ import {
   writePendingPayout,
   writePendingTopUp,
   type PendingAmountCommand,
-} from './pending-commands';
+} from '../features/wallet/model/pending-commands';
 
 const PAYOUT_POLL_DELAYS_MS = [1000, 2000, 4000] as const;
-
-type PayoutAvailability =
-  | { status: 'checking' }
-  | { status: 'ready' }
-  | { status: 'disabled' }
-  | { status: 'error'; message: string };
 
 export interface WalletScreenProps {
   api: OperatorApi;
@@ -324,54 +312,17 @@ export function WalletScreen({
 
   return (
     <Stack gap="md">
-      <Paper withBorder p="md" radius="md">
-        <Group justify="space-between" align="center" wrap="wrap">
-          <div>
-            <Text size="sm" c="dimmed">
-              Available balance
-            </Text>
-            <Title order={2}>{balanceCents === null ? '—' : formatCents(balanceCents)}</Title>
-          </div>
-          <Stack gap={4} align="flex-end">
-            <Badge variant="light">Local environment — test balance</Badge>
-            <Button size="xs" variant="default" onClick={() => void refreshBalance()}>
-              Refresh balance
-            </Button>
-          </Stack>
-        </Group>
-      </Paper>
+      <WalletBalanceCard balanceCents={balanceCents} onRefresh={() => void refreshBalance()} />
 
-      <Paper withBorder p="md" radius="md">
-        <Title order={4}>Add balance (test top-up)</Title>
-        <Text size="sm" c="dimmed" mt={4}>
-          Local test operation with an idempotency key: retrying does not credit twice.
-        </Text>
-        {pendingTopUp !== null && (
-          <Alert color="yellow" mt="sm" title="Top-up awaiting confirmation">
-            {formatCents(pendingTopUp.amountCents)} — the previous response never arrived. Try again
-            to confirm; the same key will be reused.
-          </Alert>
-        )}
-        {topUpError !== null && (
-          <Alert color="red" mt="sm" withCloseButton onClose={() => setTopUpError(null)}>
-            {topUpError}
-          </Alert>
-        )}
-        <Group align="flex-end" mt="sm" wrap="wrap">
-          <TextInput
-            label="Amount (USD)"
-            placeholder="50.00"
-            inputMode="decimal"
-            w={160}
-            value={pendingTopUp !== null ? formatCentsInput(pendingTopUp.amountCents) : topUpAmount}
-            disabled={pendingTopUp !== null}
-            onChange={(event) => setTopUpAmount(event.currentTarget.value)}
-          />
-          <Button onClick={() => void submitTopUp()} loading={topUpBusy}>
-            {pendingTopUp !== null ? 'Try again' : 'Add balance'}
-          </Button>
-        </Group>
-      </Paper>
+      <TopUpPanel
+        amount={topUpAmount}
+        error={topUpError}
+        pending={pendingTopUp}
+        busy={topUpBusy}
+        onAmountChange={setTopUpAmount}
+        onSubmit={() => void submitTopUp()}
+        onDismissError={() => setTopUpError(null)}
+      />
 
       <Tabs defaultValue="ledger" keepMounted={false}>
         <Tabs.List>
@@ -391,78 +342,24 @@ export function WalletScreen({
         </Tabs.Panel>
 
         <Tabs.Panel value="payouts" pt="md">
-          <Paper withBorder p="md" radius="md">
-            <Title order={4}>Simulated payout</Title>
-            <Text size="sm" c="dimmed" mt={4}>
-              Local test payout. The request is recorded by the operator and does not use real money.
-            </Text>
-
-            {payoutAvailability.status === 'checking' && (
-              <Group gap="xs" mt="sm">
-                <Loader size="xs" />
-                <Text size="sm" c="dimmed">
-                  Checking local payout availability…
-                </Text>
-              </Group>
-            )}
-
-            {payoutAvailability.status === 'disabled' && (
-              <Alert color="gray" mt="sm" title="Local payout unavailable">
-                This operator has payout simulation disabled.
-              </Alert>
-            )}
-
-            {payoutAvailability.status === 'error' && (
-              <Alert color="red" mt="sm" title="Could not load payouts">
-                <Group justify="space-between">
-                  <Text size="sm">{payoutAvailability.message}</Text>
-                  <Button size="xs" variant="light" onClick={() => void loadPayouts('reset')}>
-                    Try again
-                  </Button>
-                </Group>
-              </Alert>
-            )}
-
-            {payoutAvailability.status === 'ready' && (
-              <>
-                {pendingPayout !== null && (
-                  <Alert color="yellow" mt="sm" title="Payout awaiting confirmation">
-                    {formatCents(pendingPayout.amountCents)} — the previous response never arrived.
-                    Try again to confirm; the same key will be reused.
-                  </Alert>
-                )}
-                {payoutError !== null && (
-                  <Alert color="red" mt="sm" withCloseButton onClose={() => setPayoutError(null)}>
-                    {payoutError}
-                  </Alert>
-                )}
-                <Group align="flex-end" mt="sm" wrap="wrap">
-                  <TextInput
-                    label="Amount (USD)"
-                    placeholder="25.00"
-                    inputMode="decimal"
-                    w={160}
-                    value={pendingPayout !== null ? formatCentsInput(pendingPayout.amountCents) : payoutAmount}
-                    disabled={pendingPayout !== null}
-                    onChange={(event) => setPayoutAmount(event.currentTarget.value)}
-                  />
-                  <Button onClick={() => void submitPayout()} loading={payoutBusy}>
-                    {pendingPayout !== null ? 'Try again' : 'Request payout'}
-                  </Button>
-                </Group>
-
-                <PayoutHistory
-                  payouts={payouts}
-                  hasMore={payoutCursor !== null}
-                  onRefreshItem={() => {
-                    setPayoutPolls(0);
-                    void loadPayouts('reset');
-                  }}
-                  onLoadMore={() => void loadPayouts('more')}
-                />
-              </>
-            )}
-          </Paper>
+          <PayoutPanel
+            availability={payoutAvailability}
+            payouts={payouts}
+            hasMore={payoutCursor !== null}
+            amount={payoutAmount}
+            error={payoutError}
+            pending={pendingPayout}
+            busy={payoutBusy}
+            onAmountChange={setPayoutAmount}
+            onSubmit={() => void submitPayout()}
+            onDismissError={() => setPayoutError(null)}
+            onRetry={() => void loadPayouts('reset')}
+            onRefreshItem={() => {
+              setPayoutPolls(0);
+              void loadPayouts('reset');
+            }}
+            onLoadMore={() => void loadPayouts('more')}
+          />
         </Tabs.Panel>
       </Tabs>
     </Stack>

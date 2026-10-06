@@ -5,7 +5,7 @@ import {
   parseOperatorFrame,
   streamReducer,
   type OperatorStreamState,
-} from '../operator-events.client';
+} from '../data/operator-events.client';
 
 const STREAM_URL = '/game/events';
 const STREAM_EVENTS = ['snapshot', 'game-event', 'connection'] as const;

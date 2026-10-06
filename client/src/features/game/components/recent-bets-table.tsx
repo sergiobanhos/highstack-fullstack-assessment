@@ -1,7 +1,7 @@
 import { Alert, Badge, Button, Stack, Table, Text, Title, Group, Paper } from '@mantine/core';
-import type { BetCommandResult, BetCommandStatus, SettlementStatus } from '../operator-api';
-import { formatCents, formatMultiplier } from '../money';
-import { getBetGameStatusLabel, isBetOutcomePending } from '../bet-status';
+import type { BetCommandResult, BetCommandStatus, SettlementStatus } from '../../../lib/operator/operator-api';
+import { formatCents, formatMultiplier } from '../../../lib/money/money';
+import { getBetGameStatusLabel, isBetOutcomePending } from '../model/bet-status';
 
 const COMMAND_STATUS_LABELS: Record<BetCommandStatus, string> = {
   pending: 'Pending',

@@ -1,16 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
-  AppShell,
-  Badge,
   Button,
   Center,
-  Container,
-  Group,
   Loader,
   Stack,
-  Tabs,
   Text,
 } from '@mantine/core';
 import {
@@ -18,17 +13,13 @@ import {
   isUnauthenticated,
   OperatorApiError,
   type AuthUser,
-  type OperatorApi,
   type SessionInfo,
-} from './operator-api';
-import { formatCents } from './money';
-import { AuthScreen } from './auth-screen';
-import { GameScreen } from './game-screen';
-import { WalletScreen } from './wallet-screen';
-import { useAuthCommands } from './hooks/use-auth-commands';
-import { useAuthSessionRestore } from './hooks/use-auth-session';
-import { usePlayerWallet } from './hooks/use-wallet-data';
-import { queryKeys } from './query-keys';
+} from '../lib/operator/operator-api';
+import { useAuthSessionRestore } from '../features/auth/hooks/use-auth-session';
+import { queryKeys } from '../lib/query/query-keys';
+import { PlayerShell } from './player-shell';
+
+const AuthScreen = lazy(() => import('../pages/auth-page').then((module) => ({ default: module.AuthScreen })));
 
 /**
  * Player client for the Crashsim operator.
@@ -40,7 +31,7 @@ import { queryKeys } from './query-keys';
 
 const TOKEN_STORAGE_KEY = 'operator.sessionToken';
 
-interface Session {
+export interface Session {
   token: string;
   user: AuthUser;
 }
@@ -150,110 +141,18 @@ export function App(): React.JSX.Element {
 
   if (boot.phase === 'unauthenticated') {
     return (
-      <AuthScreen
-        api={api}
-        notice={boot.notice}
-        onNoticeDismissed={dismissNotice}
-        onAuthenticated={handleAuthenticated}
-      />
+      <Suspense fallback={<Center mih="100dvh"><Loader /></Center>}>
+        <AuthScreen
+          api={api}
+          notice={boot.notice}
+          onNoticeDismissed={dismissNotice}
+          onAuthenticated={handleAuthenticated}
+        />
+      </Suspense>
     );
   }
 
   return (
-    <PlayerApp api={api} session={boot.session} onSessionEnded={endSession} />
-  );
-}
-
-type PlayerView = 'game' | 'wallet';
-
-interface PlayerAppProps {
-  api: OperatorApi;
-  session: Session;
-  onSessionEnded(notice: string | null): void;
-}
-
-function PlayerApp({ api, session, onSessionEnded }: PlayerAppProps): React.JSX.Element {
-  const [view, setView] = useState<PlayerView>('game');
-  const queryClient = useQueryClient();
-
-  const handleUnauthorized = useCallback((): void => {
-    onSessionEnded('Your session expired. Please sign in again.');
-  }, [onSessionEnded]);
-
-  const walletQuery = usePlayerWallet({
-    api,
-    token: session.token,
-    playerId: session.user.id,
-    onUnauthorized: handleUnauthorized,
-  });
-  const balanceCents = walletQuery.data?.balanceCents ?? null;
-  const refreshWallet = useCallback(async (): Promise<void> => {
-    await walletQuery.refetch();
-  }, [walletQuery.refetch]);
-  const authCommands = useAuthCommands(api);
-
-  const logout = async (): Promise<void> => {
-    let notice: string | null = null;
-    try {
-      await authCommands.logout.mutateAsync(session.token);
-    } catch {
-      notice =
-        'You were signed out in this browser, but the operator could not confirm the logout.';
-    } finally {
-      queryClient.removeQueries({ queryKey: queryKeys.player(session.user.id) });
-      onSessionEnded(notice);
-    }
-  };
-
-  return (
-    <AppShell header={{ height: 64 }} padding="md">
-      <AppShell.Header>
-        <Group h="100%" px="md" justify="space-between" wrap="nowrap">
-          <Group gap="xs" wrap="nowrap">
-            <Text fw={700}>Crashsim</Text>
-            <Badge variant="light" visibleFrom="sm">
-              local operator
-            </Badge>
-          </Group>
-          <Group gap="sm" wrap="nowrap">
-            <Tabs value={view} onChange={(value) => setView(value === 'wallet' ? 'wallet' : 'game')}>
-              <Tabs.List>
-                <Tabs.Tab value="game">Game</Tabs.Tab>
-                <Tabs.Tab value="wallet">Wallet</Tabs.Tab>
-              </Tabs.List>
-            </Tabs>
-            <Badge size="lg" variant="light" color="teal" title="Available balance (USD)">
-              {balanceCents === null ? '—' : formatCents(balanceCents)}
-            </Badge>
-            <Text size="sm" visibleFrom="md">
-              {session.user.name}
-            </Text>
-            <Button size="xs" variant="default" loading={authCommands.logout.isPending} onClick={() => void logout()}>
-              Sign out
-            </Button>
-          </Group>
-        </Group>
-      </AppShell.Header>
-      <AppShell.Main>
-        <Container size="lg">
-          {view === 'game' ? (
-            <GameScreen
-              api={api}
-              token={session.token}
-              playerId={session.user.id}
-              onUnauthorized={handleUnauthorized}
-              onWalletChanged={refreshWallet}
-            />
-          ) : (
-            <WalletScreen
-              api={api}
-              token={session.token}
-              playerId={session.user.id}
-              onUnauthorized={handleUnauthorized}
-            />
-          )}
-        </Container>
-      </AppShell.Main>
-    </AppShell>
+    <PlayerShell api={api} session={boot.session} onSessionEnded={endSession} />
   );
 }

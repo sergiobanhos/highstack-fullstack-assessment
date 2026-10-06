@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { Payout } from './operator-api';
+import type { Payout } from '../../../lib/operator/operator-api';
 import { mergePayoutPage, upsertPayout } from './payouts';
 
 const payout = (id: string, overrides: Partial<Payout> = {}): Payout => ({

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { BetCommandResult, EngineBetStatus } from './operator-api';
+import type { BetCommandResult, EngineBetStatus } from '../../../lib/operator/operator-api';
 import {
   getBetGameStatusLabel,
   isBetOutcomePending,

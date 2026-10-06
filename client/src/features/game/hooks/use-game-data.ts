@@ -1,8 +1,8 @@
 import { useCallback, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { OperatorApi } from '../operator-api';
-import { queryKeys } from '../query-keys';
-import { useUnauthorizedQueryHandler, type PlayerQueryContext } from './query-context';
+import type { OperatorApi } from '../../../lib/operator/operator-api';
+import { queryKeys } from '../../../lib/query/query-keys';
+import { useUnauthorizedQueryHandler, type PlayerQueryContext } from '../../../lib/query/query-context';
 
 export function usePlayerGameSession(context: PlayerQueryContext) {
   const mutation = useMutation({ mutationFn: () => context.api.createSession(context.token), retry: false });

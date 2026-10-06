@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
-import type { OperatorApi } from '../operator-api';
+import type { OperatorApi } from '../../../lib/operator/operator-api';
 
 export function useAuthCommands(api: OperatorApi) {
   const register = useMutation({ mutationFn: (input: Parameters<OperatorApi['register']>[0]) => api.register(input) });

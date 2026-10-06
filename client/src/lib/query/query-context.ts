@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { OperatorApi } from '../operator-api';
+import type { OperatorApi } from '../operator/operator-api';
 
 export interface PlayerQueryContext {
   api: OperatorApi;

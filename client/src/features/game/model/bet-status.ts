@@ -1,4 +1,4 @@
-import type { BetCommandResult, EngineBetStatus } from './operator-api';
+import type { BetCommandResult, EngineBetStatus } from '../../../lib/operator/operator-api';
 
 export interface BetRoundContext {
   roundId: string | null;

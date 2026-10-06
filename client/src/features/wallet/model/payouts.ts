@@ -4,7 +4,7 @@
  * blindly (which would duplicate rows or keep stale `processing` states).
  */
 
-import type { Payout } from './operator-api';
+import type { Payout } from '../../../lib/operator/operator-api';
 
 /** Appends an older page, refreshing any ids that were already known. */
 export function mergePayoutPage<T extends Payout>(current: T[], incoming: T[]): T[] {

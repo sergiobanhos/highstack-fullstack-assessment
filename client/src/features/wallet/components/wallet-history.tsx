@@ -8,8 +8,8 @@ import {
   Text,
   Title,
 } from '@mantine/core';
-import type { LedgerEntry, Payout } from '../operator-api';
-import { formatCents, formatSignedCents } from '../money';
+import type { LedgerEntry, Payout } from '../../../lib/operator/operator-api';
+import { formatCents, formatSignedCents } from '../../../lib/money/money';
 
 const DIRECTION_LABELS: Record<LedgerEntry['direction'], string> = {
   credit: 'Credit',

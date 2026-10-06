@@ -1,20 +1,21 @@
 # Player client
 
-React client for the local Crashsim operator. The browser calls only the operator API; the engine credentials remain server-side.
+React client for the local Crashsim operator. The browser calls only the operator API; engine credentials stay server-side.
 
-## Frontend boundaries
+## Source layout
 
-- `src/operator-api.ts` is the typed HTTP boundary. It validates operator responses and maps failures to `OperatorApiError`.
-- `src/hooks/use-auth-commands.ts` owns register, login, and logout mutations; `src/hooks/use-auth-session.ts` restores the tab session. `src/App.tsx` composes those states.
-- `src/hooks/use-game-data.ts` owns game-session creation, the player's bet query, safe bet/command lookups, and bet/cashout mutations.
-- `src/hooks/use-game-stream.ts` owns the SSE connection, reconnect loop, and silence watchdog.
-- `src/hooks/use-wallet-data.ts` owns wallet, cursor-paged ledger and payout queries, payout lookups, and top-up/payout mutations.
-- `src/query-keys.ts` centralizes cache keys and scopes player data by the authenticated player id. Session tokens are not query keys.
-- `src/query-client.ts` defines shared retry, staleness, and focus-refetch defaults. Mutations are never retried automatically.
-- `src/operator-events.client.ts` and the stream effect in `game-screen.tsx` own SSE parsing, order, synchronization, reconnect, and bounded event history. The live stream stays outside the REST query cache.
-- `src/components/` contains presentational panels extracted from the larger screens; screen files coordinate the player flows and their local command states.
+- `src/app/` composes session boot, the authenticated shell, and screen-level navigation.
+- `src/pages/` contains route-sized views. Each page coordinates its flow and delegates domain work and presentation to its feature.
+- `src/features/auth/` owns session and auth mutations.
+- `src/features/game/` owns game queries, the SSE stream, bet/cashout reconciliation, fairness verification, and game-specific components.
+- `src/features/wallet/` owns wallet queries, payout polling, idempotent pending commands, and wallet components.
+- `src/lib/operator/` is the typed HTTP boundary. It validates responses and maps failures to `OperatorApiError`.
+- `src/lib/query/` centralizes the React Query client, cache keys, and player query context. Tokens are not query keys.
+- `src/lib/money/` contains integer-cent parsing, formatting, and payout calculations.
 
-## Local checks
+The realtime stream stays outside the REST query cache. Cashout timeouts are reconciled by reading the existing command/bet before any new operation is sent. Wallet retries retain their idempotency key when the outcome may be unknown.
+
+## Local commands
 
 ```sh
 bun run typecheck

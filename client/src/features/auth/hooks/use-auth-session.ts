@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { OperatorApi } from '../operator-api';
+import type { OperatorApi } from '../../../lib/operator/operator-api';
 
 interface StoredSession {
   token: string;

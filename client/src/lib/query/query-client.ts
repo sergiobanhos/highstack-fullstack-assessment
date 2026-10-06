@@ -1,5 +1,5 @@
 import { QueryClient } from '@tanstack/react-query';
-import { OperatorApiError } from './operator-api';
+import { OperatorApiError } from '../operator/operator-api';
 
 /** Shared cache policy for operator reads. Writes are never retried automatically. */
 export const queryClient = new QueryClient({
