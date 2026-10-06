@@ -1,41 +1,41 @@
-# HighStack player UI concepts
+# HighStack player UI references
 
-Mockups visuais unitários para orientar uma futura implementação. Cada PNG representa uma única tela ou um único estado; fluxos com modais são mostrados com apenas um modal aberto. As telas ainda não foram implementadas no frontend.
+These images are visual references for the local player experience. They show individual screens or states; modal flows are represented with one modal open at a time. The implemented React UI has evolved and does not need to match every reference pixel-for-pixel.
 
-## Autenticação
+## Authentication
 
-- `auth-login.png` — entrar
-- `auth-register.png` — criar conta, com mínimo de 12 caracteres na senha
+- `auth-login.png` — sign in
+- `auth-register.png` — create an account
 
-## Jogo
+## Game
 
-- `game-betting-open.png` — rodada aguardando apostas
-- `game-running.png` — rodada ativa com aposta em andamento
-- `game-cashout-complete.png` — cashout confirmado em modal
-- `game-crashed.png` — rodada encerrada por crash
-- `game-reconnecting-cashout-unknown.png` — conexão interrompida e resultado do cashout ainda desconhecido
+- `game-betting-open.png` — a round accepting bets
+- `game-running.png` — a live round with an active bet
+- `game-cashout-complete.png` — confirmed cashout dialog
+- `game-crashed.png` — round ended by a crash
+- `game-reconnecting-cashout-unknown.png` — upstream reconnecting while a cashout outcome is unknown
 
-## Carteira e pagamentos simulados
+## Wallet and simulated payouts
 
-- `wallet-overview.png` — carteira e histórico
-- `wallet-top-up-modal.png` — modal de adicionar fundos de teste
-- `wallet-top-up-success.png` — confirmação do top-up de teste
-- `wallet-top-up-unknown.png` — top-up sem confirmação; orienta consultar o status antes de abrir outro pedido
-- `wallet-payout-modal.png` — modal para solicitar payout
-- `wallet-payout-processing.png` — payout em processamento
-- `wallet-payout-complete.png` — payout concluído
-- `wallet-payout-validation-error.png` — erro de validação do formulário de payout
-- `wallet-payout-unknown.png` — payout sem confirmação; orienta consultar o status antes de abrir outro pedido
+- `wallet-overview.png` — wallet balance and history
+- `wallet-top-up-modal.png` — local test top-up form
+- `wallet-top-up-success.png` — test top-up confirmation
+- `wallet-top-up-unknown.png` — top-up confirmation unavailable; tells the player to read the existing operation before creating another
+- `wallet-payout-modal.png` — payout request form
+- `wallet-payout-processing.png` — payout in progress
+- `wallet-payout-complete.png` — simulated payout completed
+- `wallet-payout-validation-error.png` — payout form validation error
+- `wallet-payout-unknown.png` — payout confirmation unavailable; tells the player to check the existing request
 
-Top-up e payout aparecem como simulações locais. As imagens não afirmam que dinheiro real foi enviado ou recebido.
+Top-up and payout are local simulations. The references do not imply that real money is sent or received.
 
-## Assets prontos para o frontend
+## Frontend assets
 
-- `../../client/public/assets/highstack-logo.png` — cópia do logo oficial fornecido nas referências
-- `../../client/public/assets/highstack-background.png` — textura/fundo abstrato escuro com brilho verde, sem interface ou texto
+- `../../client/public/assets/highstack-logo.png` — supplied HighStack logo
+- `../../client/public/assets/highstack-background.png` — abstract dark background texture
 
-O frontend ainda não referencia esses assets. Gráficos de rodada, valores, botões, modais e demais partes dinâmicas devem ser componentes de interface, não imagens rasterizadas.
+Dynamic content such as round graphs, amounts, buttons, and dialogs should be rendered as UI components rather than raster images.
 
-## Direção visual
+## Visual direction
 
-Grafite e verde escuro, brilho esmeralda contido e acentos turquesa, respeitando as referências de marca fornecidas. Ações de carteira abrem modais sobre a tela da carteira; estados de sucesso, processamento, validação e resultado desconhecido também têm uma imagem independente.
+The references use graphite and dark green, restrained emerald glow, and turquoise accents. Wallet actions open dialogs over the wallet screen. Success, processing, validation, and unknown outcomes are distinct states so the interface can communicate what has and has not been confirmed.

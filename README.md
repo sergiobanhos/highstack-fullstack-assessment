@@ -1,581 +1,195 @@
-# O que eu entendi da arquitetura e do desafio
+# HighStack Crash Game Operator
 
-- A engine é o core da parte da aposta. Esse serviço é o que controla todo o fluxo de vida do jogo da bet. No caso atual, o jogo é o crash.
-- A engine tem uma API rest para: Iniciar sessao de um jogador, fazer BET, Cashout, verificar o estado atual.
-- A engine comunica os eventos de bet pela stream, mandando os eventos.
-- Eventos relacionados a carteira (credito e débito) são enviados pelo webhook
-- A stream é autenticada com operator key
-- O webhook é autenticada com webhook key
-- O objetivo do desafio é criar o serviço do operador (backend) e um pequeno client frontend.
-- O operador é o serviço que vai se comunicar com o a engine, tratar da autenticacao dos jogadores, controlar a carteira e as transações (ledger financeiro), integrado a engine.
-- O MVP suporta somente Crashsim. Outro jogo exigirá uma decisão explícita baseada no protocolo e nas necessidades daquele jogo; não há registry nem adapter genérico.
+A local full-stack implementation of a server-side operator for **Crashsim**, a simulated third-party crash-game engine. The operator keeps engine credentials off the browser, authenticates players, coordinates bets and cashouts, maintains an idempotent wallet ledger, and streams synchronized game state to the React client.
 
-# Arquitetura e Decisões
+This repository was built for a full-stack engineering assessment focused on integration boundaries, money correctness, realtime recovery, and incident-oriented edge cases. It is a local MVP: wallet top-ups and payouts are simulations, not payment services.
 
-## Arquitetura Geral
+## What is included
 
-```mermaid
-flowchart LR
-  subgraph Browser[Browser]
-    Client[React client<br/>auth, wallet, game]
-  end
+| Service | Purpose | Stack |
+|---|---|---|
+| `engine/` | Simulates a third-party crash game, HTTP API, WebSocket events, and signed wallet webhooks | Node.js 22, JavaScript |
+| `operator/` | Auth, wallet and ledger, Crashsim commands, stream synchronization, and REST/SSE APIs | Bun, TypeScript, Fastify, PostgreSQL, Drizzle, Valibot |
+| `client/` | Player UI for registration/login, game, wallet, local top-up, and simulated payout | React 19, TypeScript, Vite, Mantine, TanStack Query |
+| `postgres` | Persistent operator data | PostgreSQL 16 |
 
-  subgraph Operator[Operator — Fastify]
-    Auth[Auth REST<br/>register, login, current user]
-    GameAPI[Game REST<br/>session, bet, cashout, bet reads]
-    GameStream[game/realtime/stream.service<br/>snapshot sync + reducer]
-    Hub[GameEventFanout<br/>snapshot, events, health]
-    Financial[Financial module<br/>wallet, ledger, payouts, webhooks]
-    DB[(PostgreSQL<br/>users, sessions, bets, wallet, ledger)]
-  end
+## Run locally
 
-  subgraph Engine[Crashsim Engine]
-    EngineHTTP[HTTP API<br/>session, bet, cashout, snapshot]
-    EngineWS[WebSocket event stream]
-    EngineWebhook[Webhook sender<br/>debit and credit]
-  end
-
-  Client -->|REST + bearer token| Auth
-  Client -->|REST + bearer token| GameAPI
-  Client -->|REST + bearer token| Financial
-  Client -->|GET /game/events| Hub
-
-  Auth -->|user and session| DB
-  GameAPI -->|commands and bets| DB
-  Financial -->|wallet, operations, ledger| DB
-  Auth -. authenticated identity .-> GameAPI
-  Auth -. authenticated identity .-> Financial
-
-  GameAPI -->|HTTP + operator key| EngineHTTP
-  GameStream <-->|WebSocket stream| EngineWS
-  GameStream <-->|GET /rounds/current| EngineHTTP
-  EngineWS -->|validated round events| GameStream
-  GameStream -->|reduced state + connection health| Hub
-  Hub -->|SSE snapshot first, then updates| Client
-
-  EngineWebhook -->|HMAC-signed HTTP webhooks| Financial
-  GameAPI -->|checks settlement status| Financial
-  Financial -->|cashout credit recorded| GameAPI
-```
-
-O client fala somente com o operador. A aplicação usa três caminhos: REST para autenticação, carteira e comandos do jogo; SSE para estado realtime e saúde da conexão; webhooks HMAC da Engine para débito e crédito. O operador conversa com a Crashsim por HTTP e WebSocket, mantendo `ENGINE_OPERATOR_KEY` e `ENGINE_WEBHOOK_SECRET` no servidor.
-
-No caminho realtime, `modules/game/realtime/stream.service.ts` sincroniza o snapshot e reduz os eventos antes de publicá-los pelo `GameEventFanout` e SSE. No caminho de aposta, o operador autentica o jogador, persiste o comando e coordena a chamada HTTP para a Engine. No caminho financeiro, o webhook aplica saldo e ledger numa transação idempotente; a confirmação do crédito também atualiza o estado persistido da aposta.
-
-## Operador
-
-- O operador expõe comandos e autenticação por API REST (Fastify); o estado realtime é distribuído por SSE.
-- A comunicacao da engine com o operador deve ser idempotente
-- O MVP processa webhooks financeiros na requisição, persistindo a operação idempotente e a atualização do saldo antes de confirmar sucesso; uma fila não faz parte desta entrega.
-- Operações financeiras devem manter saldo e ledger consistentes por transação de banco, usando atualização atômica ou lock de linha quando necessário.
-- O saldo corrente será persistido junto do ledger; cache distribuído e filas ficam fora do MVP local.
-- Na conexão operador -> cliente, decidi user SSE invez de websocket pois como a direcao da mensagem é unica, apenas servidor para cliente, não tem necessidade de websocket. SSE é mais leve para esse caso.
-
-### Arquitetura banco de dados
-
-- Teremos as tabelas de autenticação. Tabela de User, por exemplo.
-- Teremos tambem as tabelas relacionadas a finanças. Wallet, Transaction, fazer um mini ledger.
-
-#### Auth
-
-User
-
-- id
-- name
-- email
-- passwordHash
-- walletId
-
-Poderia ter Account e tal mas para o escopo desse desafio não precisa
-
-#### Financial
-
-OBS: Todos os valores de dinheiro serao INT, sendo o valor em CENTAVOS
-
-Wallet
-
-- id: uuid
-- document: String
-- currency: String / Enum
-
-Transaction
-
-- id: uuid
-- transactionKey: String
-- value: Integer
-- type: String / Enum (credit | debit)
-- currency: String / ENUM
-- description: String
-
-Payout
-
-- id
-- value: Integer
-- tax: Integer
-- netValue: Integer
-
-# Fluxo de Desenvolvimento
-
-- Vou usar SDD para o desenvolivmento assistido por IA
-- Primeiro, montar as SPECS do Operador e do front, para depois iniciar a desenvolver de fato.
-- Com o SDD, consigo pensar nos requisitos e nos edge cases antes de colocar em código
-- Vou usar o meu prório framework de SDD https://www.npmjs.com/package/@banhosdev/sdd
-
-# Notas de desenvolvimento
-
-3/10 - sabado
-
-- Estruturei os projetos iniciais (operator e cliente)
-- Defini, junto com a IA, possíveis edge cases que geralmente acontecem em aplicações real time (desconexao, eventos duplicados, etc)
-- Inicializei o framework SDD no repositorio
-- Criei a primeira spec, definindo arquitetura do operador, do cliente, pensando já na expansão, edge cases, etc.
-
-## Arquitetura do Operator: módulos, comandos e realtime
-
-```mermaid
-flowchart LR
-  Browser["Cliente React<br/>EventSource"]
-
-  subgraph Operator[Operator]
-    subgraph Game[modules/game]
-      EventsController["events.controller<br/>SSE HTTP"]
-      CommandsController["commands.controller<br/>REST HTTP"]
-      Hub["GameEventFanout<br/>snapshot + fan-out"]
-      Service["realtime/stream.service<br/>connect, sync, reconnect, publish"]
-      Commands["game.service<br/>fachada + composição dos use cases"]
-      UC["usecases/<br/>bet, cashout, consulta, reconciliação"]
-      Reducer["realtime/round-state<br/>estado monotônico"]
-      Module["game.module<br/>wiring local"]
-    end
-    subgraph Integrations["integrations/crashsim"]
-      WsClient["stream.client<br/>WebSocket + validação"]
-      HttpClient["http.client<br/>snapshot e comandos"]
-      Webhook["webhook-auth<br/>HMAC e frescor"]
-    end
-  end
-
-  subgraph Modules["Módulos de negócio"]
-    Auth["auth module<br/>identidade e sessão"]
-    Financial["financial module<br/>wallet, ledger e webhooks"]
-    DB[(PostgreSQL)]
-  end
-
-  Engine["Engine Crashsim"]
-
-  Browser -->|SSE: GET /game/events| EventsController
-  EventsController -->|inscreve com snapshot| Hub
-  Hub -->|captura estado atual| Service
-  Service -->|snapshot atual| Hub
-  Service -->|publica estado, eventos e health| Hub
-  Hub -->|snapshot primeiro, depois updates| EventsController
-  EventsController -->|snapshot, game-event, connection| Browser
-
-  Browser -->|REST: sessão, bet, leituras, cashout| CommandsController
-  CommandsController -->|identidade autenticada| Auth
-  CommandsController -->|comando validado| Commands
-  Commands -->|estado de round| Service
-  Commands -->|persistência idempotente| DB
-  Commands -->|status do crédito| Financial
-  Commands -->|HTTP autenticado server-side| HttpClient
-  Engine -->|webhook de débito/crédito| Webhook
-  Webhook -->|payload autenticado| Financial
-  Financial -->|ledger e saldo| DB
-  Financial -. contrato após crédito .-> Commands
-
-  Engine -->|eventos WS| WsClient
-  WsClient -->|eventos validados| Service
-  Service -->|aplica evento ou snapshot| Reducer
-  Reducer -->|novo estado da rodada| Service
-  Service -->|busca snapshot via HTTP| HttpClient
-  HttpClient -->|GET + operator key server-side| Engine
-  Engine -->|snapshot + seq| HttpClient
-
-  Module -. instancia e liga .-> Service
-  Module -. compõe .-> Commands
-  Module -. instancia .-> Hub
-  Module -. registra .-> EventsController
-  Module -. registra .-> CommandsController
-```
-
-`server.ts` é a raiz de composição da aplicação e monta os módulos por seus contratos exportados. Cada módulo registra seus controllers e expõe uma fachada `*.service.ts`; seus fluxos coesos ficam em `usecases/`. Controllers cuidam da validação e tradução HTTP, sem implementar o fluxo de negócio.
-
-Para realtime, `game.module` cria uma única conexão WebSocket upstream por processo. `realtime/stream.service` valida e ordena os eventos, ressincroniza pelo snapshot HTTP após desconexão ou lacuna de sequência, atualiza `round-state` e publica estado/health pelo `GameEventFanout`. Cada conexão SSE recebe primeiro um snapshot consistente e depois eventos novos. A stream não tem replay histórico.
-
-Para comandos, `commands.controller` obtém a identidade autenticada do módulo auth e chama `game.service`. A fachada compõe casos de uso de sessão, aposta, cashout e reconciliação, que persistem comandos e consultam a integração concreta Crashsim e o contrato público de financial quando necessário. O status do cashout no jogo fica separado do crédito no ledger. Uma resposta ambígua leva a `GET /bets/:id`; se ainda não for possível confirmar, o comando fica `unknown` e nova tentativa fica bloqueada.
-
-# Crashsim realtime proxy (spec 001) — local run
-
-Services (all local-only):
-
-- engine on `http://localhost:4000`
-- operator on `http://127.0.0.1:3000` (loopback-only until player auth exists)
-- debug client on `http://127.0.0.1:5173` (loopback-only, proxies `/game/events` to the operator)
+Requirements: Docker and Docker Compose v2. The stack binds host ports to loopback for local use.
 
 ```bash
+cp .env.example .env
+# Edit the local secrets if desired; the checked-in defaults are development-only.
 docker compose up --build
 ```
 
-Open `http://localhost:5173` and confirm: upstream status, the current snapshot, and the live event log.
+The first startup waits for PostgreSQL, applies Drizzle migrations, then starts the operator and client.
 
-## Fault verification (reconnect, reorder, snapshot recovery)
+| URL | Service |
+|---|---|
+| <http://127.0.0.1:5173> | Player client |
+| <http://127.0.0.1:3000> | Operator API |
+| <http://127.0.0.1:3000/health> | Process liveness |
+| <http://127.0.0.1:3000/ready> | Database and schema readiness |
+| <http://127.0.0.1:4000> | Crashsim engine |
 
-```bash
-DROP_WS_EVERY=8 REORDER=1 docker compose up --build
-```
+To stop the stack while preserving local database data, run `docker compose down`. To reset the local database volume as well, run `docker compose down --volumes`.
 
-Expected in the debug client:
+### Quick demo
 
-1. Upstream status flips to `reconnecting` on each forced drop, and the snapshot freezes (stale indicator) instead of projecting forward.
-2. After reconnect, the operator resynchronizes from `GET /rounds/current` and the snapshot recovers to the engine's current state.
-3. No tick for a round already marked `crashed` moves state backward, including late ticks delivered out of order.
-4. The operator key never appears in browser payloads or in operator logs.
+1. Register a player and log in from the client.
+2. Add local test funds from the wallet screen.
+3. Open the game screen and wait for the SSE connection to report `connected`.
+4. Place a bet during `betting`, then cash out while the round is `running`.
+5. Check the bet result, wallet history, and round proof after the crash.
 
-## Banco de dados e autenticação do jogador (specs 002 e 003)
+The UI disables game actions while the engine state is reconnecting or synchronizing. The local top-up and payout controls exist for demonstrating complete flows and do not move real money.
 
-O serviço `operator-migrate` aplica as migrations Drizzle de auth e financial uma vez, depois que o PostgreSQL passa no healthcheck. O serviço `operator` só inicia depois que essas migrations terminam com sucesso. Reiniciar os containers não remove o volume `postgres-data` nem invalida sessões ainda válidas.
+### Environment variables
 
-```bash
-docker compose up --build
-```
+Compose reads the optional root `.env` file. `.env.example` contains local defaults for the service credentials, log level, session lifetime, and engine integration settings. The committed credentials are only suitable for this isolated local stack; replace them before exposing any service outside loopback.
 
-O Compose mantém engine, operador, cliente diagnóstico e PostgreSQL acessíveis pelo host somente em `127.0.0.1`. Os valores locais de PostgreSQL e das chaves da engine no Compose são credenciais de desenvolvimento; não os reutilize em outros ambientes.
+| Variable | Default | Purpose |
+|---|---|---|
+| `ENGINE_OPERATOR_KEY` | `dev-operator-key` | Server-to-server authentication from Operator to Crashsim |
+| `WEBHOOK_SECRET` | `dev-webhook-secret` | Shared HMAC secret for Crashsim wallet callbacks |
+| `LOG_LEVEL` | `info` | Operator and engine log threshold |
+| `AUTH_SESSION_TTL_SECONDS` | `86400` | Player session lifetime; operator accepts 60–604800 seconds |
 
-O operador exige `DATABASE_URL` no formato `postgres://` ou `postgresql://`. `AUTH_SESSION_TTL_SECONDS` é opcional e usa `86400` por padrão; valores aceitos vão de 60 a 604800 segundos. A URL e a senha ficam somente no servidor, migrador ou ambiente de teste e não devem ser enviadas ao navegador.
+### Database migrations
 
-### Migrations
-
-O caminho recomendado é deixar o Compose executar a migration. Para operar manualmente, suba o PostgreSQL e execute somente um migrador por vez:
+Compose runs the one-shot `operator-migrate` service after PostgreSQL is healthy and starts the Operator only after migrations succeed. To migrate manually against the local database:
 
 ```bash
 cd operator
 DATABASE_URL='postgres://operator:operator@127.0.0.1:5432/operator' bun run db:migrate
 ```
 
-`bun run db:generate` cria uma migration nova a partir dos schemas Drizzle. Migrations aplicadas não devem ser editadas; mudanças posteriores entram em outra migration. Não use `drizzle-kit push` nem remova o volume para atualizar o schema.
+Generate a migration from the Drizzle schema with `bun run db:generate`. Treat applied migrations as immutable; make later schema changes in a new migration. Run only one migrator at a time.
 
-### Endpoints REST
-
-Todas as respostas de auth incluem `Cache-Control: no-store`. O cliente envia credenciais no corpo JSON e a sessão no header `Authorization`; não coloque senha ou token em URL ou query string.
-
-| Método e rota | Sucesso | Comportamento |
-|---|---:|---|
-| `POST /auth/register` | `201 { user }` | Cria conta; email duplicado retorna `409 EMAIL_IN_USE`. Cadastro não autentica automaticamente. |
-| `POST /auth/login` | `200 { token, expiresAt, user }` | Token opaco aparece uma vez na resposta; o banco armazena somente seu hash. Credencial inválida retorna `401`. |
-| `GET /auth/me` | `200 { user }` | Exige Bearer válido; credencial ausente, expirada ou revogada retorna `401`. |
-| `POST /auth/logout` | `204` | Revoga apenas o token apresentado; repetir logout continua retornando `204`. |
-
-Exemplo de cadastro local com credenciais fictícias:
-
-```bash
-curl -i http://127.0.0.1:3000/auth/register \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"Test Player","email":"player@example.invalid","password":"example password phrase"}'
-```
-
-Exemplo de login:
-
-```bash
-curl -i http://127.0.0.1:3000/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"player@example.invalid","password":"example password phrase"}'
-```
-
-Copie o token retornado para `AUTH_TOKEN` apenas no terminal local:
-
-```bash
-curl -i http://127.0.0.1:3000/auth/me -H "Authorization: Bearer ${AUTH_TOKEN}"
-curl -i -X POST http://127.0.0.1:3000/auth/logout -H "Authorization: Bearer ${AUTH_TOKEN}"
-```
-
-`/health` mede se o processo está vivo e continua retornando `200` durante indisponibilidade do banco. `/ready` confere conexão e tabelas de auth e financial, retornando `503` enquanto o PostgreSQL ou o schema não estiver pronto. O operador não abre a porta HTTP se a verificação inicial falhar.
-
-Tentativas de cadastro e login são limitadas separadamente por endereço IP: 5 cadastros e 10 logins por minuto. O limite é local ao processo, conta também payload inválido e não usa `X-Forwarded-For`. Hashes Argon2id simultâneos também têm um teto de duas operações.
-
-## Carteira, ledger e payouts locais (specs 003 e 005)
-
-O saldo é USD e todas as quantias da API são inteiros em centavos. A carteira começa em zero e é criada no primeiro `GET /wallet` autenticado. O top-up e o payout são ferramentas locais de desenvolvimento, sem integração com pagamento: o Compose define `APP_ENV=local`, `WALLET_TEST_TOPUP_ENABLED=true` e `PAYOUT_MOCK_ENABLED=true`. Em outras configurações, as flags ficam desligadas e as rotas correspondentes não são registradas; a configuração também rejeita habilitá-las fora do ambiente local.
-
-### Rotas do jogador
-
-Todas as rotas exigem `Authorization: Bearer <token>` emitido por `/auth/login`. A identidade vem da sessão e não pode ser escolhida por `playerId` em body ou query. Respostas financeiras usam `Cache-Control: no-store`.
-
-| Método e rota | Sucesso | Notas |
-|---|---:|---|
-| `GET /wallet` | `200 { balance, currency: "USD" }` | Cria a carteira zero na primeira consulta. `balance` está em centavos. |
-| `GET /wallet/transactions?limit=&cursor=` | `200 { items, nextCursor }` | Histórico próprio, mais novo primeiro; `limit` default 50, máximo 100. Cursor opaco e estável. |
-| `POST /wallet/top-ups` | `201 { transactionId, balance, currency: "USD" }` | Apenas no Compose local. Body `{ "amount": 1000 }` adiciona USD 10,00. |
-| `POST /payouts` | `201 { id, amountCents, currency, status, requestedAt, completedAt, simulated }` | Saque parcial em centavos; exige `Idempotency-Key` UUID. Apenas com `PAYOUT_MOCK_ENABLED=true` em local. |
-| `GET /payouts/:payoutId` | `200` com o DTO acima | Consulta apenas payout do jogador autenticado; ausente ou de terceiro retorna `404`. |
-| `GET /payouts?limit=&cursor=` | `200 { items, nextCursor }` | Histórico próprio, mais novo primeiro; limite default 50, máximo 100 e cursor estável. |
-
-Exemplo de top-up local (use uma chave UUID nova por ação e mantenha o token no terminal):
-
-```bash
-curl -i -X POST http://127.0.0.1:3000/wallet/top-ups \
-  -H "Authorization: Bearer ${AUTH_TOKEN}" \
-  -H 'Content-Type: application/json' \
-  -H 'Idempotency-Key: 7b7a2c9d-08b8-44c5-b735-49f2f41c993d' \
-  -d '{"amount":1000}'
-
-curl -i http://127.0.0.1:3000/wallet -H "Authorization: Bearer ${AUTH_TOKEN}"
-curl -i 'http://127.0.0.1:3000/wallet/transactions?limit=50' \
-  -H "Authorization: Bearer ${AUTH_TOKEN}"
-```
-
-O mesmo `Idempotency-Key` com o mesmo valor devolve o resultado persistido sem novo crédito; reutilizá-lo com conteúdo diferente retorna `409`. Top-ups também respeitam o saldo máximo seguro e retornam `422` sem ultrapassá-lo.
-
-O payout simulado debita a carteira no commit do pedido e começa como `processing`. O worker local o muda para `done` cerca de cinco segundos depois, retomando itens vencidos após reinício; essa conclusão não altera saldo ou ledger e não representa transferência real. Repita a mesma chave UUID se a resposta do POST se perder. Exemplo:
-
-```bash
-curl -i -X POST http://127.0.0.1:3000/payouts \
-  -H "Authorization: Bearer ${AUTH_TOKEN}" \
-  -H 'Content-Type: application/json' \
-  -H 'Idempotency-Key: 2ac9d3f8-1ba5-4f1f-9a72-6f9242b2a018' \
-  -d '{"amount":250}'
-
-curl -i 'http://127.0.0.1:3000/payouts?limit=50' \
-  -H "Authorization: Bearer ${AUTH_TOKEN}"
-```
-
-### Webhooks privados da engine
-
-`POST /wallet/debit` e `POST /wallet/credit` são endpoints servidor-servidor. A engine envia `{ txId, playerId, amount, betId, roundId }`, onde `amount` está em centavos. Essas rotas não usam sessão de jogador: validam `x-timestamp` (Unix em segundos) e `x-signature` antes de parsear o JSON. A assinatura é HMAC-SHA256 em hexadecimal sobre os bytes exatos `${timestamp}.${rawBody}` com `ENGINE_WEBHOOK_SECRET`; o timestamp deve estar dentro de ±60 segundos. O corpo tem limite de 16 KiB.
-
-O Compose injeta o mesmo valor local de `WEBHOOK_SECRET` no Crashsim como `WEBHOOK_SECRET` e no Operator como `ENGINE_WEBHOOK_SECRET`. `ENGINE_OPERATOR_KEY` autentica as chamadas do Operator para a engine e é um segredo diferente. Nenhuma dessas chaves deve ser enviada ao browser ou incluída em logs.
-
-| Resultado | HTTP | Efeito |
-|---|---:|---|
-| Débito/crédito aplicado ou replay equivalente | `200 { balance }` | Só responde sucesso após o commit; saldo em centavos. |
-| Débito com saldo insuficiente | `402` | Resultado idempotente salvo; saldo e ledger não mudam. |
-| HMAC ausente/inválido ou timestamp vencido | `401` | Nenhuma operação financeira é chamada. |
-| Body inválido ou assinatura correta sobre JSON inválido | `400` | Sem mutação. |
-| Mesmo identificador com dados divergentes | `409` | Sem segundo movimento. |
-| Carteira inexistente | `404` | Webhook não cria carteira órfã. |
-| Quantia insegura ou saldo resultante acima do limite | `422` | Sem movimento; limite de saldo fica idempotente. |
-| Banco indisponível ou resultado de commit não confirmado | `503` | A engine pode repetir com o mesmo `txId`; o operador não declara sucesso. |
-
-O Crashsim faz retries síncronos para timeout e respostas `5xx` (atrasos locais de 500 ms, 1 s, 2 s, 4 s e 8 s); `402` recusa a aposta e outras respostas `4xx` são terminais para a engine atual. A deduplicação usa `txId`; crédito de cashout também converge por `cashout:<betId>`, permitindo que webhook e futura reconciliação não dupliquem o payout. Não há Inbox, Outbox ou worker nesta entrega: o débito precisa ser concluído antes de a engine aceitar a aposta.
-
-O contrato numérico atual só transporta inteiros até `Number.MAX_SAFE_INTEGER` centavos. Um payout inseguro é recusado com `422` e gera `wallet.cashout.precision_incident`, sem registrar valor, corpo ou assinatura. Como a engine converte seu payout de `BigInt` para `number`, o valor exato já não pode ser recuperado pelo contrato atual; F06 não credita o valor aproximado automaticamente. Esse limite permanece até que a engine ofereça um contrato exato, por exemplo uma string decimal.
-
-## Comandos de jogo Crashsim (spec 004)
-
-Todas as rotas REST de jogo exigem `Authorization: Bearer <token>`. O `playerId` vem da sessão autenticada, nunca do corpo ou da query. O SSE `/game/events` continua separado e fornece o snapshot usado para habilitar ações.
-
-| Método e rota | Sucesso | Comportamento |
-|---|---:|---|
-| `POST /game/session` | `200 { status: "ready" }` | Garante a carteira e cria ou reutiliza a sessão Crashsim; não retorna `sessionId`. |
-| `POST /game/bets` | `201` | Exige `Idempotency-Key` UUID e body `{ roundId, amount, autoCashout? }`; `amount` é centavos inteiros. |
-| `GET /game/bets?limit=10` | `200` | Lista até 20 comandos/apostas próprios, mais recentes primeiro; restaura o jogo após reload. |
-| `GET /game/commands/:commandId` | `200` | Consulta comando próprio; um comando `unknown` pode ser reconciliado por leitura, sem repetir a mutação. |
-| `GET /game/bets/:betId` | `200` | Consulta o estado atualizado da aposta, retoma a reconciliação de um cashout `pending`/`unknown` após reload e atualiza a liquidação financeira. |
-| `POST /game/bets/:betId/cashout` | `200` | Exige `Idempotency-Key` UUID; só tenta cashout de uma aposta própria, ativa, com stream sincronizado e rodada `running`. |
-
-A chave idempotente deve ser reutilizada no retry da mesma ação. Uma chave diferente não contorna um comando pendente ou desconhecido. Se uma chamada de cashout terminar sem resposta conclusiva, o operador consulta o bet na engine: `cashed_out` confirma o estado do jogo, `active` libera uma tentativa futura com uma chave nova, e uma consulta indisponível mantém o comando `unknown`. Nesse estado, o cliente consulta o mesmo comando em vez de disparar outro cashout.
-
-Erros de validação retornam `400`, falta de autenticação retorna `401`, saldo insuficiente retorna `402`, bet/comando próprio ausente retorna `404`, conflitos de rodada, idempotência ou cashout retornam `409`, e indisponibilidade operacional retorna `503`. Uma mutação com resultado `unknown` retorna `202` com `{ error: { code: "COMMAND_OUTCOME_UNKNOWN" }, command }`; uma leitura de comando retorna `200` com o estado persistido, inclusive quando continua `unknown`.
-
-O jogo pode estar `cashed_out` enquanto o crédito ainda está pendente. O operador só mostra `settlementStatus: "confirmed"` depois de encontrar o crédito correspondente no ledger; o endpoint de cashout não cria crédito. O webhook da engine continua sendo o caminho normal, e F06 cobre a recuperação operacional de crédito ausente.
-
-### Limites conhecidos do MVP
-
-- Se o débito da aposta foi confirmado no financial, mas todas as respostas entre engine e operador se perderam e a engine depois indicar rejeição, F04 não cria uma compensação automática. O comando registra o conflito e o saldo continua dependendo de investigação; não se deve assumir que foi estornado.
-- Não há worker nesta entrega. Cashout `pending`/`unknown` é reconciliado por uma leitura posterior de comando ou aposta; recuperação operacional de um webhook de crédito que não chegou pertence a F06.
-- A integração atual suporta uma instância do operador e a engine Crashsim. Sessões Crashsim ficam em memória do processo; os comandos e apostas ficam no PostgreSQL.
-
-## Edge cases e recuperação
-
-Os diagramas abaixo mostram como o operador trata falhas sem afirmar um resultado que ainda não confirmou. A stream da engine não tem replay histórico; após uma queda, o snapshot restaura o estado atual, enquanto as leituras individuais de bet reconciliam resultados persistidos.
-
-### Queda da Engine e ressincronização da stream
+## Architecture at a glance
 
 ```mermaid
-sequenceDiagram
-  participant Engine as Crashsim Engine
-  participant Stream as Operator game-stream
-  participant Hub as Event hub
-  participant Client as Client SSE
-
-  Engine--xStream: WebSocket cai ou fica indisponível
-  Stream->>Hub: connection = reconnecting
-  Hub-->>Client: estado congelado + indicador de reconexão
-  Note over Client: Bloqueia bet e cashout enquanto o estado não está sincronizado
-
-  loop Backoff de reconexão
-    Stream->>Engine: Tenta abrir WebSocket
-  end
-  Engine-->>Stream: WebSocket conectado
-  Stream->>Hub: connection = synchronizing
-  Stream->>Engine: GET /rounds/current
-  alt Snapshot disponível
-    Engine-->>Stream: Estado atual + seq
-    Stream->>Stream: Substitui o baseline pelo snapshot
-    Note over Stream: Eventos perdidos não são reproduzidos
-    Stream->>Hub: snapshot sincronizado + connection = connected
-    Hub-->>Client: snapshot atual + connection = connected
-    Note over Client: Libera ações quando receber estado sincronizado
-  else Engine ainda indisponível ou snapshot falhou
-    Engine--xStream: Sem resposta utilizável
-    Stream->>Hub: Mantém reconnecting/synchronizing e agenda nova tentativa
-    Hub-->>Client: Mantém estado congelado
-  end
+flowchart LR
+  Browser[React client] -->|REST commands| Operator[Fastify Operator]
+  Operator -->|SSE: snapshot, events, health| Browser
+  Operator <-->|HTTP: session, bets, snapshot| Engine[Crashsim]
+  Engine -->|WebSocket round events| Operator
+  Engine -->|HMAC wallet callbacks| Operator
+  Operator <-->|transactions and migrations| DB[(PostgreSQL)]
 ```
 
-O mesmo snapshot também é solicitado quando há uma lacuna de sequência. `DROP_WS_EVERY=8` exercita as quedas; `REORDER=1` pode entregar ticks atrasados.
+The browser only talks to the operator. The operator owns the upstream Crashsim connection, validates and reduces its events, and fans state out to browser subscribers. Financial callbacks are verified and applied synchronously so the engine receives success only after the wallet operation is committed.
 
-### Queda e reconexão do SSE do navegador
-
-```mermaid
-sequenceDiagram
-  participant Client as Browser client
-  participant Controller as SSE controller
-  participant Hub as Event hub
-
-  Client-xController: Conexão SSE fecha
-  Controller->>Hub: Remove a inscrição encerrada
-  Client->>Controller: EventSource reconecta em GET /game/events
-  Controller->>Hub: Registra inscrição e captura snapshot atual
-  Hub-->>Controller: Snapshot + estado de conexão
-  Controller-->>Client: Envia snapshot primeiro
-  Controller->>Hub: Ativa entrega dos eventos concorrentes
-  Hub-->>Client: Envia updates acima do seq do snapshot
-  Note over Client,Hub: Não há replay do histórico perdido durante a desconexão
-```
-
-Se a stream da Engine estiver reconectando, o snapshot inicial do browser inclui o último estado conhecido e a saúde `reconnecting`/`synchronizing`; o client mantém esse estado congelado até a ressincronização.
-
-### Evento duplicado, atrasado ou fora de ordem
+### How the Operator code is organized
 
 ```mermaid
 flowchart TD
-  Event[Evento validado recebido] --> Seq{seq <= seq atual?}
-  Seq -->|Sim: duplicado ou antigo| Ignore[Ignora sem alterar o estado]
-  Seq -->|Não| Gap{Há lacuna na sequência?}
-  Gap -->|Sim| Snapshot[Solicita GET /rounds/current]
-  Gap -->|Não| Crashed{Rodada atual já está crashed?}
-  Crashed -->|Sim, chegou tick da mesma rodada| Ignore
-  Crashed -->|Não| Round{Evento pertence à rodada atual?}
-  Round -->|Não| Ignore
-  Round -->|Sim: round.crashed| Terminal[Marca rodada como crashed]
-  Round -->|Sim: novo round.betting| Next[Inicia o estado da próxima rodada]
-  Round -->|Sim: evento válido| Apply[Aplica evento e avança seq]
-  Snapshot --> Current[Substitui o estado pelo snapshot atual]
+  Server[server.ts<br/>application composition root]
+  Module[Module composition<br/>auth.module / financial.module / game.module]
+  Controller[Controllers<br/>HTTP validation and response mapping]
+  Service[Module service<br/>public facade and use-case composition]
+  Usecases[usecases/<br/>cohesive business workflows]
+  Integration[integrations/crashsim/<br/>provider HTTP, WS, HMAC]
+  Realtime[game/realtime/<br/>stream, reducer, fan-out]
+  Database[(PostgreSQL / Drizzle)]
+
+  Server --> Module
+  Module --> Controller
+  Controller --> Service
+  Service --> Usecases
+  Usecases --> Database
+  Usecases --> Integration
+  Module --> Realtime
+  Realtime --> Integration
 ```
 
-Uma rodada `crashed` é terminal para o reducer: nem um tick com `seq` mais alto pode fazê-la voltar a `running`. Apenas um `round.betting` de outra rodada abre um novo estado.
+`server.ts` is the only application composition root. The three module files register routes and wire local dependencies. Controllers stay thin and do transport work. Each module's service exposes a stable API and composes its use cases; business decisions stay inside cohesive flows under `usecases/`.
 
-### Webhook financeiro duplicado ou repetido após timeout
+The game module has two clear paths:
 
-```mermaid
-flowchart TD
-  Engine[Crashsim envia POST /wallet/debit ou /wallet/credit] --> Auth{HMAC válido e timestamp recente?}
-  Auth -->|Não| Reject401[401; nenhuma mutação financeira]
-  Auth -->|Sim| Body{JSON e schema válidos?}
-  Body -->|Não| Reject400[400; nenhuma mutação financeira]
-  Body -->|Sim| Tx[Abre transação no PostgreSQL e reserva txId]
-  Tx --> Existing{txId já existe?}
-  Existing -->|Não| Check[Verifica o saldo com atualização condicional na mesma transação]
-  Check -->|Saldo suficiente| Apply[Atualiza saldo e grava operação + ledger]
-  Apply --> Commit{Commit confirmado?}
-  Commit -->|Sim| Success[200; retorna saldo atualizado]
-  Check -->|Saldo insuficiente| Insufficient[Persiste resultado insuficiente; sem alterar saldo ou ledger]
-  Insufficient --> InsufficientCommit{Commit confirmado?}
-  InsufficientCommit -->|Sim| Reject402[402; aposta recusada]
-  InsufficientCommit -->|Não ou resultado incerto| Retry503[503; Crashsim repete com o mesmo txId]
-  Commit -->|Não ou resultado incerto| Retry503
-  Existing -->|Sim, mesmo conteúdo| Replay[Retorna resultado idempotente persistido; sem novo movimento]
-  Replay --> StoredOutcome[Repete o status e saldo registrados]
-  Existing -->|Sim, conteúdo divergente| Conflict409[409; não aplica segundo movimento]
-  Retry503 --> Tx
+- **Commands:** `commands.controller` → `game.service` → session/bet/cashout/read/reconciliation use cases → PostgreSQL, the financial contract, or the concrete Crashsim HTTP client.
+- **Realtime:** Crashsim WebSocket → validated stream client → `realtime/stream.service` → `round-state` reducer → `GameEventFanout` → SSE controller → browser.
+
+`GameEventFanout` is an in-process subscriber registry. It captures a snapshot and buffers concurrent messages until the SSE controller writes that snapshot, preventing a new client from seeing a newer event before its baseline. The stream service owns synchronization and publication; the controller only writes SSE frames and cleans up disconnected subscribers.
+
+See [Architecture and code map](docs/architecture.md) for responsibilities of each source directory and detailed sequence diagrams. See [Failure scenarios](docs/failure-scenarios.md) for the reconnect, reorder, duplicate webhook, concurrency, and unknown-command protections.
+
+### Documentation
+
+The `docs/` directory keeps the deeper material close to the code while this README remains the starting point:
+
+- [Architecture and code map](docs/architecture.md) — module responsibilities, source layout, realtime delivery, and command composition.
+- [Design decisions](docs/decisions.md) — tradeoffs, deliberate scope limits, and the requirements-first development approach.
+- [API reference](docs/api-reference.md) — REST, SSE, authentication, money units, idempotency, and webhook contracts.
+- [Failure scenarios](docs/failure-scenarios.md) — duplicate callbacks, concurrent money operations, stream recovery, out-of-order events, timeouts, and known recovery limits.
+- [UI references](highstack-design-references/screens/README.md) — screen concepts and local visual assets.
+
+## Main decisions
+
+- **REST for commands, SSE for game state.** Commands are request/response operations; the live stream is one-way from server to browser. The operator still uses WebSocket upstream because that is the engine protocol.
+- **One concrete provider integration.** The current game module supports Crashsim directly. There is no generic game registry or speculative adapter layer; another engine would justify a design based on its actual protocol.
+- **Cents and database transactions for money.** Amounts are integer minor units. Idempotency and the balance/ledger update are persisted together; concurrent debits cannot take a wallet below zero.
+- **Unknown means unknown.** If a bet or cashout mutation times out, the operator reconciles using persisted command state and an authoritative engine read. It does not blindly repeat a mutation.
+- **Snapshot recovery, not event replay.** Crashsim does not expose stream history. After reconnect or a sequence gap, the operator restores the current state from `GET /rounds/current` and does not claim missed events were replayed.
+- **Local payout simulation.** The payout flow demonstrates idempotent request, debit, status polling, and restart recovery without a payment provider.
+
+More context and tradeoffs are in [Design decisions](docs/decisions.md).
+
+## API overview
+
+| Capability | Main routes |
+|---|---|
+| Authentication | `POST /auth/register`, `POST /auth/login`, `GET /auth/me`, `POST /auth/logout` |
+| Wallet | `GET /wallet`, `GET /wallet/transactions`, local-only `POST /wallet/top-ups` |
+| Simulated payout | `POST /payouts`, `GET /payouts`, `GET /payouts/:payoutId` |
+| Game commands | `POST /game/session`, `POST /game/bets`, `GET /game/bets`, `GET /game/commands/:commandId`, `GET /game/bets/:betId`, `POST /game/bets/:betId/cashout` |
+| Realtime | `GET /game/events` (SSE) |
+| Engine callbacks | `POST /wallet/debit`, `POST /wallet/credit` (HMAC-authenticated) |
+
+Authenticated player routes derive `playerId` from the session, never from browser input. Money values in API payloads are integer cents. See the [API reference](docs/api-reference.md) for authentication, idempotency, response semantics, and webhook details.
+
+## Tests and checks
+
+Run the Operator checks from its package directory:
+
+```bash
+cd operator
+bun install --frozen-lockfile
+bun run typecheck
+bun run test:e2e
 ```
 
-O débito só permite a aposta depois da confirmação financeira. Se o Crashsim receber timeout ou `5xx`, repete o webhook usando o mesmo `txId`; a restrição única e a transação do banco impedem que a repetição crie outro lançamento.
+`test:e2e` starts a temporary PostgreSQL container and runs the full Operator suite, including migrations, financial concurrency/idempotency, authenticated game commands, SSE synchronization, and Crashsim integration behavior. The suite uses test doubles for external engine calls; use the local Compose walkthrough to inspect the running services together.
 
-### Débitos concorrentes na mesma carteira
+Run the client checks:
 
-```mermaid
-sequenceDiagram
-  participant EngineA as Webhook A
-  participant EngineB as Webhook B
-  participant Operator as Financial service
-  participant DB as PostgreSQL
-
-  par Débito A
-    EngineA->>Operator: debit(txId A, valor A)
-    Operator->>DB: Transação A + UPDATE condicional
-  and Débito B ao mesmo tempo
-    EngineB->>Operator: debit(txId B, valor B)
-    Operator->>DB: Transação B + UPDATE condicional
-  end
-  Note over DB: Atualização atômica da linha da carteira; saldo não pode ficar negativo
-  alt Saldo cobre as duas operações
-    DB-->>Operator: Cada débito aplicado em sua transação
-    Operator-->>EngineA: 200 após commit
-    Operator-->>EngineB: 200 após commit
-  else Saldo cobre somente uma operação
-    DB-->>Operator: Uma atualização aplicada; a outra não satisfaz a condição
-    Operator-->>EngineA: 200 para a operação aplicada
-    Operator-->>EngineB: 402 para saldo insuficiente (ou vice-versa)
-  end
+```bash
+cd client
+bun install --frozen-lockfile
+bun run typecheck
+bun test
+bun run build
 ```
 
-Cada resultado, inclusive insuficiência de saldo, é persistido por chave idempotente. O webhook recusado não cria entrada de ledger nem permite saldo negativo.
+Run the engine checks:
 
-### Timeout de cashout com resultado desconhecido
-
-```mermaid
-flowchart TD
-  Client[Client solicita cashout com Idempotency-Key] --> Operator[Operator chama Crashsim]
-  Operator --> Timeout{Resposta conclusiva recebida?}
-  Timeout -->|Sim: cashed_out| GameConfirmed[Persiste resultado do jogo]
-  Timeout -->|Não: timeout ou conexão caiu| Unknown[Marca comando unknown; não dispara outro cashout]
-  Unknown --> Lookup[Consulta GET /bets/:id na Engine]
-  Lookup --> Result{Resultado da Engine}
-  Result -->|cashed_out| GameConfirmed
-  Result -->|active| Ready[A tentativa terminou sem cashout; retry futuro usa nova chave]
-  Result -->|Engine indisponível| StillUnknown[Mantém unknown e não repete a mutação]
-  StillUnknown --> ClientRetry[Client consulta novamente o mesmo comando]
-  ClientRetry --> Lookup
-  GameConfirmed --> Credit{Crédito aparece no ledger?}
-  Credit -->|Sim| Settled[settlementStatus = confirmed]
-  Credit -->|Ainda não| Pending[Estado do jogo cashed_out; liquidação continua pendente]
-  Pending --> Webhook[Engine repete webhook de crédito com o mesmo txId]
-  Webhook --> Credit
+```bash
+cd engine
+npm ci
+npm test
 ```
 
-O status do jogo e o status da liquidação são independentes. Confirmar `cashed_out` pela leitura da Engine não significa que o saldo já foi creditado.
+## Deliberate MVP limits
 
-### Resultado da aposta após crash ou snapshot
+- One Operator process is supported. The upstream stream, Crashsim player sessions, and request coalescing are process-local; multi-instance fan-out and shared session storage are out of scope.
+- The engine stream has no historical replay. Current state is recoverable from snapshots, but transient missed ticks are not.
+- Top-ups and payouts are local simulations. There is no payment provider or production cash movement.
+- An ambiguous bet debit followed by an engine rejection is not automatically compensated. The command records the conflict; the wallet operation needs investigation rather than an unsafe guessed reversal.
+- The current JSON money contract uses JavaScript safe integers. Values outside that range are rejected instead of rounded.
 
-```mermaid
-sequenceDiagram
-  participant Engine as Crashsim Engine
-  participant Stream as Operator game-stream
-  participant Game as Game command service
-  participant DB as PostgreSQL
-  participant Client as Client
+These limits are described alongside recovery behavior in the [failure scenarios](docs/failure-scenarios.md).
 
-  opt Crash aplicado ou snapshot sincronizado
-    Stream->>Game: Solicita reconciliação das bets ativas da rodada encerrada
-  end
-  Game->>DB: Busca bets persistidas ainda active
-  DB-->>Game: Bets candidatas
-  loop Para cada bet candidata
-    Game->>Engine: GET /bets/:betId
-    alt Engine confirma lost ou cashed_out
-      Engine-->>Game: Status autoritativo da bet
-      Game->>DB: Atualiza resultado do jogo
-    else Engine ainda retorna active
-      Engine-->>Game: Bet continua active
-      Note over Game,DB: Mantém status ativo; nova reconciliação ocorre em outro snapshot ou consulta
-    else Leitura falha
-      Engine--xGame: Sem resultado conclusivo
-      Note over Game,DB: Mantém o resultado pendente para nova reconciliação
-    end
-  end
-  Client->>Game: GET /game/bets ou GET /game/bets/:betId
-  Game-->>Client: Status persistido; settlementStatus separado
-  Note over Client: Exibe Checking result enquanto a bet segue active numa rodada encerrada
-```
+## Engineering workflow
 
-O operador não deduz `lost` a partir do evento `round.crashed` e não cria crédito nessa reconciliação. Só a leitura autoritativa da Engine atualiza o resultado do jogo; o crédito continua sendo tratado pelo webhook financeiro e verificado no ledger.
+The work was developed requirements-first: clarify boundaries and failure cases, write and review the design and tasks, then implement one module slice at a time. AI tools assisted with exploration and implementation; behavior was checked against the code, typed contracts, and automated tests, especially around retries, ordering, unknown outcomes, and money. The repository keeps the resulting specifications and implementation history so the decisions can be discussed and changed deliberately.
