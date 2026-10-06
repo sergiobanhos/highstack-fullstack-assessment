@@ -1,4 +1,4 @@
-import type { CrashsimRoundSnapshot, CrashsimStreamEvent } from '../../integrations/crashsim/contracts';
+import type { CrashsimRoundSnapshot, CrashsimStreamEvent } from '../../../integrations/crashsim/contracts';
 import type { GameEvent, RoundSnapshot } from './round-state';
 
 /** Maps a validated Crashsim snapshot into the game's internal state contract. */

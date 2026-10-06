@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { GameEventHub } from './game-event-hub';
+import { GameEventFanout } from './event-fanout';
 import type { OperatorMessage, OperatorSnapshot } from './round-state';
 
 const snapshot = (seq: number): OperatorSnapshot => ({
@@ -23,9 +23,9 @@ const gameEvent = (seq: number): OperatorMessage => ({
   event: { type: 'tick', seq, roundId: 'r1', multiplier: seq / 10, t: seq * 100 },
 });
 
-describe('GameEventHub', () => {
+describe('GameEventFanout', () => {
   test('captures the snapshot and queues a concurrent newer event for delivery after it', () => {
-    const hub = new GameEventHub();
+    const hub = new GameEventFanout();
     const received: OperatorMessage[] = [];
     const subscription = hub.subscribeWithSnapshot(() => {
       hub.publish(gameEvent(11));
@@ -38,7 +38,7 @@ describe('GameEventHub', () => {
   });
 
   test('discards queued events at or below the captured sequence baseline', () => {
-    const hub = new GameEventHub();
+    const hub = new GameEventFanout();
     const subscription = hub.subscribeWithSnapshot(() => snapshot(10));
     hub.publish(gameEvent(9));
     hub.publish(gameEvent(10));
@@ -50,7 +50,7 @@ describe('GameEventHub', () => {
   });
 
   test('always delivers connection health and then forwards live events', () => {
-    const hub = new GameEventHub();
+    const hub = new GameEventFanout();
     const subscription = hub.subscribeWithSnapshot(() => snapshot(100));
     const received: OperatorMessage[] = [];
     subscription.activate((message) => received.push(message));
@@ -64,7 +64,7 @@ describe('GameEventHub', () => {
   });
 
   test('unsubscribe removes the subscriber and stops delivery', () => {
-    const hub = new GameEventHub();
+    const hub = new GameEventFanout();
     const subscription = hub.subscribeWithSnapshot(() => snapshot(0));
     const received: OperatorMessage[] = [];
     subscription.activate((message) => received.push(message));
@@ -77,7 +77,7 @@ describe('GameEventHub', () => {
   });
 
   test('fans out to active subscribers independently', () => {
-    const hub = new GameEventHub();
+    const hub = new GameEventFanout();
     const first = hub.subscribeWithSnapshot(() => snapshot(0));
     const second = hub.subscribeWithSnapshot(() => snapshot(0));
     const firstReceived: OperatorMessage[] = [];
@@ -95,7 +95,7 @@ describe('GameEventHub', () => {
   });
 
   test('removes a partially registered subscriber if snapshot capture throws', () => {
-    const hub = new GameEventHub();
+    const hub = new GameEventFanout();
     expect(() =>
       hub.subscribeWithSnapshot(() => {
         throw new Error('snapshot failed');

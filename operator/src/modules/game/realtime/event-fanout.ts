@@ -1,12 +1,5 @@
 import type { OperatorMessage, OperatorSnapshot } from './round-state';
-
-export interface GameEventSubscription {
-  readonly snapshot: OperatorSnapshot;
-  readonly seq: number;
-  /** Starts delivery after the caller writes the snapshot. */
-  activate(onMessage: (message: OperatorMessage) => void): void;
-  unsubscribe(): void;
-}
+import type { GameEventSubscription } from './contracts';
 
 interface Subscriber {
   baselineSeq: number;
@@ -16,7 +9,7 @@ interface Subscriber {
 }
 
 /** In-process fan-out for the single Crashsim stream. */
-export class GameEventHub {
+export class GameEventFanout {
   private readonly subscribers = new Set<Subscriber>();
 
   get subscriberCount(): number {

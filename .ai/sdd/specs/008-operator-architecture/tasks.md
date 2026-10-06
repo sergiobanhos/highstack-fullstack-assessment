@@ -209,19 +209,19 @@ T2 é independente das demais até a integração final. As outras tarefas têm 
 
 ### Trabalho
 
-- [ ] Agrupar estado/reducer, stream coordinator, fan-out e tipos realtime sob `modules/game/realtime/`.
-- [ ] Renomear o EventHub para uma peça privada de fan-out, sem alterar a semântica de subscriber, fila, `seq` ou cleanup.
-- [ ] Expor `subscribe()` e snapshot pelo serviço realtime; remover do controller SSE a dependência direta do fan-out.
-- [ ] Fazer o controller escrever snapshot antes de ativar o recebimento de mensagens concorrentes e manter tratamento de close/error/backpressure.
-- [ ] Manter uma conexão Crashsim upstream por processo, sincronização HTTP por `GET /rounds/current`, buffer durante snapshot, backoff e comportamento stale/connected.
-- [ ] Adaptar testes do reducer, stream, fan-out, controller SSE e composição.
+- [x] Agrupar estado/reducer, stream coordinator, fan-out e tipos realtime sob `modules/game/realtime/`.
+- [x] Renomear o EventHub para uma peça privada de fan-out, sem alterar a semântica de subscriber, fila, `seq` ou cleanup.
+- [x] Expor `subscribe()` e snapshot pelo serviço realtime; remover do controller SSE a dependência direta do fan-out.
+- [x] Fazer o controller escrever snapshot antes de ativar o recebimento de mensagens concorrentes e manter tratamento de close/error/backpressure.
+- [x] Manter uma conexão Crashsim upstream por processo, sincronização HTTP por `GET /rounds/current`, buffer durante snapshot, backoff e comportamento stale/connected.
+- [x] Adaptar testes do reducer, stream, fan-out, controller SSE e composição.
 
 ### Critérios de aceite
 
-- [ ] O controller SSE não importa `event-fanout` e só conhece contrato de subscription, mensagens e logger.
-- [ ] Snapshot é capturado sincronamente; eventos concorrentes são enfileirados e entregues após o snapshot, sem gap nem evento antigo.
-- [ ] Disconnect, sequence gap, stale tick após crash, reconnect, ausência de replay e health mantêm o comportamento atual.
-- [ ] Múltiplas conexões SSE compartilham um único upstream; encerrar um subscriber não afeta os demais.
+- [x] O controller SSE não importa `event-fanout` e só conhece contrato de subscription, mensagens e logger.
+- [x] Snapshot é capturado sincronamente; eventos concorrentes são enfileirados e entregues após o snapshot, sem gap nem evento antigo.
+- [x] Disconnect, sequence gap, stale tick após crash, reconnect, ausência de replay e health mantêm o comportamento atual.
+- [x] Múltiplas conexões SSE compartilham um único upstream; encerrar um subscriber não afeta os demais.
 
 ### Arquivos prováveis
 
@@ -234,9 +234,9 @@ T2 é independente das demais até a integração final. As outras tarefas têm 
 
 ### Verificação
 
-- [ ] `cd operator && bun run typecheck`
-- [ ] `cd operator && bun test src/modules/game`
-- [ ] Cobrir snapshot-first com publicação concorrente, seq antiga/gap, tick após crash, reconnect e unsubscribe/backpressure.
+- [x] `cd operator && bun run typecheck` — exit code 0.
+- [x] `cd operator && bun test src/modules/game` — 41 testes passaram, 2 testes de integração foram ignorados por falta de `TEST_DATABASE_URL`; 180 expectativas passaram.
+- [x] Cobrir snapshot-first com publicação concorrente, seq antiga/gap, tick após crash, reconnect e unsubscribe/backpressure.
 
 ## Task T6: Extrair sessão, aposta e cashout do Game
 

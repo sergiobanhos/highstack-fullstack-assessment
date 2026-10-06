@@ -1,8 +1,8 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import * as v from 'valibot';
-import type { Logger } from '../../config';
-import { UnauthenticatedError, type AuthModule, type AuthenticatedPlayer } from '../auth/auth.module';
-import { GameCommandError, type BetCommandResult, type GameCommandService } from './game-command.service';
+import type { Logger } from '../../../config';
+import { UnauthenticatedError, type AuthModule, type AuthenticatedPlayer } from '../../auth/auth.module';
+import { GameCommandError, type BetCommandResult, type GameCommandService } from '../game-command.service';
 
 const MAX_COMMAND_BODY_BYTES = 16 * 1024;
 const MAX_BET_CENTS = 1_000_000_000;

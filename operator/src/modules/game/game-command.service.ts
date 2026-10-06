@@ -10,7 +10,7 @@ import {
   type CrashsimBet,
 } from '../../integrations/crashsim/http.client';
 import { gameBets, gameCommands, type GameCommandStatus, type GameEngineBetStatus, type GameSettlementStatus } from './game.schema';
-import type { GameStreamService } from './game-stream.service';
+import type { GameStreamService } from './realtime/stream.service';
 
 const MAX_BET_CENTS = 1_000_000_000;
 const MIN_AUTO_CASHOUT_HUNDREDTHS = 101;

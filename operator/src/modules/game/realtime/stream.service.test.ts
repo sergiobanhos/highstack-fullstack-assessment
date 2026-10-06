@@ -1,10 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { createLogger, createRedactor, loadConfig, type LoggerSink } from '../../config';
-import { GameEventHub } from './game-event-hub';
-import type { GameStreamService } from './game-stream.service';
-import { createGameStreamService } from './game-stream.service';
+import { createLogger, createRedactor, loadConfig, type LoggerSink } from '../../../config';
+import type { GameStreamService } from './stream.service';
+import { createGameStreamService } from './stream.service';
 import type { ConnectionState, GameEvent, OperatorMessage, OperatorSnapshot } from './round-state';
-import type { Scheduler, TimerHandle, UpstreamSocket, UpstreamSocketCloseInfo } from '../../integrations/crashsim/stream.client';
+import type { Scheduler, TimerHandle, UpstreamSocket, UpstreamSocketCloseInfo } from '../../../integrations/crashsim/stream.client';
 
 const OPERATOR_KEY = 'test-operator-key';
 const STREAM_URL = 'ws://engine:4000/stream';
@@ -78,7 +77,6 @@ class ManualScheduler implements Scheduler {
 }
 
 interface Harness {
-  hub: GameEventHub;
   service: GameStreamService;
   sockets: FakeSocket[];
   socketUrls: string[];
@@ -120,23 +118,7 @@ function createHarness(
   let fetchCount = 0;
   const crashReconciliations: string[] = [];
   const snapshotReconciliations: string[] = [];
-  const hub = new GameEventHub();
   const messages: OperatorMessage[] = [];
-  const collector = hub.subscribeWithSnapshot(() => ({
-    state: {
-      roundId: null,
-      state: null,
-      seq: -1,
-      serverSeedHash: null,
-      bettingEndsAt: null,
-      startedAt: null,
-      multiplier: null,
-      crashPoint: null,
-      serverSeed: null,
-    },
-    connection: 'reconnecting',
-  }));
-  collector.activate((message) => messages.push(message));
 
   const service = createGameStreamService({
     config: loadConfig({
@@ -147,7 +129,6 @@ function createHarness(
       ENGINE_STREAM_URL: STREAM_URL,
     }),
     logger,
-    hub,
     onRoundCrashed: async (roundId) => {
       crashReconciliations.push(roundId);
       await callbacks.onRoundCrashed?.(roundId);
@@ -176,9 +157,10 @@ function createHarness(
       return socket;
     },
   });
+  const collector = service.subscribe();
+  collector.activate((message) => messages.push(message));
 
   return {
-    hub,
     service,
     sockets,
     socketUrls,
@@ -384,14 +366,20 @@ describe('Crashsim stream service', () => {
     expect(joined).toContain('engine stream transport error');
   });
 
-  test('does not open an additional upstream socket for downstream clients', () => {
+  test('shares one upstream socket across downstream subscriptions', async () => {
     const harness = createHarness();
     harness.service.start();
+    const downstream: OperatorMessage[][] = [];
     for (let index = 0; index < 3; index += 1) {
-      const subscription = harness.hub.subscribeWithSnapshot(() => harness.service.getSnapshot());
-      subscription.activate(() => {});
+      const messages: OperatorMessage[] = [];
+      const subscription = harness.service.subscribe();
+      subscription.activate((message) => messages.push(message));
+      downstream.push(messages);
     }
-    expect(harness.hub.subscriberCount).toBe(4);
+    harness.sockets[0]!.emitOpen();
+    await flush();
+    harness.sockets[0]!.emitMessage(tick(6, 1.3));
+    expect(downstream.every((messages) => messages.some((message) => message.kind === 'game-event' && message.seq === 6))).toBe(true);
     expect(harness.sockets).toHaveLength(1);
   });
 

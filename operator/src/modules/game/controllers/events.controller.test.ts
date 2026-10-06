@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import Fastify, { type FastifyInstance } from 'fastify';
-import { createLogger, createRedactor, type LoggerSink } from '../../config';
-import { GameEventHub } from './game-event-hub';
+import { EventEmitter } from 'node:events';
+import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
+import { createLogger, createRedactor, type LoggerSink } from '../../../config';
+import { GameEventFanout } from '../realtime/event-fanout';
 import {
   applySnapshot,
   type GameEvent,
@@ -9,9 +10,9 @@ import {
   type OperatorMessage,
   type OperatorSnapshot,
   type RoundState,
-} from './round-state';
-import type { GameStreamService } from './game-stream.service';
-import { GAME_EVENTS_ROUTE, registerGameEventsRoute } from './game-events.controller';
+} from '../realtime/round-state';
+import type { GameEventSubscription } from '../realtime/contracts';
+import { GAME_EVENTS_ROUTE, handleGameEvents, registerGameEventsRoute } from './events.controller';
 
 const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -47,14 +48,13 @@ const tickEvent = (seq: number, multiplier: number): GameEvent => ({
 const makeRuntime = (
   state: RoundState,
   connection: ConnectionState,
+  hub: GameEventFanout,
   onSnapshot?: () => void,
-): GameStreamService => ({
-  start: () => {},
-  stop: async () => {},
-  getSnapshot: (): OperatorSnapshot => {
-    onSnapshot?.();
-    return { state, connection };
-  },
+): { subscribe(): GameEventSubscription } => ({
+  subscribe: () => hub.subscribeWithSnapshot((): OperatorSnapshot => {
+      onSnapshot?.();
+      return { state, connection };
+    }),
 });
 
 const captureLogger = () => {
@@ -124,8 +124,7 @@ interface TestServer {
 }
 
 const startServer = async (deps: {
-  hub: GameEventHub;
-  stream: GameStreamService;
+  stream: { subscribe(): GameEventSubscription };
   logger: ReturnType<typeof captureLogger>['logger'];
 }): Promise<TestServer> => {
   const app = Fastify({ logger: false });
@@ -147,11 +146,10 @@ describe('crashsim SSE endpoint', () => {
   });
 
   test('writes the captured snapshot first, then live events', async () => {
-    const hub = new GameEventHub();
+    const hub = new GameEventFanout();
     const { logger } = captureLogger();
     const { app, url } = await startServer({
-      hub,
-      stream: makeRuntime(buildState(), 'connected'),
+      stream: makeRuntime(buildState(), 'connected', hub),
       logger,
     });
 
@@ -182,11 +180,11 @@ describe('crashsim SSE endpoint', () => {
   });
 
   test('keeps an event published during subscription, after the snapshot, and drops stale ones', async () => {
-    const hub = new GameEventHub();
+    const hub = new GameEventFanout();
     const { logger } = captureLogger();
 
     let publishedDuringCapture = false;
-    const runtime = makeRuntime(buildState(), 'connected', () => {
+    const runtime = makeRuntime(buildState(), 'connected', hub, () => {
       if (publishedDuringCapture) return;
       publishedDuringCapture = true;
       // Simulates an engine event landing while the snapshot is captured.
@@ -194,7 +192,7 @@ describe('crashsim SSE endpoint', () => {
       hub.publish({ kind: 'game-event', seq: 6, event: tickEvent(6, 1.3) });
     });
 
-    const { app, url } = await startServer({ hub, stream: runtime, logger });
+    const { app, url } = await startServer({ stream: runtime, logger });
     const controller = new AbortController();
     const response = await fetch(url, { signal: controller.signal });
     const reader = new SseReader(response);
@@ -218,11 +216,10 @@ describe('crashsim SSE endpoint', () => {
   });
 
   test('publishes upstream connection health', async () => {
-    const hub = new GameEventHub();
+    const hub = new GameEventFanout();
     const { logger } = captureLogger();
     const { app, url } = await startServer({
-      hub,
-      stream: makeRuntime(buildState(), 'connected'),
+      stream: makeRuntime(buildState(), 'connected', hub),
       logger,
     });
 
@@ -242,11 +239,10 @@ describe('crashsim SSE endpoint', () => {
   });
 
   test('removes only the disconnected client and keeps the others streaming', async () => {
-    const hub = new GameEventHub();
+    const hub = new GameEventFanout();
     const { logger } = captureLogger();
     const { app, url } = await startServer({
-      hub,
-      stream: makeRuntime(buildState(), 'connected'),
+      stream: makeRuntime(buildState(), 'connected', hub),
       logger,
     });
 
@@ -270,5 +266,43 @@ describe('crashsim SSE endpoint', () => {
     await waitFor(() => hub.subscriberCount === 0);
     expect(logger).toBeDefined();
     await stopServer(app);
+  });
+
+  test('unsubscribes and closes the response when the snapshot write is backpressured', () => {
+    const { logger } = captureLogger();
+    const raw = Object.assign(new EventEmitter(), {
+      destroyed: false,
+      wroteHead: false,
+      ended: false,
+      writeHead() { this.wroteHead = true; },
+      write() { return false; },
+      end() { this.ended = true; },
+      destroy() { this.destroyed = true; },
+    });
+    const requestRaw = new EventEmitter();
+    const reply = {
+      raw,
+      request: { raw: requestRaw },
+      hijack() {},
+    } as unknown as FastifyReply;
+    let activated = false;
+    let unsubscribed = false;
+
+    handleGameEvents(reply, {
+      stream: {
+        subscribe: () => ({
+          snapshot: { state: buildState(), connection: 'connected' },
+          seq: 5,
+          activate: () => { activated = true; },
+          unsubscribe: () => { unsubscribed = true; },
+        }),
+      },
+      logger,
+    });
+
+    expect(raw.wroteHead).toBe(true);
+    expect(raw.ended).toBe(true);
+    expect(activated).toBe(false);
+    expect(unsubscribed).toBe(true);
   });
 });

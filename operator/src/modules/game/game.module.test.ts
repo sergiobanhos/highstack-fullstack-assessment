@@ -5,7 +5,7 @@ import type { OperatorDatabase } from '../../db';
 import { UnauthenticatedError, type AuthModule } from '../auth/auth.module';
 import type { FinancialModule } from '../financial/financial.module';
 import { createGameModule } from './game.module';
-import { GAME_EVENTS_ROUTE } from './game-events.controller';
+import { GAME_EVENTS_ROUTE } from './controllers/events.controller';
 import type { UpstreamSocket } from '../../integrations/crashsim/stream.client';
 
 class InertSocket implements UpstreamSocket {

@@ -4,12 +4,11 @@ import type { OperatorDatabase } from '../../db';
 import type { AuthModule } from '../auth/auth.module';
 import type { FinancialModule } from '../financial/financial.module';
 import { CrashsimHttpClient } from '../../integrations/crashsim/http.client';
-import { registerGameCommandsController } from './game-commands.controller';
+import { registerGameCommandsController } from './controllers/commands.controller';
 import type { BackoffOptions, Scheduler, UpstreamSocketFactory } from '../../integrations/crashsim/stream.client';
 import { createGameCommandService, type GameCommandService, type RecordCashoutCreditInput } from './game-command.service';
-import { GameEventHub } from './game-event-hub';
-import { registerGameEventsRoute } from './game-events.controller';
-import { createGameStreamService } from './game-stream.service';
+import { registerGameEventsRoute } from './controllers/events.controller';
+import { createGameStreamService } from './realtime/stream.service';
 
 export interface GameModuleDeps {
   app: FastifyInstance;
@@ -41,11 +40,9 @@ export interface GameModule {
 
 /** Wires the Crashsim stream, authenticated commands, and downstream SSE route. */
 export function createGameModule({ app, db, auth, financial, ...deps }: GameModuleDeps): GameModule {
-  const hub = new GameEventHub();
   let commands: GameCommandService | null = null;
   const stream = createGameStreamService({
     ...deps,
-    hub,
     onRoundCrashed: (roundId) => commands?.reconcileBetsForRound(roundId) ?? Promise.resolve(),
     onSnapshotSynchronized: ({ state }) => {
       if (!state.roundId || !state.state) return Promise.resolve();
@@ -69,7 +66,7 @@ export function createGameModule({ app, db, auth, financial, ...deps }: GameModu
   });
   commands = commandService;
   registerGameCommandsController({ app, service: commandService, requireUser: auth.requireUser, logger: deps.logger });
-  registerGameEventsRoute(app, { hub, stream, logger: deps.logger });
+  registerGameEventsRoute(app, { stream, logger: deps.logger });
 
   return {
     start: () => stream.start(),

@@ -1,7 +1,8 @@
-import type { Logger, OperatorConfig } from '../../config';
-import { CrashsimHttpClient } from '../../integrations/crashsim/http.client';
-import { CrashsimStreamClient } from '../../integrations/crashsim/stream.client';
-import type { GameEventHub } from './game-event-hub';
+import type { Logger, OperatorConfig } from '../../../config';
+import { CrashsimHttpClient } from '../../../integrations/crashsim/http.client';
+import { CrashsimStreamClient } from '../../../integrations/crashsim/stream.client';
+import { GameEventFanout } from './event-fanout';
+import type { GameEventSubscription } from './contracts';
 import {
   backoffDelay,
   type BackoffOptions,
@@ -9,7 +10,7 @@ import {
   type TimerHandle,
   realScheduler,
   type UpstreamSocketFactory,
-} from '../../integrations/crashsim/stream.client';
+} from '../../../integrations/crashsim/stream.client';
 import { toGameEvent, toRoundSnapshot } from './crashsim-event.mapper';
 import {
   applyEvent,
@@ -26,12 +27,12 @@ export interface GameStreamService {
   start(): void;
   stop(): Promise<void>;
   getSnapshot(): OperatorSnapshot;
+  subscribe(): GameEventSubscription;
 }
 
 export interface GameStreamServiceDeps {
   config: OperatorConfig;
   logger: Logger;
-  hub: GameEventHub;
   socketFactory?: UpstreamSocketFactory;
   scheduler?: Scheduler;
   random?: () => number;
@@ -54,7 +55,8 @@ type IngestOutcome = 'applied' | 'ignored' | 'gap';
 
 /** Owns the one Crashsim stream, current round, snapshot resync, and publication. */
 export function createGameStreamService(deps: GameStreamServiceDeps): GameStreamService {
-  const { config, logger, hub } = deps;
+  const { config, logger } = deps;
+  const fanout = new GameEventFanout();
   const scheduler = deps.scheduler ?? realScheduler;
   const random = deps.random ?? Math.random;
   const resyncBackoff: BackoffOptions = { ...DEFAULT_RESYNC_BACKOFF, ...deps.resyncBackoff };
@@ -87,7 +89,7 @@ export function createGameStreamService(deps: GameStreamServiceDeps): GameStream
   const setConnection = (next: ConnectionState): void => {
     if (connection === next) return;
     connection = next;
-    hub.publish({ kind: 'connection', connection: next });
+    fanout.publish({ kind: 'connection', connection: next });
   };
 
   const clearResyncTimer = (): void => {
@@ -105,7 +107,7 @@ export function createGameStreamService(deps: GameStreamServiceDeps): GameStream
 
     state = next;
     const message: OperatorMessage = { kind: 'game-event', seq: event.seq, event };
-    hub.publish(message);
+    fanout.publish(message);
     if (event.type === 'round.crashed') {
       notifyReconciliation('round.crash_reconciliation_failed', () => deps.onRoundCrashed?.(event.roundId));
     }
@@ -171,7 +173,7 @@ export function createGameStreamService(deps: GameStreamServiceDeps): GameStream
       bufferedEvents: buffered.length,
     });
 
-    hub.publish({ kind: 'snapshot', seq: state.seq, state, connection });
+    fanout.publish({ kind: 'snapshot', seq: state.seq, state, connection });
     notifyReconciliation('snapshot.bet_reconciliation_failed', () =>
       deps.onSnapshotSynchronized?.({ state, connection }));
 
@@ -244,5 +246,11 @@ export function createGameStreamService(deps: GameStreamServiceDeps): GameStream
     stream.close();
   };
 
-  return { start, stop, getSnapshot: () => ({ state, connection }) };
+  const getSnapshot = (): OperatorSnapshot => ({ state, connection });
+  return {
+    start,
+    stop,
+    getSnapshot,
+    subscribe: () => fanout.subscribeWithSnapshot(getSnapshot),
+  };
 }

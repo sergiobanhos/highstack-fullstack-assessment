@@ -10,7 +10,7 @@ import { CrashsimHttpError } from '../../integrations/crashsim/http.client';
 import { gameBets, gameCommands } from './game.schema';
 import { createGameCommandService } from './game-command.service';
 import type { Logger } from '../../config';
-import type { OperatorSnapshot } from './round-state';
+import type { OperatorSnapshot } from './realtime/round-state';
 import { financialOperations, walletLedgerEntries, wallets } from '../financial/financial.schema';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;

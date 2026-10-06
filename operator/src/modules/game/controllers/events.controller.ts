@@ -1,15 +1,17 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import type { Logger } from '../../config';
-import { GameEventHub } from './game-event-hub';
-import type { GameStreamService } from './game-stream.service';
-import type { OperatorMessage } from './round-state';
+import type { Logger } from '../../../config';
+import type { GameEventSubscription } from '../realtime/contracts';
+import type { OperatorMessage } from '../realtime/round-state';
 
 export const GAME_EVENTS_ROUTE = '/game/events';
 
 export interface GameEventsControllerDeps {
-  hub: GameEventHub;
-  stream: GameStreamService;
+  stream: Pick<GameStreamService, 'subscribe'>;
   logger: Logger;
+}
+
+interface GameStreamService {
+  subscribe(): GameEventSubscription;
 }
 
 const SSE_HEADERS: Record<string, string> = {
@@ -27,9 +29,9 @@ export function registerGameEventsRoute(app: FastifyInstance, deps: GameEventsCo
   app.get(GAME_EVENTS_ROUTE, (_request, reply) => handleGameEvents(reply, deps));
 }
 
-/** Thin SSE boundary: capture the state synchronously, then stream hub messages. */
-export function handleGameEvents(reply: FastifyReply, { hub, stream, logger }: GameEventsControllerDeps): void {
-  const subscription = hub.subscribeWithSnapshot(() => stream.getSnapshot());
+/** Thin SSE boundary: write the synchronously captured snapshot, then activate messages. */
+export function handleGameEvents(reply: FastifyReply, { stream, logger }: GameEventsControllerDeps): void {
+  const subscription = stream.subscribe();
   const response = reply.raw;
   let closed = false;
 
@@ -37,7 +39,7 @@ export function handleGameEvents(reply: FastifyReply, { hub, stream, logger }: G
     if (closed) return;
     closed = true;
     subscription.unsubscribe();
-    logger.debug('game SSE client disconnected', { subscribers: hub.subscriberCount });
+    logger.debug('game SSE client disconnected');
   };
 
   const write = (event: string, data: unknown): boolean => {
@@ -66,7 +68,7 @@ export function handleGameEvents(reply: FastifyReply, { hub, stream, logger }: G
   response.once('close', cleanup);
   response.once('error', cleanup);
   reply.request.raw.once('close', cleanup);
-  logger.debug('game SSE client connected', { subscribers: hub.subscriberCount });
+  logger.debug('game SSE client connected');
 
   const snapshotMessage: OperatorMessage = {
     kind: 'snapshot',

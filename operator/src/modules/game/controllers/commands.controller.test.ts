@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import Fastify from 'fastify';
-import type { Logger } from '../../config';
-import { UnauthenticatedError, type AuthModule, type AuthenticatedPlayer } from '../auth/auth.module';
-import { registerGameCommandsController } from './game-commands.controller';
+import type { Logger } from '../../../config';
+import { UnauthenticatedError, type AuthModule, type AuthenticatedPlayer } from '../../auth/auth.module';
+import { registerGameCommandsController } from './commands.controller';
 import {
   GameCommandError,
   type BetCommandResult,
   type GameCommandService,
-} from './game-command.service';
+} from '../game-command.service';
 
 const player: AuthenticatedPlayer = {
   id: '0e3c026b-2b1b-4229-96c8-10cd01cdf35a',
