@@ -1,7 +1,7 @@
 import { TextInput } from '@mantine/core';
-import type { ComponentProps } from 'react';
+import type { TextInputProps } from '@mantine/core';
 
-type AmountFieldProps = ComponentProps<typeof TextInput>;
+type AmountFieldProps = TextInputProps;
 
 export function AmountField({ inputMode = 'decimal', leftSection = '$', ...props }: AmountFieldProps): React.JSX.Element {
   return <TextInput {...props} inputMode={inputMode} leftSection={leftSection} />;

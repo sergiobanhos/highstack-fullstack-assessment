@@ -1,0 +1,74 @@
+.hs-wallet-page { --wallet-accent: #00e6b2; --wallet-border: rgb(132 174 159 / 18%); }
+.hs-wallet-heading { padding: 0.25rem 0 0.15rem; }
+.hs-wallet-heading h1 { font-size: clamp(2rem, 4vw, 3rem); letter-spacing: -0.055em; }
+.hs-wallet-balance {
+  border-color: rgb(0 230 178 / 24%) !important;
+  background:
+    linear-gradient(105deg, rgb(0 52 39 / 88%), rgb(3 27 22 / 89%)),
+    url('/assets/highstack-background.png') center / cover !important;
+}
+.hs-wallet-balance__inner { min-height: 132px; }
+.hs-wallet-balance__label { color: #b1c4be; font-size: 0.98rem; font-weight: 600; }
+.hs-wallet-balance__label span { margin-left: 0.3rem; color: #91aaa1; }
+.hs-wallet-balance__amount { margin: 0.2rem 0 0.45rem; font-size: clamp(2.25rem, 5vw, 3.6rem); font-variant-numeric: tabular-nums; letter-spacing: -0.065em; line-height: 1.08; }
+.hs-wallet-balance__tag { display: inline-flex; padding: 0.18rem 0.65rem; border-radius: 999px; background: rgb(0 230 178 / 12%); color: #a7f5df; font-size: 0.74rem; font-weight: 650; }
+.hs-wallet-balance__notice { display: flex; max-width: 440px; align-items: flex-start; gap: 0.85rem; padding: 0.8rem 0 0.8rem 1.5rem; border-left: 1px solid var(--wallet-border); color: var(--wallet-accent); }
+.hs-wallet-balance__notice .mantine-Text-root + .mantine-Text-root { max-width: 310px; color: #adbfba; line-height: 1.45; }
+.hs-wallet-balance__notice-icon { display: grid; width: 27px; height: 27px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: var(--wallet-accent); color: #04201a; font-weight: 800; }
+.hs-wallet-balance__refresh { margin-left: auto; color: #a6c0b7; }
+
+.hs-wallet-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.hs-wallet-action {
+  width: 100%; min-height: 112px; padding: 1rem 1.25rem; color: var(--hs-text); cursor: pointer; text-align: left;
+  transition: border-color 150ms ease, background-color 150ms ease, transform 150ms ease;
+}
+.hs-wallet-action:hover { transform: translateY(-1px); border-color: rgb(0 230 178 / 42%) !important; background-color: rgb(0 230 178 / 4%) !important; }
+.hs-wallet-action--primary { border-color: var(--wallet-accent) !important; background: linear-gradient(110deg, rgb(0 52 39 / 78%), rgb(6 25 21 / 88%)) !important; }
+.hs-wallet-action__icon { flex: 0 0 auto; border: 1px solid var(--wallet-border); background: rgb(255 255 255 / 5%); color: #e5f4ef; font-size: 1.7rem; }
+.hs-wallet-action__icon--primary { border: 0; background: var(--wallet-accent); color: #04221b; font-size: 2.2rem; box-shadow: 0 0 26px rgb(0 230 178 / 24%); }
+.hs-wallet-action__arrow { margin-left: auto; color: var(--wallet-accent); font-size: 2rem; line-height: 1; }
+.hs-wallet-action .mantine-Text-root:first-child { font-size: 1.02rem; }
+.hs-wallet-action .mantine-Text-root + .mantine-Text-root { max-width: 280px; line-height: 1.42; }
+
+.hs-wallet-tabs .mantine-Tabs-list { border-color: var(--wallet-border); }
+.hs-wallet-tabs .mantine-Tabs-tab { min-height: 48px; padding-inline: 1.2rem; color: #a7bcb4; font-weight: 650; }
+.hs-wallet-tabs .mantine-Tabs-tab[data-active] { border-color: var(--wallet-accent); color: #ecfff9; }
+.hs-wallet-tabs .mantine-Tabs-panel { min-width: 0; }
+.hs-wallet-history { border-color: var(--wallet-border) !important; background: linear-gradient(150deg, rgb(9 27 22 / 96%), rgb(5 18 15 / 96%)) !important; }
+.hs-wallet-history__scroll { width: 100%; overflow-x: auto; scrollbar-color: #28463d transparent; }
+.hs-wallet-history table { min-width: 650px; border-spacing: 0; }
+.hs-wallet-tabs thead th { border-bottom-color: var(--wallet-border); color: #92a9a1; font-size: 0.68rem; letter-spacing: 0.075em; text-transform: uppercase; }
+.hs-wallet-tabs tbody td { border-bottom-color: rgb(132 174 159 / 8%); color: #cedbd6; font-size: 0.8rem; }
+
+.hs-wallet-modal .mantine-Modal-content { border-color: rgb(0 230 178 / 43%); }
+.hs-wallet-modal__intro { display: flex; align-items: center; gap: 1rem; padding: 0.3rem 0 0.6rem; }
+.hs-wallet-modal__icon { display: grid; width: 58px; height: 58px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: var(--wallet-accent); color: #05231c; font-size: 2.3rem; font-weight: 500; }
+.hs-wallet-modal__icon--neutral { border-radius: 1rem; background: rgb(255 255 255 / 8%); color: #ebf5f1; }
+.hs-wallet-modal__simulation { border: 1px solid rgb(0 230 178 / 22%); background: rgb(0 230 178 / 5%); }
+.hs-wallet-modal__simulation .mantine-Alert-icon { color: var(--wallet-accent); }
+.hs-wallet-modal__simulation .mantine-Alert-message { color: #c3d5ce; }
+.hs-wallet-modal__simulation .mantine-Text-root:first-child { color: #65f5d0; }
+.hs-wallet-modal__amount input { min-height: 58px; border-color: rgb(0 230 178 / 54%); background: rgb(3 16 13 / 83%); font-size: 1.45rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.hs-wallet-modal__amount label { margin-bottom: 0.45rem; color: #d2e1db; font-weight: 650; }
+.hs-wallet-modal__presets button { min-height: 42px; border: 1px solid var(--wallet-border); border-radius: 0.55rem; background: rgb(255 255 255 / 3%); color: #e0ebe6; cursor: pointer; font-size: 0.83rem; font-weight: 600; }
+.hs-wallet-modal__presets button:hover:not(:disabled) { border-color: var(--wallet-accent); background: rgb(0 230 178 / 8%); }
+.hs-wallet-modal__presets button:disabled { cursor: not-allowed; opacity: 0.5; }
+.hs-wallet-result { display: flex; flex-direction: column; align-items: center; gap: 0.9rem; padding: 0.8rem 0 0.15rem; text-align: center; }
+.hs-wallet-result__icon { display: grid; width: 66px; height: 66px; place-items: center; border: 1px solid currentColor; border-radius: 50%; }
+.hs-wallet-result__icon--success { color: var(--wallet-accent); background: rgb(0 230 178 / 8%); }
+.hs-wallet-result__icon--pending { color: #efc56f; background: rgb(239 197 111 / 8%); }
+.hs-wallet-result__amount { font-size: 2rem; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+.hs-wallet-result__note { max-width: 340px; color: #93aaa1; line-height: 1.5; }
+
+@media (max-width: 48em) {
+  .hs-wallet-actions { grid-template-columns: minmax(0, 1fr); gap: 0.7rem; }
+  .hs-wallet-action { min-height: 94px; padding: 0.75rem; }
+  .hs-wallet-action__icon { width: 52px !important; height: 52px !important; }
+  .hs-wallet-balance__notice { max-width: none; padding: 0.8rem 0 0; border: 0; }
+}
+
+@media (max-width: 30em) {
+  .hs-wallet-modal .mantine-Modal-body { padding-inline: 1rem; }
+  .hs-wallet-modal__presets { flex-wrap: wrap; }
+  .hs-wallet-modal__presets button { min-height: 46px; flex: 1 1 calc(50% - 0.5rem); }
+}

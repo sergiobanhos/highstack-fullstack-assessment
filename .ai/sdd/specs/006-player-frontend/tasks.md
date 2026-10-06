@@ -349,17 +349,17 @@ As tarefas a seguir completam visualmente o F06 com base nas telas unitárias em
 
 ### Trabalho
 
-- [ ] Criar tokens semânticos HighStack de cor, tipografia, spacing, radius, elevação e z-index; configurar MantineProvider em dark mode usando o tema e as escalas compartilhadas.
-- [ ] Importar logo e background oficiais em `client/public/assets`; aplicar fundo decorativo sem afetar contraste, foco, legibilidade ou CLS.
-- [ ] Criar primitives acessíveis `BrandLogo`, `Surface`, `ActionButton`, `StatusBadge`, `AmountField` e `AppModal` em `client/src/components/ui/`.
-- [ ] Adicionar foco visível, reduced motion e classes/layout responsivos comuns; não adicionar uma segunda biblioteca de componentes.
+- [x] Criar tokens semânticos HighStack de cor, tipografia, spacing, radius, elevação e z-index; configurar MantineProvider em dark mode usando o tema e as escalas compartilhadas.
+- [x] Importar logo e background oficiais em `client/public/assets`; aplicar fundo decorativo sem afetar contraste, foco, legibilidade ou CLS.
+- [x] Criar primitives acessíveis `BrandLogo`, `Surface`, `ActionButton`, `StatusBadge`, `AmountField` e `AppModal` em `client/src/components/ui/`.
+- [x] Adicionar foco visível, reduced motion e classes/layout responsivos comuns; não adicionar uma segunda biblioteca de componentes.
 
 ### Critérios de aceitação
 
-- [ ] As primitives usam tokens e não conhecem API, React Query, auth, wallet ou game.
-- [ ] Há um só tema escuro coerente com grafite/verde e acentos emerald/turquoise; controles têm estados hover/focus/pressed/disabled/loading.
-- [ ] Logo mantém proporção; background é decorativo e não contém conteúdo de interface.
-- [ ] Foco por teclado, contraste, target mínimo de 44px e `prefers-reduced-motion` são cobertos pelos padrões compartilhados.
+- [x] As primitives usam tokens e não conhecem API, React Query, auth, wallet ou game.
+- [x] Há um só tema escuro coerente com grafite/verde e acentos emerald/turquoise; controles têm estados hover/focus/pressed/disabled/loading.
+- [x] Logo mantém proporção; background é decorativo e não contém conteúdo de interface.
+- [x] Foco por teclado, contraste, target mínimo de 44px e `prefers-reduced-motion` são cobertos pelos padrões compartilhados.
 
 ### Arquivos
 
@@ -370,7 +370,7 @@ As tarefas a seguir completam visualmente o F06 com base nas telas unitárias em
 
 ### Verificação
 
-- [ ] `cd client && bun run typecheck && bun run build`.
+- [x] `cd client && bun run typecheck && bun run build`.
 - [ ] Revisar foco, contraste, reduced motion e tokens no auth e no shell em 360px, tablet e desktop.
 
 ## T9 — Aplicar identidade à autenticação e ao shell
@@ -382,15 +382,15 @@ As tarefas a seguir completam visualmente o F06 com base nas telas unitárias em
 
 ### Trabalho
 
-- [ ] Recriar login/cadastro conforme os PNGs unitários usando logo real, fundo, card, campos e botões compartilhados.
-- [ ] Reestilizar `PlayerShell` com navegação responsiva Jogo/Carteira, saldo e sessão sem alterar logout/reidratação.
-- [ ] Manter todos os erros, validações, loading e limites locais já existentes e traduzir os estados para o sistema visual.
+- [x] Recriar login/cadastro conforme os PNGs unitários usando logo real, fundo, card, campos e botões compartilhados.
+- [x] Reestilizar `PlayerShell` com navegação responsiva Jogo/Carteira, saldo e sessão sem alterar logout/reidratação.
+- [x] Manter todos os erros, validações, loading e limites locais já existentes e traduzir os estados para o sistema visual.
 
 ### Critérios de aceitação
 
-- [ ] Login e cadastro refletem suas referências individuais e preservam o mínimo de senha/validações reais.
-- [ ] Header usa o asset oficial; navegação e saldo permanecem acessíveis em mobile/desktop.
-- [ ] A autenticação e logout continuam usando os hooks e o contrato atual sem lógica financeira/HTTP nos componentes.
+- [x] Login e cadastro refletem suas referências individuais e preservam o mínimo de senha/validações reais.
+- [x] Header usa o asset oficial; navegação e saldo permanecem acessíveis em mobile/desktop.
+- [x] A autenticação e logout continuam usando os hooks e o contrato atual sem lógica financeira/HTTP nos componentes.
 
 ### Arquivos
 
@@ -400,7 +400,7 @@ As tarefas a seguir completam visualmente o F06 com base nas telas unitárias em
 
 ### Verificação
 
-- [ ] `cd client && bun run typecheck && bun run build`.
+- [x] `cd client && bun run typecheck && bun run build`.
 - [ ] Revisar auth e shell contra PNGs, erros/loading, keyboard, 360px e desktop.
 
 ## T10 — Aplicar identidade e estados ao jogo
@@ -412,17 +412,17 @@ As tarefas a seguir completam visualmente o F06 com base nas telas unitárias em
 
 ### Trabalho
 
-- [ ] Organizar rodada/gráfico, controles e bets próprias com layout responsivo; desenhar série SVG somente com ticks reais recebidos no buffer da rodada.
-- [ ] Reestilizar estado betting, running, crashed, cashout confirmado, cashout pendente/desconhecido e reconectando conforme suas imagens unitárias.
-- [ ] Apresentar cashout concluído e resultado ambíguo em modal; stale mostra dado congelado e mantém comandos desabilitados até snapshot sincronizado.
-- [ ] Reestilizar prova da rodada e diagnóstico recolhidos sem ampliar dados exibidos nem remover as proteções atuais.
+- [x] Organizar rodada/gráfico, controles e bets próprias com layout responsivo; desenhar série SVG somente com ticks reais recebidos no buffer da rodada.
+- [x] Reestilizar estado betting, running, crashed, cashout confirmado, cashout pendente/desconhecido e reconectando conforme suas imagens unitárias.
+- [x] Apresentar cashout concluído e resultado ambíguo em modal; stale mostra dado congelado e mantém comandos desabilitados até snapshot sincronizado.
+- [x] Reestilizar prova da rodada e diagnóstico recolhidos sem ampliar dados exibidos nem remover as proteções atuais.
 
 ### Critérios de aceitação
 
-- [ ] Cada estado da referência de jogo tem a apresentação correspondente sem simular ticks, jogadores, bets ou settlement.
-- [ ] Muliplier e crash continuam derivados do estado autoritativo; tick tardio pós-crash continua sem reabrir a rodada.
-- [ ] Cashout confirmado separado de settlement pendente; resultado desconhecido só oferece consulta existente, nunca novo POST/chave.
-- [ ] Bet/cashout permanecem bloqueados enquanto stale/desconectado ou incompatível; estado final permanece legível em 360px.
+- [x] Cada estado da referência de jogo tem a apresentação correspondente sem simular ticks, jogadores, bets ou settlement.
+- [x] Multiplier e crash continuam derivados do estado autoritativo; tick tardio pós-crash continua sem reabrir a rodada.
+- [x] Cashout confirmado separado de settlement pendente; resultado desconhecido só oferece consulta existente, nunca novo POST/chave.
+- [x] Bet/cashout permanecem bloqueados enquanto stale/desconectado ou incompatível; estado final permanece legível em 360px.
 
 ### Arquivos
 
@@ -433,7 +433,7 @@ As tarefas a seguir completam visualmente o F06 com base nas telas unitárias em
 
 ### Verificação
 
-- [ ] `cd client && bun run typecheck && bun run build`.
+- [x] `cd client && bun run typecheck && bun run build`.
 - [ ] Revisar cada estado de jogo contra seu PNG individual, incluindo crash, cashout, unknown e reconexão/stale.
 
 ## T11 — Carteira com ações e estados em modais
@@ -445,17 +445,17 @@ As tarefas a seguir completam visualmente o F06 com base nas telas unitárias em
 
 ### Trabalho
 
-- [ ] Reorganizar saldo confirmado e histórico da carteira para corresponder à referência unitária.
-- [ ] Mover top-up e payout de painéis permanentes para modais `AppModal`; manter formulário, validação e ação de submit atuais.
-- [ ] Exibir nos próprios modais confirmação de top-up, processing/done de payout, validação/erro, indisponibilidade e resultado desconhecido.
-- [ ] Garantir que atualização de saldo/histórico venha só das respostas/consultas do operador; payout mantém indicação constante de simulação local.
+- [x] Reorganizar saldo confirmado e histórico da carteira para corresponder à referência unitária.
+- [x] Mover top-up e payout de painéis permanentes para modais `AppModal`; manter formulário, validação e ação de submit atuais.
+- [x] Exibir nos próprios modais confirmação de top-up, processing/done de payout, validação/erro, indisponibilidade e resultado desconhecido.
+- [x] Garantir que atualização de saldo/histórico venha só das respostas/consultas do operador; payout mantém indicação constante de simulação local.
 
 ### Critérios de aceitação
 
-- [ ] Add funds e payout abrem modais; fechar/cancelar preserva ou descarta rascunho conforme comportamento atual e não envia comandos por acidente.
-- [ ] Estado unknown orienta consultar/recuperar a mesma operação; não mostra sucesso/fracasso final nem permite nova mutação com chave nova.
-- [ ] Saldo e histórico só exibem valores autoritativos; formatação usa centavos exatos e estados de erro não alteram o saldo confirmado.
-- [ ] Teclado, Escape, botão fechar, foco e leitor de tela são suportados; formulário cabe em 360px.
+- [x] Add funds e payout abrem modais; fechar/cancelar preserva ou descarta rascunho conforme comportamento atual e não envia comandos por acidente.
+- [x] Estado unknown orienta consultar/recuperar a mesma operação; não mostra sucesso/fracasso final nem permite nova mutação com chave nova.
+- [x] Saldo e histórico só exibem valores autoritativos; formatação usa centavos exatos e estados de erro não alteram o saldo confirmado.
+- [x] Teclado, Escape, botão fechar, foco e leitor de tela são suportados; formulário cabe em 360px.
 
 ### Arquivos
 
@@ -466,5 +466,5 @@ As tarefas a seguir completam visualmente o F06 com base nas telas unitárias em
 
 ### Verificação
 
-- [ ] `cd client && bun run typecheck && bun run build`.
+- [x] `cd client && bun run typecheck && bun run build`.
 - [ ] Revisar referência da carteira e cada estado/modal individual em 360px, tablet e desktop.

@@ -1,7 +1,8 @@
-import { Alert, Badge, Button, Stack, Table, Text, Title, Group, Paper } from '@mantine/core';
+import { Alert, Badge, Stack, Table, Text, Title, Group } from '@mantine/core';
 import type { BetCommandResult, BetCommandStatus, SettlementStatus } from '../../../lib/operator/operator-api';
 import { formatCents, formatMultiplier } from '../../../lib/money/money';
 import { getBetGameStatusLabel, isBetOutcomePending } from '../model/bet-status';
+import { ActionButton, Surface } from '../../../components/ui';
 
 const COMMAND_STATUS_LABELS: Record<BetCommandStatus, string> = {
   pending: 'Pending',
@@ -46,13 +47,14 @@ export function RecentBetsTable({
   onRefreshBet,
 }: RecentBetsTableProps): React.JSX.Element {
   return (
-    <Paper withBorder p="md" radius="md">
+    <Surface className="hs-recent-bets" p={{ base: 'sm', sm: 'md' }} radius="lg">
       <Group justify="space-between">
-        <Title order={4}>Your recent bets</Title>
-        <Button size="xs" variant="default" onClick={onRefresh}>Refresh</Button>
+        <Title order={4} className="hs-recent-bets__title">Your recent bets</Title>
+        <ActionButton tone="quiet" size="xs" onClick={onRefresh}>Refresh</ActionButton>
       </Group>
       {error !== null && <Alert color="red" mt="sm">{error}</Alert>}
-      <Table mt="sm" striped withTableBorder highlightOnHover>
+      <div className="hs-recent-bets__scroll">
+      <Table className="hs-recent-bets__table" mt="sm" striped highlightOnHover>
         <Table.Thead><Table.Tr><Table.Th>Round</Table.Th><Table.Th>Amount</Table.Th><Table.Th>Command</Table.Th><Table.Th>Game</Table.Th><Table.Th>Result</Table.Th><Table.Th>Settlement</Table.Th><Table.Th /></Table.Tr></Table.Thead>
         <Table.Tbody>
           {bets === null || bets.length === 0 ? (
@@ -76,14 +78,15 @@ export function RecentBetsTable({
                 <Table.Td>{multiplier}</Table.Td>
                 <Table.Td>{item.bet === null ? '—' : SETTLEMENT_LABELS[item.bet.settlementStatus]}</Table.Td>
                 <Table.Td>
-                  {item.bet?.settlementStatus === 'pending' && settlementBetId !== null && <Button size="compact-xs" variant="light" onClick={() => onRefreshBet(settlementBetId)}>Check credit</Button>}
-                  {outcomePending && verificationBetId !== null && <Stack gap={2} align="flex-start"><Button size="compact-xs" variant="light" disabled={checkingBetIds.has(verificationBetId)} onClick={() => onRefreshBet(verificationBetId)}>{checkingBetIds.has(verificationBetId) ? 'Checking…' : 'Check result'}</Button>{failedBetVerifications.has(verificationBetId) && <Text size="xs" c="dimmed">Could not verify right now. Try again.</Text>}</Stack>}
+                  {item.bet?.settlementStatus === 'pending' && settlementBetId !== null && <ActionButton tone="secondary" size="compact-xs" onClick={() => onRefreshBet(settlementBetId)}>Check credit</ActionButton>}
+                  {outcomePending && verificationBetId !== null && <Stack gap={2} align="flex-start"><ActionButton tone="secondary" size="compact-xs" disabled={checkingBetIds.has(verificationBetId)} onClick={() => onRefreshBet(verificationBetId)}>{checkingBetIds.has(verificationBetId) ? 'Checking…' : 'Check result'}</ActionButton>{failedBetVerifications.has(verificationBetId) && <Text size="xs" c="dimmed">Could not verify right now. Try again.</Text>}</Stack>}
                 </Table.Td>
               </Table.Tr>
             );
           })}
         </Table.Tbody>
       </Table>
-    </Paper>
+      </div>
+    </Surface>
   );
 }

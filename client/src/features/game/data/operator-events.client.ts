@@ -28,6 +28,12 @@ export interface ClientGameEvent {
   payload: unknown;
 }
 
+export interface ClientTickPoint {
+  seq: number;
+  elapsedMs: number;
+  multiplier: number;
+}
+
 /**
  * Proof material for a round the operator already finished: the revealed seed,
  * the commitment published while it was open, and the crash point shown. Kept
@@ -53,9 +59,12 @@ export interface OperatorStreamState {
   snapshot: ClientRoundState | null;
   lastRevealed: RevealedRound | null;
   events: ClientGameEvent[];
+  /** Round-local chart history, retained independently of the short event log. */
+  tickHistory: ClientTickPoint[];
 }
 
 export const MAX_RETAINED_EVENTS = 100;
+export const MAX_RETAINED_TICKS = 10_000;
 
 export const initialStreamState: OperatorStreamState = {
   upstream: 'reconnecting',
@@ -64,6 +73,7 @@ export const initialStreamState: OperatorStreamState = {
   snapshot: null,
   lastRevealed: null,
   events: [],
+  tickHistory: [],
 };
 
 export type StreamAction =
@@ -257,6 +267,7 @@ export function streamReducer(state: OperatorStreamState, action: StreamAction):
         snapshot: action.snapshot,
         lastRevealed: keepLatestReveal(state.lastRevealed, revealedFromSnapshot(action.snapshot)),
         events: state.events.filter((event) => event.seq > action.snapshot.seq),
+        tickHistory: state.snapshot?.roundId === action.snapshot.roundId ? state.tickHistory : [],
       };
     case 'game-event': {
       if (state.snapshot && action.event.seq <= state.snapshot.seq) return state;
@@ -272,6 +283,9 @@ export function streamReducer(state: OperatorStreamState, action: StreamAction):
           revealedFromEvent(action.event, state.snapshot),
         ),
         events,
+        tickHistory: action.event.type === 'round.betting' && action.event.roundId !== state.snapshot?.roundId
+          ? []
+          : appendTickPoint(state.tickHistory, state.snapshot, action.event),
       };
     }
     case 'connection':
@@ -283,6 +297,25 @@ export function streamReducer(state: OperatorStreamState, action: StreamAction):
         synchronized: action.upstream === 'connected' && state.snapshot !== null,
       };
   }
+}
+
+function getTickPoint(event: ClientGameEvent): ClientTickPoint | null {
+  if (event.type !== 'tick' || !isRecord(event.payload)) return null;
+  const elapsedMs = toNumber(event.payload.t);
+  const multiplier = toNumber(event.payload.multiplier);
+  if (elapsedMs === null || multiplier === null) return null;
+  return { seq: event.seq, elapsedMs, multiplier };
+}
+
+function appendTickPoint(
+  history: ClientTickPoint[],
+  snapshot: ClientRoundState | null,
+  event: ClientGameEvent,
+): ClientTickPoint[] {
+  if (snapshot?.state !== 'running' || snapshot.roundId !== event.roundId) return history;
+  const point = getTickPoint(event);
+  if (point === null || history.some((candidate) => candidate.seq === point.seq)) return history;
+  return [...history, point].slice(-MAX_RETAINED_TICKS);
 }
 
 /** True while the displayed snapshot must be treated as frozen/stale. */

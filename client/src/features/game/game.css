@@ -1,0 +1,210 @@
+.hs-game-page {
+  --game-accent: #00e6b2;
+  --game-muted: #91a9a2;
+  --game-border: rgb(132 174 159 / 15%);
+}
+
+.hs-game-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(290px, 0.76fr);
+  align-items: start;
+  gap: 1rem;
+}
+
+.hs-game-layout__main,
+.hs-game-layout__side {
+  display: grid;
+  min-width: 0;
+  gap: 1rem;
+}
+
+.hs-round-panel__surface {
+  position: relative;
+  overflow: hidden;
+  min-height: 480px;
+  background:
+    linear-gradient(180deg, rgb(5 20 17 / 83%), rgb(4 17 14 / 96%)),
+    url('/assets/highstack-background.png') center / cover !important;
+}
+
+.hs-round-panel__status { min-height: 36px; }
+.hs-round-phase { text-transform: uppercase; letter-spacing: 0.07em; }
+.hs-round-phase__dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 0.42rem;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 10px currentColor;
+  vertical-align: 1px;
+}
+.hs-stream-health { justify-content: flex-end; }
+.hs-round-panel__intro {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1.3rem 0 0.4rem;
+}
+.hs-round-panel__title { font-size: clamp(1rem, 1.7vw, 1.25rem); }
+.hs-round-countdown {
+  min-width: 116px;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--game-border);
+  border-radius: 0.7rem;
+  background: rgb(3 14 12 / 64%);
+  text-align: center;
+}
+.hs-round-countdown__value { color: var(--game-accent); font-size: 1.12rem; font-variant-numeric: tabular-nums; letter-spacing: 0.08em; }
+.hs-round-chart {
+  position: relative;
+  min-height: clamp(275px, 36vw, 390px);
+  margin-top: 0.65rem;
+  overflow: hidden;
+  border: 1px solid rgb(103 150 134 / 10%);
+  border-radius: 0.8rem;
+  background:
+    radial-gradient(ellipse at 77% 4%, rgb(0 230 178 / 10%), transparent 45%),
+    linear-gradient(180deg, rgb(3 16 13 / 46%), rgb(3 14 12 / 80%));
+}
+.hs-round-chart__svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.hs-round-chart__grid { stroke: rgb(117 165 149 / 14%); stroke-dasharray: 3 8; stroke-width: 1.2; }
+.hs-round-chart__grid--vertical { stroke: rgb(117 165 149 / 9%); }
+.hs-round-chart__axis { fill: none; stroke: rgb(117 165 149 / 34%); stroke-width: 1.5; }
+.hs-round-chart__axis-label { fill: #778f87; font: 15px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.hs-round-chart__axis-label--x { text-anchor: middle; }
+.hs-round-chart__line { fill: none; stroke: var(--game-accent); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 7px rgb(0 230 178 / 58%)); }
+.hs-round-chart__point { fill: #e1fff8; stroke: var(--game-accent); stroke-width: 4; filter: drop-shadow(0 0 9px rgb(0 230 178 / 90%)); }
+.hs-round-chart__multiplier {
+  position: absolute;
+  inset: 38% 0 auto;
+  color: #d7fff4;
+  font-size: clamp(3rem, 8vw, 6.4rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  letter-spacing: -0.075em;
+  line-height: 1;
+  text-align: center;
+  text-shadow: 0 0 38px rgb(0 230 178 / 35%);
+  pointer-events: none;
+}
+.hs-round-chart__multiplier.is-crashed { color: #ff8d88; text-shadow: 0 0 34px rgb(255 85 80 / 25%); }
+.hs-round-chart__frozen { position: absolute; right: 0.75rem; bottom: 0.7rem; }
+.hs-round-meta { margin: 0.7rem 0 0 0.2rem; font-variant-numeric: tabular-nums; }
+.hs-stale-alert { border-color: rgb(245 185 73 / 30%); background: rgb(65 45 12 / 32%); }
+
+.hs-bet-panel { position: sticky; top: 1.25rem; }
+.hs-bet-panel__eyebrow { color: var(--game-accent); letter-spacing: 0.13em; }
+.hs-bet-panel__heading { margin-top: 0.25rem; font-size: 1.45rem; letter-spacing: -0.03em; }
+.hs-bet-panel__round-state {
+  padding: 0.3rem 0.55rem;
+  border: 1px solid rgb(0 230 178 / 23%);
+  border-radius: 999px;
+  background: rgb(0 230 178 / 8%);
+  color: var(--game-accent);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.hs-bet-panel__amount input,
+.hs-bet-panel__auto-cashout input {
+  min-height: 54px;
+  border-color: var(--game-border);
+  background: rgb(3 14 12 / 78%);
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+}
+.hs-bet-panel__amount label,
+.hs-bet-panel__auto-cashout label { margin-bottom: 0.4rem; color: #c3d4ce; font-size: 0.78rem; font-weight: 600; }
+.hs-currency { color: var(--game-accent); font-weight: 700; }
+.hs-currency-label { color: var(--game-muted); font-size: 0.65rem; font-weight: 700; letter-spacing: 0.08em; }
+.hs-bet-panel__presets button {
+  min-height: 35px;
+  border: 1px solid var(--game-border);
+  border-radius: 0.5rem;
+  background: rgb(255 255 255 / 2%);
+  color: #c5d5d0;
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 600;
+  transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+.hs-bet-panel__presets button:hover:not(:disabled) { border-color: rgb(0 230 178 / 44%); background: rgb(0 230 178 / 8%); color: #e6fff8; }
+.hs-bet-panel__presets button:disabled { cursor: not-allowed; opacity: 0.5; }
+.hs-bet-panel__submit { min-height: 52px; font-weight: 800; }
+.hs-bet-panel__cashout { min-height: 49px; border-color: rgb(105 150 136 / 28%); background: rgb(255 255 255 / 3%); }
+.hs-bet-panel__hint { color: var(--game-muted); line-height: 1.55; }
+.hs-bet-panel__pending { padding: 0.75rem; border: 1px solid rgb(241 187 75 / 24%); border-radius: 0.7rem; background: rgb(80 56 14 / 20%); color: #efd08b; }
+.hs-bet-panel__pending p + p { margin-top: 0.25rem; color: #bfa96e; line-height: 1.5; }
+.hs-command-feedback { border-color: var(--game-border); background: rgb(4 20 16 / 90%); }
+.hs-recent-bets { min-width: 0; }
+.hs-recent-bets__title { font-size: 1rem; letter-spacing: -0.02em; }
+.hs-recent-bets__scroll { width: 100%; overflow-x: auto; scrollbar-color: #28463d transparent; }
+.hs-recent-bets__table { min-width: 690px; border-spacing: 0; }
+.hs-recent-bets__table thead th { border-bottom-color: var(--game-border); color: var(--game-muted); font-size: 0.66rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.hs-recent-bets__table tbody td { border-bottom-color: rgb(132 174 159 / 8%); color: #cfddd8; font-size: 0.78rem; }
+.hs-recent-bets__table tbody tr:hover { background: rgb(0 230 178 / 3%); }
+
+.hs-outcome-dialog { padding-top: 0.25rem; }
+.hs-outcome-dialog__icon {
+  display: grid;
+  width: 62px;
+  height: 62px;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+.hs-outcome-dialog__icon--success { color: #00e6b2; background: rgb(0 230 178 / 8%); box-shadow: 0 0 35px rgb(0 230 178 / 12%); }
+.hs-outcome-dialog__icon--pending { color: #efc56f; background: rgb(239 197 111 / 8%); }
+.hs-outcome-dialog__icon--error { color: #ff817c; background: rgb(255 129 124 / 8%); }
+.hs-outcome-dialog__amount { font-size: 1.7rem; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+.hs-outcome-dialog__footnote { max-width: 360px; color: var(--game-muted); line-height: 1.55; }
+
+.hs-game-details { border: 1px solid var(--game-border); border-radius: 0.8rem; background: rgb(5 18 15 / 80%); }
+.hs-game-details .mantine-Accordion-item { border-color: var(--game-border); }
+.hs-game-details .mantine-Accordion-control { color: #b5c8c0; }
+
+@media (max-width: 62em) {
+  .hs-game-layout { grid-template-columns: minmax(0, 1.35fr) minmax(270px, 0.85fr); }
+  .hs-stream-health { justify-content: flex-start; }
+}
+
+@media (max-width: 48em) {
+  .hs-game-layout { display: flex; flex-direction: column; gap: 0.8rem; }
+  .hs-game-layout__main,
+  .hs-game-layout__side { display: contents; }
+  .hs-round-panel { order: 1; width: 100%; }
+  .hs-bet-panel { order: 2; width: 100%; }
+  .hs-recent-bets { order: 3; width: 100%; }
+  .hs-bet-panel { position: static; }
+  .hs-round-panel__surface { min-height: 370px; padding: 0.85rem !important; }
+  .hs-round-panel__intro { margin-top: 0.85rem; }
+  .hs-round-chart { min-height: clamp(245px, 68vw, 315px); }
+  .hs-round-chart__axis-label { font-size: 18px; }
+  .hs-bet-panel { padding: 1rem !important; }
+  .hs-bet-panel__heading { font-size: 1.25rem; }
+  .hs-bet-panel__amount input,
+  .hs-bet-panel__auto-cashout input { min-height: 50px; }
+  .hs-bet-panel__submit,
+  .hs-bet-panel__cashout { min-height: 50px; }
+  .hs-bet-panel__presets button { min-height: 44px; }
+}
+
+@media (max-width: 30em) {
+  .hs-game-page { gap: 0.7rem; }
+  .hs-game-layout { gap: 0.7rem; }
+  .hs-round-panel__status { align-items: flex-start; }
+  .hs-round-panel__status > .mantine-Group-root:first-child { width: 100%; }
+  .hs-stream-health { width: 100%; justify-content: flex-start; }
+  .hs-round-panel__intro { align-items: flex-start; }
+  .hs-round-countdown { min-width: 88px; padding-inline: 0.45rem; }
+  .hs-round-panel__surface { min-height: 335px; }
+  .hs-round-chart { min-height: 240px; }
+  .hs-round-chart__axis-label { font-size: 21px; }
+  .hs-round-chart__multiplier { top: 41%; }
+  .hs-stream-health .mantine-Badge-root { font-size: 0.58rem; }
+  .hs-outcome-dialog__amount { font-size: 1.5rem; }
+}

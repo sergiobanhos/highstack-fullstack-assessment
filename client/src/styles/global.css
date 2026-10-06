@@ -50,6 +50,7 @@ a,
 
 #root {
   min-height: 100vh;
+  overflow-x: clip;
 }
 
 .hs-app {
@@ -173,6 +174,10 @@ a,
     padding-block: 1rem 2rem;
   }
 
+  .hs-modal .mantine-Modal-content { width: calc(100vw - 1rem); max-height: calc(100dvh - 1rem); overflow-y: auto; }
+  .hs-modal .mantine-Modal-header { padding: 1rem 1rem 0.7rem; }
+  .hs-modal .mantine-Modal-body { padding: 0.7rem 1rem 1rem; }
+
   .hs-header__brand {
     gap: 0.5rem;
   }
@@ -181,11 +186,27 @@ a,
     width: clamp(96px, 23vw, 132px);
   }
 
-  .hs-header__product,
-  .hs-header__divider,
-  .hs-header__actions {
-    gap: 0.35rem;
+  .hs-app { --app-shell-header-height: 108px !important; }
+  .hs-app .mantine-AppShell-header { height: auto !important; min-height: 108px; }
+  .hs-header {
+    display: grid !important;
+    width: 100%;
+    min-height: 108px;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas: 'brand balance account' 'nav nav nav';
+    align-content: center;
+    gap: 0.2rem 0.55rem;
+    padding-block: 0.45rem;
   }
+  .hs-header__brand { grid-area: brand; min-width: 0; }
+  .hs-header__divider,
+  .hs-header__product { display: none; }
+  .hs-header__actions { display: contents !important; }
+  .hs-nav { grid-area: nav; width: 100%; }
+  .hs-nav .mantine-Tabs-list { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hs-nav .mantine-Tabs-tab { justify-content: center; }
+  .hs-balance { grid-area: balance; justify-self: end; }
+  .hs-account-trigger { grid-area: account; }
 
   .hs-nav .mantine-Tabs-tab {
     min-height: 44px;
@@ -207,6 +228,17 @@ a,
     width: 40px;
     height: 40px;
   }
+}
+
+@media (max-width: 22em) {
+  .hs-header { grid-template-columns: minmax(0, 1fr) auto auto; column-gap: 0.3rem; padding-inline: 0.5rem !important; }
+  .hs-header__brand img { width: 94px; }
+  .hs-balance { padding-inline: 0.35rem; font-size: 0.67rem; }
+  .hs-balance__content svg { width: 15px; height: 15px; }
+}
+
+@media (max-width: 48em) and (max-height: 42em) {
+  .hs-modal .mantine-Modal-content { max-height: calc(100dvh - 0.5rem); }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -3,13 +3,13 @@ import {
   Button,
   Group,
   Loader,
-  Paper,
   Table,
   Text,
   Title,
 } from '@mantine/core';
 import type { LedgerEntry, Payout } from '../../../lib/operator/operator-api';
 import { formatCents, formatSignedCents } from '../../../lib/money/money';
+import { Surface } from '../../../components/ui';
 
 const DIRECTION_LABELS: Record<LedgerEntry['direction'], string> = {
   credit: 'Credit',
@@ -49,13 +49,14 @@ interface WalletHistoryProps {
 
 export function WalletHistory({ ledger, error, loading, hasMore, onRefresh, onLoadMore }: WalletHistoryProps): React.JSX.Element {
   return (
-    <Paper withBorder p="md" radius="md">
+    <Surface className="hs-wallet-history" p={{ base: 'sm', sm: 'md' }} radius="lg">
       <Group justify="space-between">
         <Title order={4}>Wallet history</Title>
         <Button size="xs" variant="default" onClick={onRefresh}>Refresh</Button>
       </Group>
       {error !== null && <Text size="sm" c="red" mt="sm">{error}</Text>}
-      <Table mt="sm" striped withTableBorder>
+      <div className="hs-wallet-history__scroll">
+      <Table mt="sm" striped>
         <Table.Thead><Table.Tr><Table.Th>When</Table.Th><Table.Th>Operation</Table.Th><Table.Th>Amount</Table.Th><Table.Th>Balance after</Table.Th></Table.Tr></Table.Thead>
         <Table.Tbody>
           {ledger === null ? (
@@ -73,7 +74,8 @@ export function WalletHistory({ ledger, error, loading, hasMore, onRefresh, onLo
         </Table.Tbody>
       </Table>
       {hasMore && <Button mt="sm" size="xs" variant="light" loading={loading} onClick={onLoadMore}>Load more</Button>}
-    </Paper>
+      </div>
+    </Surface>
   );
 }
 
@@ -87,7 +89,8 @@ interface PayoutHistoryProps {
 export function PayoutHistory({ payouts, hasMore, onRefreshItem, onLoadMore }: PayoutHistoryProps): React.JSX.Element {
   return (
     <>
-      <Table mt="md" striped withTableBorder>
+      <div className="hs-wallet-history__scroll">
+      <Table className="hs-wallet-history__table" mt="md" striped>
         <Table.Thead><Table.Tr><Table.Th>Requested</Table.Th><Table.Th>Reference</Table.Th><Table.Th>Amount</Table.Th><Table.Th>Status</Table.Th><Table.Th>Completed</Table.Th><Table.Th /></Table.Tr></Table.Thead>
         <Table.Tbody>
           {payouts === null || payouts.length === 0 ? (
@@ -109,6 +112,7 @@ export function PayoutHistory({ payouts, hasMore, onRefreshItem, onLoadMore }: P
           ))}
         </Table.Tbody>
       </Table>
+      </div>
       {hasMore && <Button mt="sm" size="xs" variant="light" onClick={onLoadMore}>Load more</Button>}
     </>
   );

@@ -78,7 +78,7 @@
 - [x] Approve F04 tasks
 - [x] Implement F02 and F03 in dependency order
 - [ ] Implement F04 after F03 verification (T1–T5 complete)
-- [ ] Implement F06 visual system and apply unitary screen references (T8–T11)
+- [ ] Implement F06 visual system and apply unitary screen references (T8–T11; code/build complete, manual responsive visual review pending)
 - [x] Review and approve payout requirements in `.ai/sdd/specs/005-payout/`
 - [x] Register F05 local payout in `.ai/sdd/PLAN.md`
 - [x] Review and approve F05 design in `.ai/sdd/specs/005-payout/`

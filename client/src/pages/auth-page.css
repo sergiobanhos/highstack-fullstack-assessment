@@ -85,3 +85,23 @@
   min-height: 56px;
   font-size: 1rem;
 }
+
+@media (max-width: 48em) {
+  .hs-auth-page { min-height: 100dvh; padding: 1.25rem 0.75rem; }
+  .hs-auth-card { width: min(100%, 30rem); padding: 1.35rem !important; border-radius: 1.1rem !important; }
+  .hs-auth-card .mantine-Stack-root { gap: 1.15rem; }
+  .hs-auth-brand img { width: min(68vw, 210px); }
+  .hs-auth-card .mantine-TextInput-input,
+  .hs-auth-card .mantine-PasswordInput-input { min-height: 54px; font-size: 16px; }
+  .hs-auth-footer { gap: 0.55rem; }
+  .hs-auth-footer .mantine-Group-root { gap: 0.15rem; }
+  .hs-auth-footer .mantine-Text-root,
+  .hs-auth-footer .hs-auth-switch { font-size: 0.78rem; }
+  .hs-local-environment { margin-top: -0.25rem; }
+}
+
+@media (max-width: 23em) {
+  .hs-auth-page { padding-inline: 0.5rem; }
+  .hs-auth-card { padding: 1.1rem !important; }
+  .hs-auth-heading h1 { font-size: 1.65rem; }
+}

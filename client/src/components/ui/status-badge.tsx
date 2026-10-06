@@ -1,11 +1,13 @@
 import { Badge } from '@mantine/core';
-import type { ComponentProps } from 'react';
+import type { BadgeProps } from '@mantine/core';
+import type { HTMLAttributes } from 'react';
 
 export type StatusTone = 'neutral' | 'live' | 'success' | 'warning' | 'danger';
 
-interface StatusBadgeProps extends Omit<ComponentProps<typeof Badge>, 'color' | 'variant'> {
+type StatusBadgeProps = Omit<BadgeProps, 'color' | 'variant'> &
+  Omit<HTMLAttributes<HTMLDivElement>, keyof BadgeProps> & {
   tone?: StatusTone;
-}
+};
 
 const STATUS_COLORS: Record<StatusTone, string> = {
   neutral: 'gray',

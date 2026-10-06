@@ -55,6 +55,9 @@ export function useGamePageModel({ api, token, playerId, onUnauthorized, onWalle
   const lastBetsRef = useRef<BetCommandResult[] | null>(null);
   const [checkingBetIds, setCheckingBetIds] = useState<Set<string>>(() => new Set());
   const [failedBetVerifications, setFailedBetVerifications] = useState<Set<string>>(() => new Set());
+  const [autoCashout, setAutoCashout] = useState<{ betId: string; command: BetCommandResult | null } | null>(null);
+  const previousBetStatusesRef = useRef(new Map<string, string>());
+  const triggeredAutoCashoutBetRef = useRef<string | null>(null);
   const betsQuery = usePlayerBets(playerContext, BETS_LIMIT);
   const gameSessionMutation = usePlayerGameSession(playerContext);
   const gameCommands = usePlayerGameCommands(playerContext);
@@ -267,26 +270,43 @@ export function useGamePageModel({ api, token, playerId, onUnauthorized, onWalle
   });
   const {
     amountText, setAmountText, autoCashoutText, setAutoCashoutText,
-    amountError, autoCashoutError, busy, pending, feedback, setFeedback,
+    amountError, autoCashoutError, busy, pending, pendingDialogOpen, dismissPendingDialog, feedback, setFeedback,
     canBet, canCashout, cashoutLabel, reconcile, submitBet, submitCashout,
   } = commandFlow;
 
-  // The engine cashes the bet out the instant the multiplier reaches the
-  // target, and the operator records it from the credit webhook. Crossing the
-  // target is therefore the moment to re-read the list instead of waiting for
-  // the next cadence tick — the row still only changes when the operator says so.
-  const crossedAutoCashout =
-    activeBet !== null &&
-    activeBet.autoCashoutHundredths !== null &&
-    liveMultiplierHundredths !== null &&
-    liveMultiplierHundredths >= activeBet.autoCashoutHundredths;
-  const crossedBetId = crossedAutoCashout ? (activeBet?.betId ?? null) : null;
-  const crossedReadRef = useRef<string | null>(null);
+  const autoCashoutReached = !stale && phase === 'running' && activeBet?.betId !== null &&
+    activeBet?.autoCashoutHundredths !== null && activeBet?.autoCashoutHundredths !== undefined &&
+    liveMultiplierHundredths !== null && liveMultiplierHundredths >= activeBet.autoCashoutHundredths;
+
+  // Open an in-progress modal as soon as the live multiplier reaches the
+  // configured target. The result shown in it still comes from the operator.
   useEffect(() => {
-    if (crossedBetId === null || crossedReadRef.current === crossedBetId) return;
-    crossedReadRef.current = crossedBetId;
+    if (!autoCashoutReached || activeBet?.betId == null || triggeredAutoCashoutBetRef.current === activeBet.betId) return;
+    triggeredAutoCashoutBetRef.current = activeBet.betId;
+    setAutoCashout({ betId: activeBet.betId, command: null });
     void loadBets();
-  }, [crossedBetId, loadBets]);
+  }, [autoCashoutReached, activeBet?.betId, loadBets]);
+
+  useEffect(() => {
+    if (bets === null) return;
+    for (const item of bets) {
+      const previousStatus = previousBetStatusesRef.current.get(item.commandId);
+      const currentStatus = item.bet?.engineStatus ?? 'unknown';
+      const manualCashoutInFlight = pending?.type === 'cashout' && pending.betId === item.betId;
+      const cashoutDialogAlreadyShown = feedback?.kind === 'cashout' || feedback?.kind === 'cashout-error';
+      const closedAtAutoTarget = item.autoCashoutHundredths !== null &&
+        item.bet?.multiplierHundredths !== null && item.bet?.multiplierHundredths !== undefined &&
+        item.bet.multiplierHundredths >= item.autoCashoutHundredths;
+      if (
+        previousStatus === 'active' && currentStatus === 'cashed_out' &&
+        closedAtAutoTarget && !manualCashoutInFlight && !cashoutDialogAlreadyShown
+      ) setAutoCashout({ betId: item.betId ?? item.commandId, command: item });
+      if (currentStatus === 'cashed_out' && autoCashout?.betId === item.betId) {
+        setAutoCashout((current) => current?.betId === item.betId ? { ...current, command: item } : current);
+      }
+      previousBetStatusesRef.current.set(item.commandId, currentStatus);
+    }
+  }, [bets, pending, feedback, autoCashout?.betId]);
 
 
   return {
@@ -295,9 +315,14 @@ export function useGamePageModel({ api, token, playerId, onUnauthorized, onWalle
       phase, roundId, snapshot, multiplierText, staleAlertVisible,
     },
     feedback: { value: feedback, dismiss: () => setFeedback(null) },
+    autoCashout: {
+      value: autoCashout === null ? null : { status: autoCashout.command === null ? 'checking' as const : 'confirmed' as const, command: autoCashout.command },
+      dismiss: () => setAutoCashout(null),
+    },
     betCommand: {
       amountText, setAmountText, autoCashoutText, setAutoCashoutText,
-      amountError, autoCashoutError, busy, pending, canBet, canCashout, cashoutLabel,
+      amountError, autoCashoutError, busy, pending, pendingDialogOpen, dismissPendingDialog,
+      canBet, canCashout, cashoutLabel,
       submitBet, submitCashout, reconcile,
     },
     bets: {

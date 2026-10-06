@@ -388,6 +388,7 @@ Esta etapa aplica ao client as referências unitárias entregues em `highstack-d
 ### 14.2 Shell e telas
 
 - `PlayerShell` fornece header responsivo com logo, navegação Jogo/Carteira, saldo e menu de sessão. Em telas estreitas, reduzir a navegação sem ocultar saldo, estado stale ou ação principal.
+- Mobile é uma composição própria: header em duas linhas compactas, login/cadastro com card e campos dimensionados para toque, jogo em uma coluna com gráfico antes dos controles e apostas recentes depois, controles e modais sem overflow horizontal. Carteira reorganiza ações, histórico e formulários para telas estreitas; desktop preserva o header e a composição em duas colunas.
 - Auth usa o mesmo fundo, marca, campos e primitivos do produto em um card central; troca Login/Cadastro sem perder o estado de erros e segue os formulários atuais.
 - Jogo organiza rodada/gráfico e controles em duas áreas no desktop e uma coluna no mobile. O multiplier continua vindo do snapshot; SVG usa apenas sequência real de `round.tick` da rodada atual presente no buffer local, não gera histórico, odds ou resultado fictícios. Sem pontos suficientes, mostrar apenas o multiplier e eixos vazios discretos.
 - A lista de jogo é das bets do usuário retornadas pela API; não preencher com nomes ou ganhos fictícios do mockup.
@@ -413,3 +414,4 @@ Esta etapa aplica ao client as referências unitárias entregues em `highstack-d
 - Executar as tarefas T8–T11 depois das tarefas funcionais F06; atualizar estado somente pela interface pública dos page models.
 - Verificação planejada: `cd client && bun run typecheck` e `cd client && bun run build`. Revisão visual manual em 360px, tablet e desktop contra cada PNG individual; conferir keyboard/focus, modal close/cancel, erro/loading/disabled e `prefers-reduced-motion`.
 - Não é objetivo desta etapa alterar os contratos API ou produzir gráfico/leaderboard sintético.
+- Correção de cashout automático: modal abre quando o tick ao vivo alcança o alvo, mostra `wallet credit pending` enquanto o client consulta a lista autoritativa e troca para o resultado real do operator; botão de cashout manual fica bloqueado durante a confirmação. Histórico dos ticks é mantido à parte do buffer curto de eventos para que o gráfico não reinicie em refetches de bets/wallet.

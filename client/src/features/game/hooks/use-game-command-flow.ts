@@ -19,8 +19,10 @@ interface PendingGameCommand {
 }
 
 export interface GameCommandFeedback {
+  kind: 'bet' | 'cashout' | 'bet-error' | 'cashout-error';
   color: 'green' | 'red' | 'yellow';
   text: string;
+  command: BetCommandResult | null;
 }
 
 const RESULT_CODE_MESSAGES: Record<string, string> = {
@@ -63,6 +65,7 @@ export function useGameCommandFlow({
   const [autoCashoutText, setAutoCashoutText] = useState('');
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<PendingGameCommand | null>(null);
+  const [pendingDialogDismissed, setPendingDialogDismissed] = useState(false);
   const [feedback, setFeedback] = useState<GameCommandFeedback | null>(null);
   const parsedAmount = amountText.trim().length === 0 ? null : parseUsdToCents(amountText, { maxCents: MAX_BET_CENTS });
   const parsedAutoCashout = autoCashoutText.trim().length === 0 ? null : parseMultiplierToHundredths(autoCashoutText);
@@ -71,11 +74,15 @@ export function useGameCommandFlow({
   const canBet = !stale && phase === 'betting' && roundId !== null && pending === null && !busy &&
     conflictingBet === null && parsedAmount !== null && parsedAmount.ok &&
     (parsedAutoCashout === null || parsedAutoCashout.ok);
-  const canCashout = !stale && phase === 'running' && activeBet !== null && pending === null && !busy;
+  const autoCashoutReached = activeBet?.autoCashoutHundredths !== null && activeBet?.autoCashoutHundredths !== undefined &&
+    liveMultiplierHundredths !== null && liveMultiplierHundredths >= activeBet.autoCashoutHundredths;
+  const canCashout = !stale && phase === 'running' && activeBet !== null && pending === null && !busy && !autoCashoutReached;
   const predictedPayoutCents = activeBet !== null && liveMultiplierHundredths !== null
     ? projectPayoutCents(activeBet.amountCents, liveMultiplierHundredths)
     : null;
-  const cashoutLabel = predictedPayoutCents === null ? 'Cashout' : `Cashout (USD ${formatCentsInput(predictedPayoutCents)})`;
+  const cashoutLabel = autoCashoutReached
+    ? 'Auto cashout triggered'
+    : predictedPayoutCents === null ? 'Cashout' : `Cashout (USD ${formatCentsInput(predictedPayoutCents)})`;
 
   const reconcile = useCallback(async (command: PendingGameCommand): Promise<void> => {
     try {
@@ -93,13 +100,15 @@ export function useGameCommandFlow({
       }
       if (result.betCommandStatus === 'accepted') {
         setPending(null);
-        setFeedback({ color: 'green', text: command.type === 'bet' ? 'Bet confirmed by the operator.' : 'Cashout confirmed by the operator.' });
+        setPendingDialogDismissed(false);
+        setFeedback({ kind: command.type, color: 'green', text: command.type === 'bet' ? 'Bet confirmed by the operator.' : 'Cashout confirmed by the operator.', command: result });
         await afterMutation();
         return;
       }
       if (result.betCommandStatus === 'rejected') {
         setPending(null);
-        setFeedback({ color: 'red', text: describeBetResult(result.resultCode) });
+        setPendingDialogDismissed(false);
+        setFeedback({ kind: `${command.type}-error`, color: 'red', text: describeBetResult(result.resultCode), command: result });
         await afterMutation();
         return;
       }
@@ -133,18 +142,20 @@ export function useGameCommandFlow({
       });
       if (outcome.kind === 'accepted') {
         setAmountText(''); setAutoCashoutText('');
-        setFeedback({ color: 'green', text: `Bet of ${formatCents(command.amountCents)} accepted.` });
+        setFeedback({ kind: 'bet', color: 'green', text: `Bet of ${formatCents(command.amountCents)} accepted.`, command: outcome.command });
         await afterMutation();
       } else if (outcome.kind === 'unknown') {
+        setPendingDialogDismissed(false);
         setPending({ ...command, commandId: outcome.command?.commandId ?? null, note: 'The operator is still confirming this bet. Do not place another bet in this round.' });
         await afterMutation();
       } else {
-        setFeedback({ color: 'red', text: describeBetResult(outcome.command?.resultCode ?? null) });
+        setFeedback({ kind: 'bet-error', color: 'red', text: describeBetResult(outcome.command?.resultCode ?? null), command: outcome.command });
         await afterMutation();
       }
     } catch (error) {
       if (isUnauthenticated(error)) { onUnauthorized(); return; }
       // Keep the original idempotency key; reconcile by reading before any retry.
+      setPendingDialogDismissed(false);
       setPending({ ...command, commandId: null, note: 'The response never arrived. No new bet was sent: confirm before trying again.' });
       await afterMutation();
     } finally { setBusy(false); }
@@ -162,17 +173,19 @@ export function useGameCommandFlow({
     try {
       const outcome = await gameCommands.cashout.mutateAsync({ betId, idempotencyKey: command.idempotencyKey });
       if (outcome.kind === 'accepted') {
-        setFeedback({ color: 'green', text: 'Cashout accepted. The credit is confirmed by the operator.' });
+        setFeedback({ kind: 'cashout', color: 'green', text: 'Cashout confirmed by the operator.', command: outcome.command });
         await afterMutation();
       } else if (outcome.kind === 'unknown') {
+        setPendingDialogDismissed(false);
         setPending({ ...command, commandId: outcome.command?.commandId ?? null, note: 'The operator is still confirming this cashout.' });
         await afterMutation();
       } else {
-        setFeedback({ color: 'red', text: describeBetResult(outcome.command?.resultCode ?? null) });
+        setFeedback({ kind: 'cashout-error', color: 'red', text: describeBetResult(outcome.command?.resultCode ?? null), command: outcome.command });
         await afterMutation();
       }
     } catch (error) {
       if (isUnauthenticated(error)) { onUnauthorized(); return; }
+      setPendingDialogDismissed(false);
       setPending({ ...command, commandId: null, note: 'The response never arrived. No new cashout was sent: confirm before trying again.' });
       await afterMutation();
     } finally { setBusy(false); }
@@ -180,7 +193,8 @@ export function useGameCommandFlow({
 
   return {
     amountText, setAmountText, autoCashoutText, setAutoCashoutText,
-    amountError, autoCashoutError, busy, pending, feedback, setFeedback,
+    amountError, autoCashoutError, busy, pending, pendingDialogOpen: pending !== null && !pendingDialogDismissed,
+    dismissPendingDialog: () => setPendingDialogDismissed(true), feedback, setFeedback,
     canBet, canCashout, cashoutLabel,
     reconcile, submitBet, submitCashout,
   };

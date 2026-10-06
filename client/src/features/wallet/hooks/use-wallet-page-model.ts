@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useQueryClient, type InfiniteData } from '@tanstack/react-query';
-import { notifications } from '@mantine/notifications';
 import {
   createIdempotencyKey, isTerminalRefusal, isUnauthenticated,
   OperatorApiError, type OperatorApi, type PayoutPage,
 } from '../../../lib/operator/operator-api';
-import { formatCents, parseUsdToCents } from '../../../lib/money/money';
+import { parseUsdToCents } from '../../../lib/money/money';
+import type { Payout, TopUpReceipt } from '../../../lib/operator/operator-api';
 import { upsertPayout } from '../model/payouts';
 import { usePlayerPayoutLookup, usePlayerPayouts, usePlayerTransactions, usePlayerWallet, usePlayerWalletCommands } from './use-wallet-data';
 import { queryKeys } from '../../../lib/query/query-keys';
@@ -88,6 +88,8 @@ export function useWalletPageModel({ api, token, playerId, onUnauthorized }: Wal
   const [pendingTopUp, setPendingTopUp] = useState<PendingAmountCommand | null>(() =>
     readPendingTopUp(),
   );
+  const [topUpReceipt, setTopUpReceipt] = useState<TopUpReceipt | null>(null);
+  const [topUpCompletedAmount, setTopUpCompletedAmount] = useState<number | null>(null);
 
   const payoutPages = payoutsQuery.data?.pages.flatMap((page) => page.items) ?? null;
   const [missingPayoutIds, setMissingPayoutIds] = useState<Set<string>>(() => new Set());
@@ -109,6 +111,7 @@ export function useWalletPageModel({ api, token, playerId, onUnauthorized }: Wal
   const [pendingPayout, setPendingPayout] = useState<PendingAmountCommand | null>(() =>
     readPendingPayout(),
   );
+  const [payoutReceipt, setPayoutReceipt] = useState<Payout | null>(null);
   const [payoutPolls, setPayoutPolls] = useState(0);
 
   const refreshBalance = useCallback(async (): Promise<void> => {
@@ -143,6 +146,7 @@ export function useWalletPageModel({ api, token, playerId, onUnauthorized }: Wal
         for (const item of processing) {
           try {
             const fresh = await payoutLookup(item.id);
+            setPayoutReceipt((current) => current?.id === fresh.id ? fresh : current);
             setMissingPayoutIds((current) => {
               if (!current.has(item.id)) return current;
               const next = new Set(current);
@@ -183,13 +187,10 @@ export function useWalletPageModel({ api, token, playerId, onUnauthorized }: Wal
       clearPendingTopUp();
       setPendingTopUp(null);
       setTopUpAmount('');
+      setTopUpReceipt(receipt);
+      setTopUpCompletedAmount(command.amountCents);
       queryClient.setQueryData(queryKeys.wallet(playerId), { balanceCents: receipt.balanceCents, currency: receipt.currency });
       await loadLedger('reset');
-      notifications.show({
-        color: 'teal',
-        title: 'Balance added',
-        message: `${formatCents(command.amountCents)} credited (local test operation).`,
-      });
     } catch (error) {
       if (isUnauthenticated(error)) {
         onUnauthorized();
@@ -239,6 +240,7 @@ export function useWalletPageModel({ api, token, playerId, onUnauthorized }: Wal
       clearPendingPayout();
       setPendingPayout(null);
       setPayoutAmount('');
+      setPayoutReceipt(payout);
       setPayoutPolls(0);
       queryClient.setQueryData<InfiniteData<PayoutPage, string | null>>(queryKeys.payouts(playerId), (current) => {
         if (!current) return current;
@@ -247,11 +249,6 @@ export function useWalletPageModel({ api, token, playerId, onUnauthorized }: Wal
       });
       await loadLedger('reset');
       await refreshBalance();
-      notifications.show({
-        color: 'teal',
-        title: 'Payout requested',
-        message: `${formatCents(payout.amountCents)} processing (local simulation).`,
-      });
     } catch (error) {
       if (isUnauthenticated(error)) {
         onUnauthorized();
@@ -302,7 +299,8 @@ export function useWalletPageModel({ api, token, playerId, onUnauthorized }: Wal
     topUp: {
       amount: topUpAmount, setAmount: setTopUpAmount, error: topUpError,
       dismissError: () => setTopUpError(null), busy: topUpBusy, pending: pendingTopUp,
-      submit: submitTopUp,
+      receipt: topUpReceipt, completedAmount: topUpCompletedAmount,
+      dismissReceipt: () => { setTopUpReceipt(null); setTopUpCompletedAmount(null); }, submit: submitTopUp,
     },
     ledger: {
       items: ledger, error: ledgerError, loading: ledgerBusy, hasMore: ledgerCursor !== null,
@@ -312,7 +310,7 @@ export function useWalletPageModel({ api, token, playerId, onUnauthorized }: Wal
       availability: payoutAvailability, items: payouts, hasMore: payoutCursor !== null,
       amount: payoutAmount, setAmount: setPayoutAmount, error: payoutError,
       dismissError: () => setPayoutError(null), busy: payoutBusy, pending: pendingPayout,
-      submit: submitPayout, refresh: refreshPayouts,
+      receipt: payoutReceipt, dismissReceipt: () => setPayoutReceipt(null), submit: submitPayout, refresh: refreshPayouts,
       retry: () => loadPayouts('reset'), loadMore: () => loadPayouts('more'),
     },
   };
