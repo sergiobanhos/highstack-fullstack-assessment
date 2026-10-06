@@ -192,4 +192,4 @@ These limits are described alongside recovery behavior in the [failure scenarios
 
 ## Engineering workflow
 
-The work was developed requirements-first: clarify boundaries and failure cases, write and review the design and tasks, then implement one module slice at a time. AI tools assisted with exploration and implementation; behavior was checked against the code, typed contracts, and automated tests, especially around retries, ordering, unknown outcomes, and money. The repository keeps the resulting specifications and implementation history so the decisions can be discussed and changed deliberately.
+The work followed a requirements-first process managed with [`@banhosdev/sdd`](https://www.npmjs.com/package/@banhosdev/sdd). Requirements, designs, task plans, and their status are kept under [`.ai/sdd/specs/`](.ai/sdd/specs/), making the decisions and implementation sequence reviewable alongside the code. AI tools assisted with exploration and implementation; behavior was checked against typed contracts and automated tests, especially around retries, ordering, unknown outcomes, and money.
