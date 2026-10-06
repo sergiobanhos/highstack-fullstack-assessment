@@ -76,7 +76,9 @@ export async function reproduceCrashPoint(serverSeed: string, roundId: string): 
 /** Runs both checks for a finished round; unavailable until the seed is revealed. */
 export async function verifyRound(input: RoundProofInput): Promise<RoundProof> {
   const { roundId, serverSeed, serverSeedHash, crashPoint } = input;
-  if (serverSeed === null) {
+  // A blank seed is not verifiable: Web Crypto rejects an empty HMAC key, and
+  // claiming anything from it would be worse than saying it is unavailable.
+  if (serverSeed === null || serverSeed.trim().length === 0) {
     return { commitment: 'unavailable', result: 'unavailable', reproducedHundredths: null };
   }
 

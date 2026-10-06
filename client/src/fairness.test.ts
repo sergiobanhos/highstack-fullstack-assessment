@@ -99,4 +99,15 @@ describe('verifyRound', () => {
     });
     expect(proof).toEqual({ commitment: 'unavailable', result: 'unavailable', reproducedHundredths: null });
   });
+
+  test('a blank seed is unavailable instead of throwing', async () => {
+    // Web Crypto rejects an empty HMAC key, so the panel must not blow up on it.
+    const proof = await verifyRound({
+      roundId: ROUND_ID,
+      serverSeed: '   ',
+      serverSeedHash: SEED_HASH,
+      crashPoint: CRASH_POINT,
+    });
+    expect(proof).toEqual({ commitment: 'unavailable', result: 'unavailable', reproducedHundredths: null });
+  });
 });

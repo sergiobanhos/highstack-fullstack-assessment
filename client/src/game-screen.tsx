@@ -58,6 +58,11 @@ const STALE_ALERT_DELAY_MS = 2000;
 const STREAM_RECONNECT_DELAY_MS = 1500;
 /** A running round publishes ticks continuously; silence means a dead stream. */
 const STREAM_SILENCE_MS = 5000;
+/**
+ * Betting and crashed windows are legitimately quiet (the engine sends no
+ * ticks), so they only need a watchdog that outlives the window itself.
+ */
+const STREAM_SILENCE_IDLE_MS = 15000;
 const STREAM_SILENCE_CHECK_MS = 2000;
 /** Engine auto-cashouts are only visible to the operator through an engine read. */
 const ACTIVE_BET_POLL_MS = 3000;
@@ -341,12 +346,15 @@ export function GameScreen({
     return () => clearTimeout(timer);
   }, [stream.downstream, streamAttempt]);
 
-  // Silence watchdog: ticks are continuous while the round runs, so a long gap
-  // means the stream is dead even if the browser never reported an error.
+  // Silence watchdog: a long gap with no frame means the stream is dead even if
+  // the browser never reported an error, and a half-open connection would
+  // otherwise stay silent through the next round. Running rounds publish ticks
+  // continuously; betting and crashed windows are quiet by design.
   useEffect(() => {
+    const threshold = phase === 'running' ? STREAM_SILENCE_MS : STREAM_SILENCE_IDLE_MS;
     const timer = setInterval(() => {
-      if (phase !== 'running' || stale) return;
-      if (Date.now() - lastFrameAtRef.current > STREAM_SILENCE_MS) {
+      if (stale) return;
+      if (Date.now() - lastFrameAtRef.current > threshold) {
         setStreamAttempt((count) => count + 1);
       }
     }, STREAM_SILENCE_CHECK_MS);
