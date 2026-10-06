@@ -19,7 +19,7 @@
 
 | Field | Value | Notes |
 |-------|-------|-------|
-| Next Feature ID | 008 | Recompute from filesystem before creating a new spec |
+| Next Feature ID | 009 | Recompute from filesystem before creating a new spec |
 | Numbering Issues | none | duplicate prefix / invalid status / non-canonical directory |
 
 ## Specs
@@ -33,6 +33,7 @@
 | 005 | F05 — Payout local de carteira | review:done | `.ai/sdd/specs/005-payout/requirements.md` (approved; Q-001 respondido; D-005 definido) | `.ai/sdd/specs/005-payout/design.md` (approved) | `.ai/sdd/specs/005-payout/tasks.md` (approved; T1–T5 concluídas e verificadas) | `.ai/sdd/specs/005-payout/review.md` (Approved with follow-ups; um achado baixo) |
 | 006 | F06 — Interface inicial do jogador | implementation:done | `.ai/sdd/specs/006-player-frontend/requirements.md` (approved; inclui payout local e prova da rodada) | `.ai/sdd/specs/006-player-frontend/design.md` (approved; contrato de payout conforme F05; §6.2 prova da rodada) | `.ai/sdd/specs/006-player-frontend/tasks.md` (approved; T1–T7 concluídas e verificadas com a stack local) | pending |
 | 007 | F07 — Reconciliação das apostas ao fim da rodada | implementation:done | `.ai/sdd/specs/007-round-bet-reconciliation/requirements.md` (approved) | `.ai/sdd/specs/007-round-bet-reconciliation/design.md` (approved) | `.ai/sdd/specs/007-round-bet-reconciliation/tasks.md` (approved; T1–T3 concluídas e verificadas) | — |
+| 008 | Refatoração arquitetural do Operator | requirements:approved | `.ai/sdd/specs/008-operator-architecture/requirements.md` (approved) | — | — | — |
 
 ## Handoff
 
@@ -86,3 +87,4 @@
 - [x] Create F07 design draft and non-binding tasks draft
 - [x] Approve F07 design
 - [x] Approve F07 tasks before implementation
+- [x] Review and approve requirements for the Operator architecture refactor in `.ai/sdd/specs/008-operator-architecture/`
