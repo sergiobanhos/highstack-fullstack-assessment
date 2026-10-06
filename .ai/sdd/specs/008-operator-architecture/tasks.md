@@ -62,16 +62,16 @@ T2 é independente das demais até a integração final. As outras tarefas têm 
 
 ### Trabalho
 
-- [ ] Criar `operator/src/integrations/crashsim/` e mover o cliente HTTP e o cliente WebSocket concretos, schemas de protocolo e tipos externos.
-- [ ] Mover a verificação HMAC/frescor do webhook para `integrations/crashsim/webhook-auth.ts` sem alterar o cálculo ou as respostas de segurança.
-- [ ] Ajustar imports dos módulos game/financial e dos testes; evitar que a integração importe módulos de negócio.
-- [ ] Manter credenciais server-only, timeouts, classificação de erro, validação Valibot, reconexão e logs redigidos.
+- [x] Criar `operator/src/integrations/crashsim/` e mover o cliente HTTP e o cliente WebSocket concretos, schemas de protocolo e tipos externos.
+- [x] Mover a verificação HMAC/frescor do webhook para `integrations/crashsim/webhook-auth.ts` sem alterar o cálculo ou as respostas de segurança.
+- [x] Ajustar imports dos módulos game/financial e dos testes; evitar que a integração importe módulos de negócio.
+- [x] Manter credenciais server-only, timeouts, classificação de erro, validação Valibot, reconexão e logs redigidos.
 
 ### Critérios de aceite
 
-- [ ] Não há implementação duplicada de transporte/schema Crashsim sob `modules/game` ou `modules/financial`.
-- [ ] Clientes HTTP/stream e webhook continuam obedecendo exatamente os contratos atuais.
-- [ ] A integração depende apenas de configuração e tipos/schemas do protocolo, sem acesso a DB ou regra financeira.
+- [x] Não há implementação duplicada de transporte/schema Crashsim sob `modules/game` ou `modules/financial`.
+- [x] Clientes HTTP/stream e webhook continuam obedecendo exatamente os contratos atuais.
+- [x] A integração depende apenas de configuração e tipos/schemas do protocolo, sem acesso a DB ou regra financeira.
 
 ### Arquivos prováveis
 
@@ -86,9 +86,9 @@ T2 é independente das demais até a integração final. As outras tarefas têm 
 
 ### Verificação
 
-- [ ] `cd operator && bun run typecheck`
-- [ ] `cd operator && bun test src/integrations/crashsim`
-- [ ] Verificar que mensagens/logs não contêm operator key, webhook secret ou body de webhook.
+- [x] `cd operator && bun run typecheck` — exit code 0.
+- [x] `cd operator && bun test src/integrations/crashsim/http.client.test.ts src/integrations/crashsim/webhook-auth.test.ts src/modules/game/game-stream.service.test.ts` — 22 testes passaram.
+- [x] Teste do stream confirmou operator key server-side e ausente dos logs; HMAC permanece validado sobre o body cru.
 
 ## Task T2: Extrair os casos de uso de Auth
 

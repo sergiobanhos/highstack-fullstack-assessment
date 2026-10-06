@@ -1,15 +1,16 @@
 import type { Logger, OperatorConfig } from '../../config';
+import { CrashsimHttpClient } from '../../integrations/crashsim/http.client';
+import { CrashsimStreamClient } from '../../integrations/crashsim/stream.client';
 import type { GameEventHub } from './game-event-hub';
-import { CrashsimHttpClient } from './crashsim-http.client';
 import {
   backoffDelay,
   type BackoffOptions,
   type Scheduler,
   type TimerHandle,
   realScheduler,
-  CrashsimStreamClient,
   type UpstreamSocketFactory,
-} from './crashsim-stream.client';
+} from '../../integrations/crashsim/stream.client';
+import { toGameEvent, toRoundSnapshot } from './crashsim-event.mapper';
 import {
   applyEvent,
   applySnapshot,
@@ -158,7 +159,7 @@ export function createGameStreamService(deps: GameStreamServiceDeps): GameStream
 
     if (stopped || myGeneration !== generation || !stream.hasOpenSocket) return;
 
-    state = applySnapshot(snapshot);
+    state = applySnapshot(toRoundSnapshot(snapshot));
     const buffered = [...buffer].sort((left, right) => left.seq - right.seq);
     buffer = [];
     syncing = false;
@@ -201,19 +202,20 @@ export function createGameStreamService(deps: GameStreamServiceDeps): GameStream
       },
       onEvent: (event) => {
         if (syncing) {
-          buffer.push(event);
+          buffer.push(toGameEvent(event));
           return;
         }
-        const outcome = ingest(event);
+        const gameEvent = toGameEvent(event);
+        const outcome = ingest(gameEvent);
         if (outcome === 'gap') {
           logger.warn('engine sequence gap detected', {
-            roundId: event.roundId,
+            roundId: gameEvent.roundId,
             lastSeq: state.seq,
-            eventSeq: event.seq,
+            eventSeq: gameEvent.seq,
           });
           void synchronize('sequence-gap');
         } else if (outcome === 'ignored') {
-          logger.debug('engine event ignored as stale or out of order', { roundId: event.roundId, seq: event.seq });
+          logger.debug('engine event ignored as stale or out of order', { roundId: gameEvent.roundId, seq: gameEvent.seq });
         }
       },
       onClose: (reason) => {

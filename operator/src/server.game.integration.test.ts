@@ -8,7 +8,7 @@ import { createDatabase } from './db';
 import { authSessions, players } from './modules/auth/auth.schema';
 import { financialOperations, walletLedgerEntries, wallets } from './modules/financial/financial.schema';
 import { gameBets, gameCommands } from './modules/game/game.schema';
-import type { UpstreamSocket, UpstreamSocketCloseInfo } from './modules/game/crashsim-stream.client';
+import type { UpstreamSocket, UpstreamSocketCloseInfo } from './integrations/crashsim/stream.client';
 import { buildOperatorApp, checkOperatorReadiness, type OperatorApp } from './server';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;

@@ -6,7 +6,7 @@ import {
   type AuthModule,
   type AuthenticatedPlayer,
 } from "../auth/auth.module";
-import { verifyCrashsimWebhook } from "./crashsim-webhook-auth";
+import { verifyCrashsimWebhook } from "../../integrations/crashsim/webhook-auth";
 import type { CashoutCreditListener } from "./financial.module";
 import {
   FinancialServiceError,

@@ -6,7 +6,7 @@ import { UnauthenticatedError, type AuthModule } from '../auth/auth.module';
 import type { FinancialModule } from '../financial/financial.module';
 import { createGameModule } from './game.module';
 import { GAME_EVENTS_ROUTE } from './game-events.controller';
-import type { UpstreamSocket } from './crashsim-stream.client';
+import type { UpstreamSocket } from '../../integrations/crashsim/stream.client';
 
 class InertSocket implements UpstreamSocket {
   closeCalls = 0;

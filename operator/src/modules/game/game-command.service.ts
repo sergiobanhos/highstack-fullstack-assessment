@@ -8,7 +8,7 @@ import {
   CrashsimHttpError,
   type CashoutResult,
   type CrashsimBet,
-} from './crashsim-http.client';
+} from '../../integrations/crashsim/http.client';
 import { gameBets, gameCommands, type GameCommandStatus, type GameEngineBetStatus, type GameSettlementStatus } from './game.schema';
 import type { GameStreamService } from './game-stream.service';
 

@@ -4,7 +4,7 @@ import { GameEventHub } from './game-event-hub';
 import type { GameStreamService } from './game-stream.service';
 import { createGameStreamService } from './game-stream.service';
 import type { ConnectionState, GameEvent, OperatorMessage, OperatorSnapshot } from './round-state';
-import type { Scheduler, TimerHandle, UpstreamSocket, UpstreamSocketCloseInfo } from './crashsim-stream.client';
+import type { Scheduler, TimerHandle, UpstreamSocket, UpstreamSocketCloseInfo } from '../../integrations/crashsim/stream.client';
 
 const OPERATOR_KEY = 'test-operator-key';
 const STREAM_URL = 'ws://engine:4000/stream';

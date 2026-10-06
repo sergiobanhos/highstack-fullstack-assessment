@@ -3,12 +3,12 @@ import type { Logger, OperatorConfig } from '../../config';
 import type { OperatorDatabase } from '../../db';
 import type { AuthModule } from '../auth/auth.module';
 import type { FinancialModule } from '../financial/financial.module';
+import { CrashsimHttpClient } from '../../integrations/crashsim/http.client';
 import { registerGameCommandsController } from './game-commands.controller';
-import type { BackoffOptions, Scheduler, UpstreamSocketFactory } from './crashsim-stream.client';
+import type { BackoffOptions, Scheduler, UpstreamSocketFactory } from '../../integrations/crashsim/stream.client';
 import { createGameCommandService, type GameCommandService, type RecordCashoutCreditInput } from './game-command.service';
 import { GameEventHub } from './game-event-hub';
 import { registerGameEventsRoute } from './game-events.controller';
-import { CrashsimHttpClient } from './crashsim-http.client';
 import { createGameStreamService } from './game-stream.service';
 
 export interface GameModuleDeps {
