@@ -13,6 +13,7 @@ import {
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { OperatorApiError, type OperatorApi, type SessionInfo } from './operator-api';
+import { useAuthCommands } from './hooks/use-auth-commands';
 
 const MIN_PASSWORD_LENGTH = 12;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -73,8 +74,9 @@ export function AuthScreen({
   onAuthenticated,
 }: AuthScreenProps): React.JSX.Element {
   const [mode, setMode] = useState<AuthMode>('login');
-  const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const authCommands = useAuthCommands(api);
+  const submitting = authCommands.register.isPending || authCommands.login.isPending;
 
   const form = useForm({
     initialValues: { name: '', email: '', password: '' },
@@ -83,13 +85,12 @@ export function AuthScreen({
 
   const handleSubmit = form.onSubmit(async (values) => {
     setFormError(null);
-    setSubmitting(true);
     const email = values.email.trim();
     try {
       if (mode === 'register') {
-        await api.register({ name: values.name.trim(), email, password: values.password });
+        await authCommands.register.mutateAsync({ name: values.name.trim(), email, password: values.password });
         try {
-          const session = await api.login({ email, password: values.password });
+          const session = await authCommands.login.mutateAsync({ email, password: values.password });
           onAuthenticated(session);
           return;
         } catch (loginError) {
@@ -100,12 +101,10 @@ export function AuthScreen({
           return;
         }
       }
-      const session = await api.login({ email, password: values.password });
+      const session = await authCommands.login.mutateAsync({ email, password: values.password });
       onAuthenticated(session);
     } catch (error) {
       setFormError(describeFailure(error));
-    } finally {
-      setSubmitting(false);
     }
   });
 

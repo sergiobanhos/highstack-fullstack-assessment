@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import {
   Alert,
   Badge,
@@ -7,7 +8,6 @@ import {
   Loader,
   Paper,
   Stack,
-  Table,
   Tabs,
   Text,
   TextInput,
@@ -19,12 +19,14 @@ import {
   isTerminalRefusal,
   isUnauthenticated,
   OperatorApiError,
-  type LedgerEntry,
   type OperatorApi,
-  type Payout,
+  type PayoutPage,
 } from './operator-api';
-import { formatCents, formatCentsInput, formatSignedCents, parseUsdToCents } from './money';
-import { mergePayoutPage, upsertPayout } from './payouts';
+import { formatCents, formatCentsInput, parseUsdToCents } from './money';
+import { upsertPayout } from './payouts';
+import { usePlayerPayoutLookup, usePlayerPayouts, usePlayerTransactions, usePlayerWallet, usePlayerWalletCommands } from './hooks/use-wallet-data';
+import { queryKeys } from './query-keys';
+import { PayoutHistory, WalletHistory, type PayoutView } from './components/wallet-history';
 import {
   clearPendingPayout,
   clearPendingTopUp,
@@ -35,12 +37,7 @@ import {
   type PendingAmountCommand,
 } from './pending-commands';
 
-const LEDGER_PAGE_SIZE = 20;
-const PAYOUT_PAGE_SIZE = 50;
 const PAYOUT_POLL_DELAYS_MS = [1000, 2000, 4000] as const;
-
-/** A payout the list knows about but `GET /payouts/:id` no longer returns. */
-type PayoutView = Payout & { missing?: boolean };
 
 type PayoutAvailability =
   | { status: 'checking' }
@@ -51,35 +48,8 @@ type PayoutAvailability =
 export interface WalletScreenProps {
   api: OperatorApi;
   token: string;
-  balanceCents: number | null;
-  onBalanceChange(balanceCents: number): void;
+  playerId: string;
   onUnauthorized(): void;
-}
-
-const DIRECTION_LABELS: Record<LedgerEntry['direction'], string> = {
-  credit: 'Credit',
-  debit: 'Debit',
-};
-
-const SOURCE_LABELS: Record<string, string> = {
-  engine: 'Engine (bet/cashout)',
-  test: 'Test top-up',
-  payout: 'Simulated payout',
-  reconciliation: 'Reconciliation',
-};
-
-const PAYOUT_STATUS_LABELS: Record<Payout['status'], string> = {
-  processing: 'Processing',
-  done: 'Done',
-};
-
-function formatTimestamp(value: string): string {
-  const milliseconds = Date.parse(value);
-  if (!Number.isFinite(milliseconds)) return value;
-  return new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  }).format(milliseconds);
 }
 
 function describeTopUpError(error: unknown): string {
@@ -125,14 +95,23 @@ function describePayoutError(error: unknown): string {
 export function WalletScreen({
   api,
   token,
-  balanceCents,
-  onBalanceChange,
+  playerId,
   onUnauthorized,
 }: WalletScreenProps): React.JSX.Element {
-  const [ledger, setLedger] = useState<LedgerEntry[] | null>(null);
-  const [ledgerCursor, setLedgerCursor] = useState<string | null>(null);
-  const [ledgerError, setLedgerError] = useState<string | null>(null);
-  const [ledgerBusy, setLedgerBusy] = useState(false);
+  const queryClient = useQueryClient();
+  const playerContext = { api, token, playerId, onUnauthorized };
+  const walletQuery = usePlayerWallet(playerContext);
+  const ledgerQuery = usePlayerTransactions(playerContext);
+  const payoutsQuery = usePlayerPayouts(playerContext);
+  const walletCommands = usePlayerWalletCommands(playerContext);
+  const payoutLookup = usePlayerPayoutLookup(playerContext);
+  const balanceCents = walletQuery.data?.balanceCents ?? null;
+  const ledger = ledgerQuery.data?.pages.flatMap((page) => page.items) ?? null;
+  const ledgerError = ledgerQuery.error === null
+    ? null
+    : ledgerQuery.error instanceof OperatorApiError ? ledgerQuery.error.message : 'Could not load the history.';
+  const ledgerBusy = ledgerQuery.isFetching;
+  const ledgerCursor = ledgerQuery.hasNextPage ? 'next' : null;
 
   const [topUpAmount, setTopUpAmount] = useState('');
   const [topUpError, setTopUpError] = useState<string | null>(null);
@@ -141,11 +120,20 @@ export function WalletScreen({
     readPendingTopUp(),
   );
 
-  const [payouts, setPayouts] = useState<PayoutView[] | null>(null);
-  const [payoutCursor, setPayoutCursor] = useState<string | null>(null);
-  const [payoutAvailability, setPayoutAvailability] = useState<PayoutAvailability>({
-    status: 'checking',
-  });
+  const payoutPages = payoutsQuery.data?.pages.flatMap((page) => page.items) ?? null;
+  const [missingPayoutIds, setMissingPayoutIds] = useState<Set<string>>(() => new Set());
+  const payouts: PayoutView[] | null = payoutPages?.map((payout) => ({
+    ...payout,
+    ...(missingPayoutIds.has(payout.id) ? { missing: true } : {}),
+  })) ?? null;
+  const payoutCursor = payoutsQuery.hasNextPage ? 'next' : null;
+  const payoutAvailability: PayoutAvailability = !payoutsQuery.isFetched
+    ? { status: 'checking' }
+    : payoutsQuery.error instanceof OperatorApiError && payoutsQuery.error.status === 404 && payoutsQuery.error.code === null
+      ? { status: 'disabled' }
+      : payoutsQuery.error !== null
+        ? { status: 'error', message: payoutsQuery.error instanceof Error ? payoutsQuery.error.message : 'Could not load payouts.' }
+        : { status: 'ready' };
   const [payoutAmount, setPayoutAmount] = useState('');
   const [payoutError, setPayoutError] = useState<string | null>(null);
   const [payoutBusy, setPayoutBusy] = useState(false);
@@ -155,84 +143,20 @@ export function WalletScreen({
   const [payoutPolls, setPayoutPolls] = useState(0);
 
   const refreshBalance = useCallback(async (): Promise<void> => {
-    try {
-      const wallet = await api.getWallet(token);
-      onBalanceChange(wallet.balanceCents);
-    } catch (error) {
-      if (isUnauthenticated(error)) onUnauthorized();
-    }
-  }, [api, token, onBalanceChange, onUnauthorized]);
+    const result = await walletQuery.refetch();
+    if (result.error && isUnauthenticated(result.error)) onUnauthorized();
+  }, [walletQuery.refetch, onUnauthorized]);
 
-  const loadLedger = useCallback(
-    async (mode: 'reset' | 'more', cursor: string | null): Promise<void> => {
-      setLedgerBusy(true);
-      setLedgerError(null);
-      try {
-        const page = await api.getTransactions(token, {
-          limit: LEDGER_PAGE_SIZE,
-          ...(mode === 'more' && cursor !== null ? { cursor } : {}),
-        });
-        setLedger((current) => (mode === 'more' && current !== null ? [...current, ...page.items] : page.items));
-        setLedgerCursor(page.nextCursor);
-      } catch (error) {
-        if (isUnauthenticated(error)) {
-          onUnauthorized();
-          return;
-        }
-        setLedgerError(
-          error instanceof OperatorApiError ? error.message : 'Could not load the history.',
-        );
-      } finally {
-        setLedgerBusy(false);
-      }
-    },
-    [api, token, onUnauthorized],
-  );
+  const loadLedger = useCallback(async (mode: 'reset' | 'more'): Promise<void> => {
+    if (mode === 'more') await ledgerQuery.fetchNextPage();
+    else await ledgerQuery.refetch();
+  }, [ledgerQuery.fetchNextPage, ledgerQuery.refetch]);
 
-  const loadPayouts = useCallback(
-    async (mode: 'reset' | 'more', cursor: string | null): Promise<void> => {
-      try {
-        const page = await api.listPayouts(token, {
-          limit: PAYOUT_PAGE_SIZE,
-          ...(mode === 'more' && cursor !== null ? { cursor } : {}),
-        });
-        setPayouts((current) =>
-          mode === 'more' && current !== null ? mergePayoutPage(current, page.items) : page.items,
-        );
-        setPayoutCursor(page.nextCursor);
-        setPayoutAvailability({ status: 'ready' });
-        setPayoutError(null);
-      } catch (error) {
-        if (isUnauthenticated(error)) {
-          onUnauthorized();
-          return;
-        }
-        if (error instanceof OperatorApiError && error.status === 404 && error.code === null) {
-          // Route not registered: local payout simulation is disabled here.
-          setPayoutAvailability({ status: 'disabled' });
-          setPayouts(null);
-          return;
-        }
-        setPayoutAvailability({
-          status: 'error',
-          message: error instanceof OperatorApiError ? error.message : 'Could not load payouts.',
-        });
-      }
-    },
-    [api, token, onUnauthorized],
-  );
-
-  useEffect(() => {
-    void refreshBalance();
-  }, [refreshBalance]);
-
-  useEffect(() => {
-    void loadLedger('reset', null);
-  }, [loadLedger]);
-
-  useEffect(() => {
-    void loadPayouts('reset', null);
-  }, [loadPayouts]);
+  const loadPayouts = useCallback(async (mode: 'reset' | 'more'): Promise<void> => {
+    setPayoutError(null);
+    if (mode === 'more') await payoutsQuery.fetchNextPage();
+    else await payoutsQuery.refetch();
+  }, [payoutsQuery.fetchNextPage, payoutsQuery.refetch]);
 
   // A requested payout settles shortly after; poll briefly, then require a manual refresh.
   useEffect(() => {
@@ -244,8 +168,21 @@ export function WalletScreen({
       void (async () => {
         for (const item of processing) {
           try {
-            const fresh = await api.getPayout(token, item.id);
-            setPayouts((current) => (current === null ? current : upsertPayout(current, fresh)));
+            const fresh = await payoutLookup(item.id);
+            setMissingPayoutIds((current) => {
+              if (!current.has(item.id)) return current;
+              const next = new Set(current);
+              next.delete(item.id);
+              return next;
+            });
+            queryClient.setQueryData<InfiniteData<PayoutPage, string | null>>(queryKeys.payouts(playerId), (current) => {
+              if (!current) return current;
+              const [first, ...rest] = current.pages;
+              return {
+                ...current,
+                pages: [{ ...first, items: upsertPayout(first.items, fresh) }, ...rest],
+              };
+            });
             if (fresh.status === 'done') void refreshBalance();
           } catch (error) {
             if (isUnauthenticated(error)) {
@@ -255,27 +192,25 @@ export function WalletScreen({
             // The list still shows it, but the item is gone or belongs to
             // another identity: stop treating it as an in-flight payout.
             if (error instanceof OperatorApiError && error.status === 404 && error.code !== null) {
-              setPayouts((current) =>
-                current === null ? current : upsertPayout(current, { ...item, missing: true }),
-              );
+              setMissingPayoutIds((current) => new Set(current).add(item.id));
             }
           }
         }
       })();
     }, PAYOUT_POLL_DELAYS_MS[payoutPolls]);
     return () => clearTimeout(timer);
-  }, [payouts, payoutPolls, api, token, onUnauthorized, refreshBalance]);
+  }, [payouts, payoutPolls, api, token, playerId, queryClient, payoutLookup, onUnauthorized, refreshBalance]);
 
   const runTopUp = async (command: PendingAmountCommand): Promise<void> => {
     setTopUpBusy(true);
     setTopUpError(null);
     try {
-      const receipt = await api.requestTopUp(token, command);
+      const receipt = await walletCommands.topUp.mutateAsync(command);
       clearPendingTopUp();
       setPendingTopUp(null);
       setTopUpAmount('');
-      onBalanceChange(receipt.balanceCents);
-      await loadLedger('reset', null);
+      queryClient.setQueryData(queryKeys.wallet(playerId), { balanceCents: receipt.balanceCents, currency: receipt.currency });
+      await loadLedger('reset');
       notifications.show({
         color: 'teal',
         title: 'Balance added',
@@ -326,13 +261,17 @@ export function WalletScreen({
     setPayoutBusy(true);
     setPayoutError(null);
     try {
-      const payout = await api.createPayout(token, command);
+      const payout = await walletCommands.payout.mutateAsync(command);
       clearPendingPayout();
       setPendingPayout(null);
       setPayoutAmount('');
       setPayoutPolls(0);
-      setPayouts((current) => (current === null ? [payout] : upsertPayout(current, payout)));
-      await loadLedger('reset', null);
+      queryClient.setQueryData<InfiniteData<PayoutPage, string | null>>(queryKeys.payouts(playerId), (current) => {
+        if (!current) return current;
+        const [first, ...rest] = current.pages;
+        return { ...current, pages: [{ ...first, items: upsertPayout(first.items, payout) }, ...rest] };
+      });
+      await loadLedger('reset');
       await refreshBalance();
       notifications.show({
         color: 'teal',
@@ -441,70 +380,14 @@ export function WalletScreen({
         </Tabs.List>
 
         <Tabs.Panel value="ledger" pt="md">
-          <Paper withBorder p="md" radius="md">
-            <Group justify="space-between">
-              <Title order={4}>Wallet history</Title>
-              <Button size="xs" variant="default" onClick={() => void loadLedger('reset', null)}>
-                Refresh
-              </Button>
-            </Group>
-            {ledgerError !== null && (
-              <Alert color="red" mt="sm" withCloseButton onClose={() => setLedgerError(null)}>
-                {ledgerError}
-              </Alert>
-            )}
-            <Table mt="sm" striped withTableBorder>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>When</Table.Th>
-                  <Table.Th>Operation</Table.Th>
-                  <Table.Th>Amount</Table.Th>
-                  <Table.Th>Balance after</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {ledger === null ? (
-                  <Table.Tr>
-                    <Table.Td colSpan={4}>
-                      <Group gap="xs">
-                        <Loader size="xs" />
-                        <Text size="sm" c="dimmed">
-                          Loading…
-                        </Text>
-                      </Group>
-                    </Table.Td>
-                  </Table.Tr>
-                ) : ledger.length === 0 ? (
-                  <Table.Tr>
-                    <Table.Td colSpan={4}>
-                      <Text size="sm" c="dimmed">
-                        No transactions yet.
-                      </Text>
-                    </Table.Td>
-                  </Table.Tr>
-                ) : (
-                  ledger.map((entry) => (
-                    <Table.Tr key={entry.id}>
-                      <Table.Td>{formatTimestamp(entry.createdAt)}</Table.Td>
-                      <Table.Td>
-                        <Badge size="sm" variant="light" color={entry.direction === 'credit' ? 'teal' : 'orange'}>
-                          {DIRECTION_LABELS[entry.direction]}
-                        </Badge>{' '}
-                        {SOURCE_LABELS[entry.source] ?? entry.source}
-                      </Table.Td>
-                      <Table.Td>{formatSignedCents(entry.amountCents, entry.direction)}</Table.Td>
-                      <Table.Td>{formatCents(entry.balanceAfterCents)}</Table.Td>
-                    </Table.Tr>
-                  ))
-                )}
-              </Table.Tbody>
-            </Table>
-            {ledgerCursor !== null && (
-              <Button mt="sm" size="xs" variant="light" loading={ledgerBusy} onClick={() => void loadLedger('more', ledgerCursor)}>
-                Load more
-              </Button>
-            )}
-          </Paper>
+          <WalletHistory
+            ledger={ledger}
+            error={ledgerError}
+            loading={ledgerBusy}
+            hasMore={ledgerCursor !== null}
+            onRefresh={() => void loadLedger('reset')}
+            onLoadMore={() => void loadLedger('more')}
+          />
         </Tabs.Panel>
 
         <Tabs.Panel value="payouts" pt="md">
@@ -533,7 +416,7 @@ export function WalletScreen({
               <Alert color="red" mt="sm" title="Could not load payouts">
                 <Group justify="space-between">
                   <Text size="sm">{payoutAvailability.message}</Text>
-                  <Button size="xs" variant="light" onClick={() => void loadPayouts('reset', null)}>
+                  <Button size="xs" variant="light" onClick={() => void loadPayouts('reset')}>
                     Try again
                   </Button>
                 </Group>
@@ -568,84 +451,15 @@ export function WalletScreen({
                   </Button>
                 </Group>
 
-                <Table mt="md" striped withTableBorder>
-                  <Table.Thead>
-                    <Table.Tr>
-                      <Table.Th>Requested</Table.Th>
-                      <Table.Th>Reference</Table.Th>
-                      <Table.Th>Amount</Table.Th>
-                      <Table.Th>Status</Table.Th>
-                      <Table.Th>Completed</Table.Th>
-                      <Table.Th />
-                    </Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {payouts === null || payouts.length === 0 ? (
-                      <Table.Tr>
-                        <Table.Td colSpan={6}>
-                          <Text size="sm" c="dimmed">
-                            {payouts === null ? 'Loading…' : 'No payouts requested yet.'}
-                          </Text>
-                        </Table.Td>
-                      </Table.Tr>
-                    ) : (
-                      payouts.map((payout) => (
-                        <Table.Tr key={payout.id}>
-                          <Table.Td>{formatTimestamp(payout.requestedAt)}</Table.Td>
-                          <Table.Td>
-                            <Text size="xs" ff="monospace">
-                              {payout.id.slice(0, 8)}…
-                            </Text>
-                          </Table.Td>
-                          <Table.Td>{formatCents(payout.amountCents)}</Table.Td>
-                          <Table.Td>
-                            {payout.missing === true ? (
-                              <Badge variant="light" color="red">
-                                Not found
-                              </Badge>
-                            ) : (
-                              <>
-                                <Badge
-                                  variant="light"
-                                  color={payout.status === 'done' ? 'teal' : 'blue'}
-                                >
-                                  {PAYOUT_STATUS_LABELS[payout.status]}
-                                </Badge>
-                                {payout.simulated && (
-                                  <Text size="xs" c="dimmed">
-                                    local simulation
-                                  </Text>
-                                )}
-                              </>
-                            )}
-                          </Table.Td>
-                          <Table.Td>
-                            {payout.completedAt === null ? '—' : formatTimestamp(payout.completedAt)}
-                          </Table.Td>
-                          <Table.Td>
-                            {payout.status === 'processing' && payout.missing !== true && (
-                              <Button
-                                size="compact-xs"
-                                variant="light"
-                                onClick={() => {
-                                  setPayoutPolls(0);
-                                  void loadPayouts('reset', null);
-                                }}
-                              >
-                                Refresh
-                              </Button>
-                            )}
-                          </Table.Td>
-                        </Table.Tr>
-                      ))
-                    )}
-                  </Table.Tbody>
-                </Table>
-                {payoutCursor !== null && (
-                  <Button mt="sm" size="xs" variant="light" onClick={() => void loadPayouts('more', payoutCursor)}>
-                    Load more
-                  </Button>
-                )}
+                <PayoutHistory
+                  payouts={payouts}
+                  hasMore={payoutCursor !== null}
+                  onRefreshItem={() => {
+                    setPayoutPolls(0);
+                    void loadPayouts('reset');
+                  }}
+                  onLoadMore={() => void loadPayouts('more')}
+                />
               </>
             )}
           </Paper>

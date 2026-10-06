@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   AppShell,
@@ -24,6 +25,9 @@ import { formatCents } from './money';
 import { AuthScreen } from './auth-screen';
 import { GameScreen } from './game-screen';
 import { WalletScreen } from './wallet-screen';
+import { useAuthCommands } from './hooks/use-auth-commands';
+import { usePlayerWallet } from './hooks/use-wallet-data';
+import { queryKeys } from './query-keys';
 
 /**
  * Player client for the Crashsim operator.
@@ -72,6 +76,7 @@ function clearStoredToken(): void {
 
 export function App(): React.JSX.Element {
   const api = useMemo(() => createOperatorApi(), []);
+  const queryClient = useQueryClient();
   const [boot, setBoot] = useState<BootState>({ phase: 'checking' });
   const [bootAttempt, setBootAttempt] = useState(0);
 
@@ -118,8 +123,9 @@ export function App(): React.JSX.Element {
 
   const endSession = useCallback((notice: string | null): void => {
     clearStoredToken();
+    queryClient.removeQueries({ queryKey: queryKeys.player(boot.phase === 'authenticated' ? boot.session.user.id : '') });
     setBoot({ phase: 'unauthenticated', notice });
-  }, []);
+  }, [boot, queryClient]);
 
   const dismissNotice = useCallback((): void => {
     setBoot((current) =>
@@ -183,36 +189,33 @@ interface PlayerAppProps {
 
 function PlayerApp({ api, session, onSessionEnded }: PlayerAppProps): React.JSX.Element {
   const [view, setView] = useState<PlayerView>('game');
-  const [balanceCents, setBalanceCents] = useState<number | null>(null);
-  const [loggingOut, setLoggingOut] = useState(false);
+  const queryClient = useQueryClient();
 
   const handleUnauthorized = useCallback((): void => {
     onSessionEnded('Your session expired. Please sign in again.');
   }, [onSessionEnded]);
 
+  const walletQuery = usePlayerWallet({
+    api,
+    token: session.token,
+    playerId: session.user.id,
+    onUnauthorized: handleUnauthorized,
+  });
+  const balanceCents = walletQuery.data?.balanceCents ?? null;
   const refreshWallet = useCallback(async (): Promise<void> => {
-    try {
-      const wallet = await api.getWallet(session.token);
-      setBalanceCents(wallet.balanceCents);
-    } catch (error) {
-      if (isUnauthenticated(error)) handleUnauthorized();
-    }
-  }, [api, session.token, handleUnauthorized]);
-
-  useEffect(() => {
-    void refreshWallet();
-  }, [refreshWallet]);
+    await walletQuery.refetch();
+  }, [walletQuery.refetch]);
+  const authCommands = useAuthCommands(api);
 
   const logout = async (): Promise<void> => {
-    setLoggingOut(true);
     let notice: string | null = null;
     try {
-      await api.logout(session.token);
+      await authCommands.logout.mutateAsync(session.token);
     } catch {
       notice =
         'You were signed out in this browser, but the operator could not confirm the logout.';
     } finally {
-      setLoggingOut(false);
+      queryClient.removeQueries({ queryKey: queryKeys.player(session.user.id) });
       onSessionEnded(notice);
     }
   };
@@ -240,7 +243,7 @@ function PlayerApp({ api, session, onSessionEnded }: PlayerAppProps): React.JSX.
             <Text size="sm" visibleFrom="md">
               {session.user.name}
             </Text>
-            <Button size="xs" variant="default" loading={loggingOut} onClick={() => void logout()}>
+            <Button size="xs" variant="default" loading={authCommands.logout.isPending} onClick={() => void logout()}>
               Sign out
             </Button>
           </Group>
@@ -252,6 +255,7 @@ function PlayerApp({ api, session, onSessionEnded }: PlayerAppProps): React.JSX.
             <GameScreen
               api={api}
               token={session.token}
+              playerId={session.user.id}
               onUnauthorized={handleUnauthorized}
               onWalletChanged={refreshWallet}
             />
@@ -259,8 +263,7 @@ function PlayerApp({ api, session, onSessionEnded }: PlayerAppProps): React.JSX.
             <WalletScreen
               api={api}
               token={session.token}
-              balanceCents={balanceCents}
-              onBalanceChange={setBalanceCents}
+              playerId={session.user.id}
               onUnauthorized={handleUnauthorized}
             />
           )}

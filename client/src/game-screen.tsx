@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Accordion,
   Alert,
@@ -10,7 +11,6 @@ import {
   Loader,
   Paper,
   Stack,
-  Table,
   Text,
   TextInput,
   Title,
@@ -22,7 +22,6 @@ import {
   type BetCommandResult,
   type BetCommandStatus,
   type OperatorApi,
-  type SettlementStatus,
 } from './operator-api';
 import {
   formatCents,
@@ -34,7 +33,10 @@ import {
   projectPayoutCents,
 } from './money';
 import { verifyRound, type ProofCheck, type RoundProof } from './fairness';
-import { getBetGameStatusLabel, isBetOutcomePending, shouldRefreshBetsForSnapshot } from './bet-status';
+import { isBetOutcomePending, shouldRefreshBetsForSnapshot } from './bet-status';
+import { usePlayerBetLookups, usePlayerBets, usePlayerGameCommands, usePlayerGameSession } from './hooks/use-game-data';
+import { queryKeys } from './query-keys';
+import { RecentBetsTable } from './components/recent-bets-table';
 import {
   initialStreamState,
   isSnapshotStale,
@@ -88,6 +90,7 @@ interface Feedback {
 export interface GameScreenProps {
   api: OperatorApi;
   token: string;
+  playerId: string;
   onUnauthorized(): void;
   onWalletChanged(): void;
 }
@@ -121,20 +124,6 @@ const COMMAND_STATUS_LABELS: Record<BetCommandStatus, string> = {
   accepted: 'Accepted',
   rejected: 'Rejected',
   unknown: 'Confirming',
-};
-
-const COMMAND_STATUS_COLORS: Record<BetCommandStatus, string> = {
-  pending: 'gray',
-  accepted: 'teal',
-  rejected: 'red',
-  unknown: 'yellow',
-};
-
-const SETTLEMENT_LABELS: Record<SettlementStatus, string> = {
-  not_applicable: '—',
-  pending: 'Credit pending',
-  confirmed: 'Credited',
-  precision_incident: 'Precision incident logged',
 };
 
 const RESULT_CODE_MESSAGES: Record<string, string> = {
@@ -200,13 +189,14 @@ export function describeGameError(error: unknown): string {
 export function GameScreen({
   api,
   token,
+  playerId,
   onUnauthorized,
   onWalletChanged,
 }: GameScreenProps): React.JSX.Element {
+  const queryClient = useQueryClient();
+  const playerContext = { api, token, playerId, onUnauthorized };
   const [stream, dispatch] = useReducer(streamReducer, initialStreamState);
-  const [session, setSession] = useState<'connecting' | 'ready' | 'unavailable'>('connecting');
   const [sessionAttempt, setSessionAttempt] = useState(0);
-  const [bets, setBets] = useState<BetCommandResult[] | null>(null);
   const [betsError, setBetsError] = useState<string | null>(null);
   const [amountText, setAmountText] = useState('');
   const [autoCashoutText, setAutoCashoutText] = useState('');
@@ -220,8 +210,21 @@ export function GameScreen({
   const lastBetsRef = useRef<BetCommandResult[] | null>(null);
   const [checkingBetIds, setCheckingBetIds] = useState<Set<string>>(() => new Set());
   const [failedBetVerifications, setFailedBetVerifications] = useState<Set<string>>(() => new Set());
+  const betsQuery = usePlayerBets(playerContext, BETS_LIMIT);
+  const gameSessionMutation = usePlayerGameSession(playerContext);
+  const gameCommands = usePlayerGameCommands(playerContext);
+  const betLookups = usePlayerBetLookups(playerContext);
+  const bets = betsQuery.data ?? null;
+  const session = gameSessionMutation.isError
+    ? 'unavailable'
+    : gameSessionMutation.isSuccess ? 'ready' : 'connecting';
 
   const stale = isSnapshotStale(stream);
+
+  useEffect(() => {
+    gameSessionMutation.reset();
+    gameSessionMutation.mutate();
+  }, [gameSessionMutation.mutate, gameSessionMutation.reset, sessionAttempt]);
 
   // A brief reconnect blip must not throw a full-width warning at the player:
   // the frozen badge and the disabled controls already carry that state, and
@@ -253,15 +256,13 @@ export function GameScreen({
       return next;
     });
     try {
-      const fresh = await api.getBet(token, betId);
+      const fresh = await betLookups.bet(betId);
       if (fresh === null) {
         setFailedBetVerifications((current) => new Set(current).add(betId));
         return;
       }
-      setBets((current) =>
-        current === null
-          ? current
-          : current.map((bet) => (bet.commandId === fresh.commandId ? fresh : bet)),
+      queryClient.setQueryData<BetCommandResult[]>(queryKeys.bets(playerId, BETS_LIMIT), (current) =>
+        current?.map((bet) => (bet.commandId === fresh.commandId ? fresh : bet)),
       );
       if (fresh.bet?.settlementStatus === 'confirmed') onWalletChanged();
     } catch (error) {
@@ -274,14 +275,15 @@ export function GameScreen({
         return next;
       });
     }
-  }, [api, token, onUnauthorized, onWalletChanged]);
+  }, [betLookups, playerId, queryClient, onUnauthorized, onWalletChanged]);
 
   const loadBets = useCallback(async (): Promise<void> => {
     try {
-      const list = await api.listBets(token, BETS_LIMIT);
+      const response = await betsQuery.refetch();
+      if (response.error) throw response.error;
+      const list = response.data ?? [];
       const previous = lastBetsRef.current;
       lastBetsRef.current = list;
-      setBets(list);
       setBetsError(null);
 
       // A bet that stopped being active is exactly the moment the operator
@@ -305,7 +307,7 @@ export function GameScreen({
       }
       setBetsError(describeGameError(error));
     }
-  }, [api, token, onUnauthorized, refreshBet, onWalletChanged]);
+  }, [betsQuery.refetch, onUnauthorized, refreshBet, onWalletChanged]);
 
   const afterMutation = useCallback(async (): Promise<void> => {
     setSettlementPolls(0);
@@ -362,29 +364,18 @@ export function GameScreen({
   }, [phase, stale]);
 
   useEffect(() => {
-    let cancelled = false;
-    setSession('connecting');
-    void (async () => {
-      try {
-        await api.createSession(token);
-        if (!cancelled) setSession('ready');
-      } catch (error) {
-        if (cancelled) return;
-        if (isUnauthenticated(error)) {
-          onUnauthorized();
-          return;
-        }
-        setSession('unavailable');
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [api, token, onUnauthorized, sessionAttempt]);
+    if (betsQuery.error !== null) {
+      if (isUnauthenticated(betsQuery.error)) onUnauthorized();
+      else setBetsError(describeGameError(betsQuery.error));
+    }
+  }, [betsQuery.error, onUnauthorized]);
 
   useEffect(() => {
-    void loadBets();
-  }, [loadBets]);
+    if (betsQuery.data !== undefined) {
+      lastBetsRef.current = betsQuery.data;
+      setBetsError(null);
+    }
+  }, [betsQuery.data]);
 
   // Refresh personal bets after a crash, initial synchronization, or a new
   // connected round. Primitive dependencies keep ticks from reloading the list.
@@ -405,12 +396,13 @@ export function GameScreen({
       try {
         let result: BetCommandResult | null = null;
         if (command.commandId !== null) {
-          result = await api.getCommand(token, command.commandId);
+          result = await betLookups.command(command.commandId);
         } else if (command.type === 'cashout' && command.betId !== null) {
-          result = await api.getBet(token, command.betId);
+          result = await betLookups.bet(command.betId);
         } else {
-          const list = await api.listBets(token, BETS_LIMIT);
-          setBets(list);
+          const response = await betsQuery.refetch();
+          if (response.error) throw response.error;
+          const list = response.data ?? [];
           result = list.find((item) => item.roundId === command.roundId) ?? null;
         }
 
@@ -456,8 +448,8 @@ export function GameScreen({
             : { ...current, attempts: current.attempts + 1, note: 'Could not reach the operator right now.' },
         );
       }
-    },
-    [api, token, onUnauthorized, afterMutation],
+  },
+    [betsQuery.refetch, betLookups, onUnauthorized, afterMutation],
   );
 
   // Bounded, read-only reconciliation: never resend with a fresh key.
@@ -482,13 +474,11 @@ export function GameScreen({
         for (const item of awaitingCredit) {
           if (item.betId === null) continue;
           try {
-            const fresh = await api.getBet(token, item.betId);
+            const fresh = await betLookups.bet(item.betId);
             if (fresh === null) continue;
             if (fresh.bet?.settlementStatus === 'confirmed') onWalletChanged();
-            setBets((current) =>
-              current === null
-                ? current
-                : current.map((bet) => (bet.commandId === fresh.commandId ? fresh : bet)),
+            queryClient.setQueryData<BetCommandResult[]>(queryKeys.bets(playerId, BETS_LIMIT), (current) =>
+              current?.map((bet) => (bet.commandId === fresh.commandId ? fresh : bet)),
             );
           } catch (error) {
             if (isUnauthenticated(error)) {
@@ -500,7 +490,7 @@ export function GameScreen({
       })();
     }, SETTLEMENT_POLL_MS);
     return () => clearTimeout(timer);
-  }, [bets, settlementPolls, api, token, onUnauthorized, onWalletChanged]);
+  }, [bets, settlementPolls, api, token, playerId, queryClient, onUnauthorized, onWalletChanged]);
 
   // Provably-fair proof for the last finished round: recomputed locally, never
   // taken from the operator's word.
@@ -639,7 +629,7 @@ export function GameScreen({
     setBusy(true);
     setFeedback(null);
     try {
-      const outcome = await api.placeBet(token, {
+      const outcome = await gameCommands.placeBet.mutateAsync({
         roundId: command.roundId,
         amountCents: command.amountCents,
         autoCashoutHundredths: command.autoCashoutHundredths,
@@ -700,7 +690,7 @@ export function GameScreen({
     setBusy(true);
     setFeedback(null);
     try {
-      const outcome = await api.cashout(token, {
+      const outcome = await gameCommands.cashout.mutateAsync({
         betId,
         idempotencyKey: command.idempotencyKey,
       });
@@ -863,119 +853,17 @@ export function GameScreen({
         </Stack>
       </Paper>
 
-      <Paper withBorder p="md" radius="md">
-        <Group justify="space-between">
-          <Title order={4}>Your recent bets</Title>
-          <Button size="xs" variant="default" onClick={() => void loadBets()}>
-            Refresh
-          </Button>
-        </Group>
-        {betsError !== null && (
-          <Alert color="red" mt="sm">
-            {betsError}
-          </Alert>
-        )}
-        <Table mt="sm" striped withTableBorder highlightOnHover>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Round</Table.Th>
-              <Table.Th>Amount</Table.Th>
-              <Table.Th>Command</Table.Th>
-              <Table.Th>Game</Table.Th>
-              <Table.Th>Result</Table.Th>
-              <Table.Th>Settlement</Table.Th>
-              <Table.Th />
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {bets === null || bets.length === 0 ? (
-              <Table.Tr>
-                <Table.Td colSpan={7}>
-                  <Text size="sm" c="dimmed">
-                    {bets === null ? 'Loading…' : 'No bets recorded yet.'}
-                  </Text>
-                </Table.Td>
-              </Table.Tr>
-            ) : (
-              bets.map((item) => {
-                const settlementBetId = item.bet?.betId ?? null;
-                const verificationBetId = item.bet?.betId ?? item.betId;
-                const outcomePending = isBetOutcomePending(item, { roundId, phase });
-                const autoCashoutCrossed =
-                  item.bet?.engineStatus === 'active' &&
-                  item.autoCashoutHundredths !== null &&
-                  liveMultiplierHundredths !== null &&
-                  liveMultiplierHundredths >= item.autoCashoutHundredths;
-                const multiplier =
-                  item.bet?.payoutCents !== null && item.bet?.payoutCents !== undefined
-                    ? formatCents(item.bet.payoutCents)
-                    : item.bet?.multiplierHundredths !== null &&
-                        item.bet?.multiplierHundredths !== undefined
-                      ? formatMultiplier(item.bet.multiplierHundredths)
-                      : '—';
-                return (
-                  <Table.Tr key={item.commandId}>
-                    <Table.Td>
-                      <Text size="sm" ff="monospace">
-                        {item.roundId.slice(0, 8)}…
-                      </Text>
-                    </Table.Td>
-                    <Table.Td>{formatCents(item.amountCents)}</Table.Td>
-                    <Table.Td>
-                      <Badge color={COMMAND_STATUS_COLORS[item.betCommandStatus]} variant="light">
-                        {COMMAND_STATUS_LABELS[item.betCommandStatus]}
-                      </Badge>
-                      {item.resultCode !== null && (
-                        <Text size="xs" c="dimmed">
-                          {item.resultCode}
-                        </Text>
-                      )}
-                    </Table.Td>
-                    <Table.Td>
-                      {getBetGameStatusLabel(item, { roundId, phase })}
-                      {autoCashoutCrossed && (
-                        <Text size="xs" c="dimmed">
-                          cashing out…
-                        </Text>
-                      )}
-                    </Table.Td>
-                    <Table.Td>{multiplier}</Table.Td>
-                    <Table.Td>
-                      {item.bet === null ? '—' : SETTLEMENT_LABELS[item.bet.settlementStatus]}
-                    </Table.Td>
-                    <Table.Td>
-                      {item.bet?.settlementStatus === 'pending' && settlementBetId !== null && (
-                        <Button
-                          size="compact-xs"
-                          variant="light"
-                          onClick={() => void refreshBet(settlementBetId)}
-                        >
-                          Check credit
-                        </Button>
-                      )}
-                      {outcomePending && verificationBetId !== null && (
-                        <Stack gap={2} align="flex-start">
-                          <Button
-                            size="compact-xs"
-                            variant="light"
-                            disabled={checkingBetIds.has(verificationBetId)}
-                            onClick={() => void refreshBet(verificationBetId)}
-                          >
-                            {checkingBetIds.has(verificationBetId) ? 'Checking…' : 'Check result'}
-                          </Button>
-                          {failedBetVerifications.has(verificationBetId) && (
-                            <Text size="xs" c="dimmed">Could not verify right now. Try again.</Text>
-                          )}
-                        </Stack>
-                      )}
-                    </Table.Td>
-                  </Table.Tr>
-                );
-              })
-            )}
-          </Table.Tbody>
-        </Table>
-      </Paper>
+      <RecentBetsTable
+        bets={bets}
+        error={betsError}
+        roundId={roundId}
+        phase={phase}
+        liveMultiplierHundredths={liveMultiplierHundredths}
+        checkingBetIds={checkingBetIds}
+        failedBetVerifications={failedBetVerifications}
+        onRefresh={() => void loadBets()}
+        onRefreshBet={(betId) => void refreshBet(betId)}
+      />
 
       <Accordion variant="contained">
         <Accordion.Item value="fairness">
