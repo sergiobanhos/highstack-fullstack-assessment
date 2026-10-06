@@ -2,7 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import type { Logger, OperatorConfig } from '../../config';
 import type { OperatorDatabase } from '../../db';
 import type { AuthModule } from '../auth/auth.module';
-import { registerFinancialController } from './financial.controller';
+import { registerEngineWebhookController } from './controllers/engine-webhook.controller';
+import { registerWalletController } from './controllers/wallet.controller';
 import { createFinancialService, type FinancialService } from './financial.service';
 
 export type {
@@ -50,14 +51,19 @@ export function createFinancialModule({
   payoutMockEnabled = config.payoutMockEnabled,
 }: FinancialModuleOptions): FinancialModule {
   const service = createFinancialService({ db });
-  registerFinancialController({
+  registerWalletController({
+    app,
+    service,
+    walletTestTopupEnabled: config.walletTestTopupEnabled,
+    payoutMockEnabled,
+    requireUser: auth.requireUser,
+    logger,
+  });
+  registerEngineWebhookController({
     app,
     service,
     webhookSecret: config.engine.webhookSecret,
-    walletTestTopupEnabled: config.walletTestTopupEnabled,
-    payoutMockEnabled,
     onCashoutCredited,
-    requireUser: auth.requireUser,
     logger,
   });
 

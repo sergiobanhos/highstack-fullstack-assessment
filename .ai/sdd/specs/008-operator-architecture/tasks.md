@@ -172,18 +172,18 @@ T2 é independente das demais até a integração final. As outras tarefas têm 
 
 ### Trabalho
 
-- [ ] Separar rotas autenticadas de wallet/ledger/top-up/payout das rotas de webhook Engine em dois controllers registráveis.
-- [ ] Manter parsing do body raw, validação HMAC/frescor e limite de tamanho junto à fronteira HTTP de webhook; executar operações somente pela fachada financial.
-- [ ] Manter `auth.requireUser`, cursor/paginação, rate limits, códigos/status/payloads atuais e tradução de erros.
-- [ ] Atualizar `financial.module.ts` para registrar ambos os controllers e manter lifecycle do payout local, timer, prevenção de sweep concorrente e shutdown.
-- [ ] Preservar testes de rota autenticada e de webhook em duplicidade, assinatura inválida e retry.
+- [x] Separar rotas autenticadas de wallet/ledger/top-up/payout das rotas de webhook Engine em dois controllers registráveis.
+- [x] Manter parsing do body raw, validação HMAC/frescor e limite de tamanho junto à fronteira HTTP de webhook; executar operações somente pela fachada financial.
+- [x] Manter `auth.requireUser`, cursor/paginação, rate limits, códigos/status/payloads atuais e tradução de erros.
+- [x] Atualizar `financial.module.ts` para registrar ambos os controllers e manter lifecycle do payout local, timer, prevenção de sweep concorrente e shutdown.
+- [x] Preservar testes de rota autenticada e de webhook em duplicidade, assinatura inválida e retry.
 
 ### Critérios de aceite
 
-- [ ] Nenhum controller importa use case privado ou acessa DB diretamente.
-- [ ] Rotas e wire payloads REST/webhook permanecem idênticos, inclusive comportamento de erros e respostas.
-- [ ] HMAC é calculado sobre os bytes originais e timestamp antigo/inválido é rejeitado antes de qualquer mutação financeira.
-- [ ] `financial.module.ts` continua compondo os dois controllers e o job local sem introduzir worker/queue.
+- [x] Nenhum controller importa use case privado ou acessa DB diretamente.
+- [x] Rotas e wire payloads REST/webhook permanecem idênticos, inclusive comportamento de erros e respostas.
+- [x] HMAC é calculado sobre os bytes originais e timestamp antigo/inválido é rejeitado antes de qualquer mutação financeira.
+- [x] `financial.module.ts` continua compondo os dois controllers e o job local sem introduzir worker/queue.
 
 ### Arquivos prováveis
 
@@ -196,9 +196,9 @@ T2 é independente das demais até a integração final. As outras tarefas têm 
 
 ### Verificação
 
-- [ ] `cd operator && bun run typecheck`
-- [ ] `cd operator && bun test src/modules/financial`
-- [ ] `cd operator && bun run test:e2e` com banco local de teste configurado.
+- [x] `cd operator && bun run typecheck` — exit code 0.
+- [x] `cd operator && bun run test:e2e` — exit code 0, 162 testes e 940 expectativas passaram em PostgreSQL temporário.
+- [x] Testes verificaram raw-body, HMAC, frescor, duplicidade, status HTTP, autenticação e rotas locais de top-up/payout.
 
 ## Task T5: Encapsular realtime e contrato SSE
 

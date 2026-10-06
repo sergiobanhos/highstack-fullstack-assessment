@@ -9,11 +9,26 @@ import { createDatabase } from '../../db';
 import { financialOperations, payouts, walletLedgerEntries, wallets } from './financial.schema';
 import { createFinancialModule, type CashoutCreditListener } from './financial.module';
 import { FinancialServiceError, type FinancialService } from './financial.service';
-import { registerFinancialController } from './financial.controller';
+import { registerEngineWebhookController } from './controllers/engine-webhook.controller';
+import { registerWalletController } from './controllers/wallet.controller';
 import { UnauthenticatedError, type AuthModule, type AuthenticatedPlayer } from '../auth/auth.module';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const webhookSecret = 'controller-test-webhook-secret';
+
+type FinancialControllerTestOptions = Parameters<typeof registerWalletController>[0] &
+  Pick<Parameters<typeof registerEngineWebhookController>[0], 'webhookSecret' | 'onCashoutCredited'>;
+
+function registerFinancialControllers(options: FinancialControllerTestOptions): void {
+  registerWalletController(options);
+  registerEngineWebhookController({
+    app: options.app,
+    service: options.service,
+    webhookSecret: options.webhookSecret,
+    onCashoutCredited: options.onCashoutCredited,
+    logger: options.logger,
+  });
+}
 
 function isDedicatedTestDatabase(databaseUrl: string): boolean {
   try {
@@ -574,7 +589,7 @@ describe('financial webhook controller error mapping', () => {
       debit: async () => { throw new FinancialServiceError('STORAGE_UNAVAILABLE'); },
       creditCashoutOnce: async () => { throw new FinancialServiceError('STORAGE_UNAVAILABLE'); },
     } as unknown as FinancialService;
-    registerFinancialController({
+    registerFinancialControllers({
       app,
       service: failingService,
       webhookSecret,
@@ -600,7 +615,7 @@ describe('financial webhook controller error mapping', () => {
     const unavailableService = {
       ensureWallet: async () => { throw new FinancialServiceError('STORAGE_UNAVAILABLE'); },
     } as unknown as FinancialService;
-    registerFinancialController({
+    registerFinancialControllers({
       app,
       service: unavailableService,
       webhookSecret,
@@ -633,7 +648,7 @@ describe('cashout credit listener', () => {
       debit: async () => ({ outcome: 'applied', replayed: false, balanceCents: 1_000n }),
       creditCashoutOnce: async () => ({ outcome: 'applied', replayed: false, balanceCents: 1_050n }),
     } as unknown as FinancialService;
-    registerFinancialController({
+    registerFinancialControllers({
       app,
       service,
       webhookSecret,
