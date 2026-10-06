@@ -3,7 +3,7 @@ import { createLogger, createRedactor, loadConfig, type LoggerSink } from '../..
 import { GameEventHub } from './game-event-hub';
 import type { GameStreamService } from './game-stream.service';
 import { createGameStreamService } from './game-stream.service';
-import type { ConnectionState, GameEvent, OperatorMessage } from './round-state';
+import type { ConnectionState, GameEvent, OperatorMessage, OperatorSnapshot } from './round-state';
 import type { Scheduler, TimerHandle, UpstreamSocket, UpstreamSocketCloseInfo } from './crashsim-stream.client';
 
 const OPERATOR_KEY = 'test-operator-key';
@@ -86,13 +86,21 @@ interface Harness {
   scheduler: ManualScheduler;
   fetchCount(): number;
   requestHeaders: Headers[];
+  crashReconciliations: string[];
+  snapshotReconciliations: string[];
   events(): GameEvent[];
   connections(): ConnectionState[];
 }
 
-function createHarness(snapshotBodies: unknown[] = [
-  { roundId: 'r1', state: 'running', seq: 5, startedAt: 100, multiplier: 1.2, serverSeedHash: 'h1' },
-]): Harness {
+function createHarness(
+  snapshotBodies: unknown[] = [
+    { roundId: 'r1', state: 'running', seq: 5, startedAt: 100, multiplier: 1.2, serverSeedHash: 'h1' },
+  ],
+  callbacks: {
+    onRoundCrashed?: (roundId: string) => Promise<void>;
+    onSnapshotSynchronized?: (snapshot: OperatorSnapshot) => Promise<void>;
+  } = {},
+): Harness {
   const logs: string[] = [];
   const logger = createLogger({
     level: 'debug',
@@ -110,6 +118,8 @@ function createHarness(snapshotBodies: unknown[] = [
   const scheduler = new ManualScheduler();
   const requestHeaders: Headers[] = [];
   let fetchCount = 0;
+  const crashReconciliations: string[] = [];
+  const snapshotReconciliations: string[] = [];
   const hub = new GameEventHub();
   const messages: OperatorMessage[] = [];
   const collector = hub.subscribeWithSnapshot(() => ({
@@ -138,6 +148,14 @@ function createHarness(snapshotBodies: unknown[] = [
     }),
     logger,
     hub,
+    onRoundCrashed: async (roundId) => {
+      crashReconciliations.push(roundId);
+      await callbacks.onRoundCrashed?.(roundId);
+    },
+    onSnapshotSynchronized: async (snapshot) => {
+      snapshotReconciliations.push(snapshot.state.roundId ?? '');
+      await callbacks.onSnapshotSynchronized?.(snapshot);
+    },
     scheduler,
     random: () => 0.5,
     streamBackoff: { baseDelayMs: 100, maxDelayMs: 800, jitterRatio: 0, stableAfterMs: 0 },
@@ -167,6 +185,8 @@ function createHarness(snapshotBodies: unknown[] = [
     logs,
     scheduler,
     requestHeaders,
+    crashReconciliations,
+    snapshotReconciliations,
     fetchCount: () => fetchCount,
     events: () => messages.flatMap((message) => (message.kind === 'game-event' ? [message.event] : [])),
     connections: () => messages.flatMap((message) => (message.kind === 'connection' ? [message.connection] : [])),
@@ -247,6 +267,41 @@ describe('Crashsim stream service', () => {
     expect(state.multiplier).toBe(2.5);
     expect(state.seq).toBe(4);
     expect(harness.events().map((event) => event.seq)).toEqual([4]);
+  });
+
+  test('reconciles an applied crash in background without delaying event publication', async () => {
+    const harness = createHarness(
+      [{ roundId: 'r1', state: 'running', seq: 5, startedAt: 100, multiplier: 1.2, serverSeedHash: 'h1' }],
+      { onRoundCrashed: () => new Promise<void>(() => {}) },
+    );
+    harness.service.start();
+    const socket = harness.sockets[0]!;
+    socket.emitOpen();
+    await flush();
+
+    socket.emitMessage(crashed(6, 'r1'));
+
+    expect(harness.events().map((event) => event.type)).toEqual(['round.crashed']);
+    expect(harness.crashReconciliations).toEqual(['r1']);
+    expect(harness.service.getSnapshot().state.state).toBe('crashed');
+    expect(harness.service.getSnapshot().connection).toBe('connected');
+    await harness.service.stop();
+  });
+
+  test('starts snapshot reconciliation in background and reaches connected despite callback failure', async () => {
+    const harness = createHarness(
+      [{ roundId: 'r2', state: 'running', seq: 8, startedAt: 200, multiplier: 1.1, serverSeedHash: 'h2' }],
+      { async onSnapshotSynchronized() { throw new Error('private callback detail'); } },
+    );
+    harness.service.start();
+    harness.sockets[0]!.emitOpen();
+    await flush();
+
+    expect(harness.snapshotReconciliations).toEqual(['r2']);
+    expect(harness.service.getSnapshot().connection).toBe('connected');
+    expect(harness.logs.join('\n')).toContain('snapshot.bet_reconciliation_failed');
+    expect(harness.logs.join('\n')).not.toContain('private callback detail');
+    await harness.service.stop();
   });
 
   test('resynchronizes from a fresh snapshot on a sequence gap without opening another socket', async () => {

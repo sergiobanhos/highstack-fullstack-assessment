@@ -2,7 +2,7 @@
 
 > Requirements: @requirements.md
 > Design: @design.md
-> Status: Implementation in progress — T1 complete
+> Status: Implementation in progress — T1–T2 complete
 
 ## Cobertura dos requisitos
 
@@ -85,19 +85,19 @@
 
 ### Trabalho
 
-- [ ] Adicionar callbacks específicos ao `GameStreamService` para crash aplicado e snapshot sincronizado; sem introduzir um event bus paralelo.
-- [ ] Conectar os callbacks ao serviço de comandos em `game.module.ts`, garantindo que ambos existam antes de `game.start()`.
-- [ ] No crash, reconciliar as bets da rodada; no snapshot, localizar bets de rodadas não atuais e incluir a rodada snapshot quando ela estiver `crashed`.
-- [ ] Executar o trabalho em background e registrar falhas sem atrasar a publicação de eventos, snapshot ou estado `connected` para o SSE.
-- [ ] Garantir que eventos repetidos, sequence gap e snapshot após desconexão acionem um fluxo idempotente.
-- [ ] Adicionar testes unitários do callback e de composição do módulo, incluindo snapshot já avançado para a rodada seguinte.
+- [x] Adicionar callbacks específicos ao `GameStreamService` para crash aplicado e snapshot sincronizado; sem introduzir um event bus paralelo.
+- [x] Conectar os callbacks ao serviço de comandos em `game.module.ts`, garantindo que ambos existam antes de `game.start()`.
+- [x] No crash, reconciliar as bets da rodada; no snapshot, localizar bets de rodadas não atuais e incluir a rodada snapshot quando ela estiver `crashed`.
+- [x] Executar o trabalho em background e registrar falhas sem atrasar a publicação de eventos, snapshot ou estado `connected` para o SSE.
+- [x] Garantir que eventos repetidos, sequence gap e snapshot após desconexão acionem um fluxo idempotente.
+- [x] Adicionar testes unitários do callback e de composição do módulo, incluindo snapshot já avançado para a rodada seguinte.
 
 ### Critérios de aceitação
 
-- [ ] Um `round.crashed` aplicado aciona reconciliação da rodada sem aguardar as consultas upstream para publicar o evento.
-- [ ] Snapshot `crashed` reconcilia a rodada snapshot; snapshot `betting`/`running` reconcilia bets antigas e preserva bets `active` da rodada atual.
-- [ ] Um evento perdido ou sequence gap é recuperado pelo snapshot, sem assumir replay histórico.
-- [ ] Erros do fluxo são registrados com referências seguras e não quebram a conexão/fan-out do stream.
+- [x] Um `round.crashed` aplicado aciona reconciliação da rodada sem aguardar as consultas upstream para publicar o evento.
+- [x] Snapshot `crashed` reconcilia a rodada snapshot; snapshot `betting`/`running` reconcilia bets antigas e preserva bets `active` da rodada atual.
+- [x] Um evento perdido ou sequence gap é recuperado pelo snapshot, sem assumir replay histórico.
+- [x] Erros do fluxo são registrados com referências seguras e não quebram a conexão/fan-out do stream.
 
 ### Arquivos prováveis
 
@@ -108,9 +108,11 @@
 
 ### Verificação
 
-- [ ] `cd operator && bun run typecheck`
-- [ ] `cd operator && bun test src/modules/game/game-stream.service.test.ts src/modules/game/game.module.test.ts`
-- [ ] Conferir que a suite mantém as garantias atuais de sequence gap, snapshot e reconnect.
+- [x] `cd operator && bun run typecheck`
+- [x] `cd operator && bun test src/modules/game/game-stream.service.test.ts src/modules/game/game.module.test.ts`
+- [x] Conferir que a suite mantém as garantias atuais de sequence gap, snapshot e reconnect.
+
+**Evidência T2:** typecheck passou; 13 testes de stream/composição passaram. Os testes confirmam callback após crash aplicado, snapshot de sincronização, estado `connected` e fan-out sem aguardar reconciliação, e log seguro quando callback falha.
 
 ## Task T3: Mostrar apostas encerradas como em verificação no client
 

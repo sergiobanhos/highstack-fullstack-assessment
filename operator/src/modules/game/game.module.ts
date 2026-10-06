@@ -5,7 +5,7 @@ import type { AuthModule } from '../auth/auth.module';
 import type { FinancialModule } from '../financial/financial.module';
 import { registerGameCommandsController } from './game-commands.controller';
 import type { BackoffOptions, Scheduler, UpstreamSocketFactory } from './crashsim-stream.client';
-import { createGameCommandService } from './game-command.service';
+import { createGameCommandService, type GameCommandService } from './game-command.service';
 import { GameEventHub } from './game-event-hub';
 import { registerGameEventsRoute } from './game-events.controller';
 import { CrashsimHttpClient } from './crashsim-http.client';
@@ -35,20 +35,33 @@ export interface GameModule {
 /** Wires the Crashsim stream, authenticated commands, and downstream SSE route. */
 export function createGameModule({ app, db, auth, financial, ...deps }: GameModuleDeps): GameModule {
   const hub = new GameEventHub();
-  const stream = createGameStreamService({ ...deps, hub });
+  let commands: GameCommandService | null = null;
+  const stream = createGameStreamService({
+    ...deps,
+    hub,
+    onRoundCrashed: (roundId) => commands?.reconcileBetsForRound(roundId) ?? Promise.resolve(),
+    onSnapshotSynchronized: ({ state }) => {
+      if (!state.roundId || !state.state) return Promise.resolve();
+      return commands?.reconcileClosedBets({
+        currentRoundId: state.roundId,
+        currentRoundState: state.state,
+      }) ?? Promise.resolve();
+    },
+  });
   const engine = new CrashsimHttpClient({
     baseUrl: deps.config.engine.httpUrl,
     operatorKey: deps.config.engine.operatorKey,
     fetchImpl: deps.fetchImpl,
   });
-  const commands = createGameCommandService({
+  const commandService = createGameCommandService({
     db,
     financial,
     engine,
     stream,
     logger: deps.logger,
   });
-  registerGameCommandsController({ app, service: commands, requireUser: auth.requireUser, logger: deps.logger });
+  commands = commandService;
+  registerGameCommandsController({ app, service: commandService, requireUser: auth.requireUser, logger: deps.logger });
   registerGameEventsRoute(app, { hub, stream, logger: deps.logger });
 
   return {

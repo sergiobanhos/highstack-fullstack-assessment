@@ -38,6 +38,8 @@ export interface GameStreamServiceDeps {
   resyncBackoff?: Partial<BackoffOptions>;
   fetchImpl?: typeof fetch;
   snapshotTimeoutMs?: number;
+  onRoundCrashed?: (roundId: string) => Promise<void>;
+  onSnapshotSynchronized?: (snapshot: OperatorSnapshot) => Promise<void>;
 }
 
 const DEFAULT_RESYNC_BACKOFF: BackoffOptions = {
@@ -103,7 +105,22 @@ export function createGameStreamService(deps: GameStreamServiceDeps): GameStream
     state = next;
     const message: OperatorMessage = { kind: 'game-event', seq: event.seq, event };
     hub.publish(message);
+    if (event.type === 'round.crashed') {
+      notifyReconciliation('round.crash_reconciliation_failed', () => deps.onRoundCrashed?.(event.roundId));
+    }
     return 'applied';
+  };
+
+  const notifyReconciliation = (message: string, run: () => Promise<void> | undefined): void => {
+    try {
+      const reconciliation = run();
+      if (!reconciliation) return;
+      void reconciliation.catch((error: unknown) => {
+        logger.warn(message, { reason: error instanceof Error ? error.name : 'unexpected_error' });
+      });
+    } catch (error) {
+      logger.warn(message, { reason: error instanceof Error ? error.name : 'unexpected_error' });
+    }
   };
 
   const scheduleResync = (reason: string): void => {
@@ -154,6 +171,8 @@ export function createGameStreamService(deps: GameStreamServiceDeps): GameStream
     });
 
     hub.publish({ kind: 'snapshot', seq: state.seq, state, connection });
+    notifyReconciliation('snapshot.bet_reconciliation_failed', () =>
+      deps.onSnapshotSynchronized?.({ state, connection }));
 
     for (const event of buffered) {
       if (stopped || myGeneration !== generation) return;

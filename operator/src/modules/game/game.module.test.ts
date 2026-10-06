@@ -10,14 +10,20 @@ import type { UpstreamSocket } from './crashsim-stream.client';
 
 class InertSocket implements UpstreamSocket {
   closeCalls = 0;
+  private openListener: (() => void) | null = null;
+  private messageListener: ((raw: string) => void) | null = null;
   close(): void {
     this.closeCalls += 1;
   }
-  onOpen(): void {}
-  onMessage(): void {}
+  onOpen(listener: () => void): void { this.openListener = listener; }
+  onMessage(listener: (raw: string) => void): void { this.messageListener = listener; }
   onClose(): void {}
   onError(): void {}
+  emitOpen(): void { this.openListener?.(); }
+  emitMessage(raw: string): void { this.messageListener?.(raw); }
 }
+
+const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
 const silentLogger = () =>
   createLogger({
@@ -33,10 +39,24 @@ const silentLogger = () =>
 describe('createGameModule', () => {
   test('composes authenticated game commands and the Crashsim SSE route', async () => {
     const sockets: InertSocket[] = [];
+    let betLookups = 0;
+    const db = {
+      select() {
+        const query = {
+          from() { return this; },
+          where() { return this; },
+          then(onFulfilled: (value: unknown[]) => unknown, onRejected?: (reason: unknown) => unknown) {
+            betLookups += 1;
+            return Promise.resolve([]).then(onFulfilled, onRejected);
+          },
+        };
+        return query;
+      },
+    } as unknown as OperatorDatabase;
     const app = Fastify({ logger: false });
     const game = createGameModule({
       app,
-      db: {} as OperatorDatabase,
+      db,
       auth: {
         async requireUser() { throw new UnauthenticatedError(); },
       } satisfies Pick<AuthModule, 'requireUser'>,
@@ -47,6 +67,9 @@ describe('createGameModule', () => {
         ENGINE_WEBHOOK_SECRET: 'test-webhook-secret',
       }),
       logger: silentLogger(),
+      fetchImpl: (async () => new Response(JSON.stringify({
+        roundId: 'r1', state: 'running', seq: 5, startedAt: 100, multiplier: 1.1, serverSeedHash: 'hash-r1',
+      }), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof fetch,
       socketFactory: () => {
         const socket = new InertSocket();
         sockets.push(socket);
@@ -69,6 +92,16 @@ describe('createGameModule', () => {
     game.start();
     game.start();
     expect(sockets).toHaveLength(1);
+    sockets[0]!.emitOpen();
+    await flush();
+    expect(betLookups).toBe(1);
+
+    sockets[0]!.emitMessage(JSON.stringify({
+      type: 'round.crashed', seq: 6,
+      data: { roundId: 'r1', crashPoint: 2.5, serverSeed: 'seed-r1' },
+    }));
+    await flush();
+    expect(betLookups).toBe(2);
 
     await game.stop();
     expect(sockets[0]?.closeCalls).toBe(1);
