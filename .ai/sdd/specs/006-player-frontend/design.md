@@ -208,6 +208,7 @@ client/src/
   game-screen.tsx                 # estado de rodada, controles e apostas recentes
   wallet-screen.tsx               # saldo, top-up, ledger e payout
   operator-events.client.ts       # parser/reducer SSE existente, mantido e ampliado
+  fairness.ts                     # prova da rodada (SHA-256/HMAC + aritmética do engine)
 ```
 
 Evitar Redux, cache framework, provider genérico de jogos e camadas de domínio no browser nesta etapa. Cada tela mantém apenas estado transitório de formulários/loading; snapshots REST/SSE são substituídos por respostas autoritativas do operador.
@@ -247,9 +248,33 @@ O arquivo `.ai/sdd/specs/005-payout/design.md` define este contrato aprovado; a 
 | Consultar um payout | `GET /payouts/:payoutId` | `200` com os mesmos campos e status atual (`processing` ou `done`) |
 | Listar payouts | `GET /payouts?limit=50&cursor=...` | `200 { items, nextCursor }`; cada item inclui `id`, `amountCents`, `currency`, `status`, `requestedAt`, `completedAt`, `simulated` |
 
-`limit` usa default 50, aceita 1–100; `nextCursor` é opaco. Todas as rotas autenticam o jogador e usam o usuário do token, sem `playerId` no client. `402 INSUFFICIENT_FUNDS` é uma recusa terminal para aquela chave e, após top-up, exige nova chave. `409 IDEMPOTENCY_CONFLICT` significa chave reaproveitada com valor incompatível. `503 SERVICE_UNAVAILABLE` ocorre antes do commit; permitir retry com a mesma chave e o mesmo valor. Timeout de rede pode ter resultado desconhecido; replay com a mesma chave recupera o payout existente sem novo débito.
+`limit` usa default 50, aceita 1–100; `nextCursor` é opaco. Todas as rotas autenticam o jogador e usam o usuário do token, sem `playerId` no client. `402 INSUFFICIENT_FUNDS` é uma recusa terminal para aquela chave e, após top-up, exige nova chave. `409 IDEMPOTENCY_CONFLICT` significa chave reaproveitada com valor incompatível. Timeout de rede pode ter resultado desconhecido; replay com a mesma chave recupera o payout existente sem novo débito.
+
+`503 SERVICE_UNAVAILABLE` **não** é tratado como recusa terminal no client: `POST /payouts` grava o débito e só depois relê a linha, e uma falha nessa releitura é mapeada como `STORAGE_UNAVAILABLE` → 503 **após** o commit. Em 503 (assim como timeout ou resposta ilegível) a chave pendente é mantida e o retry reenvia a mesma solicitação; apenas recusas garantidamente pré-commit (400, 402, 404, 409, 422, 429) consomem a chave e liberam uma nova. Ver `isTerminalRefusal` em `client/src/operator-api.ts`.
 
 Se `GET /payouts` retornar 404, as rotas do mock não estão registradas neste ambiente; informar indisponibilidade e desabilitar o formulário. Em `GET /payouts/:payoutId`, 404 indica payout inexistente ou de outro jogador e não deve ser apresentado como “feature desabilitada”.
+
+### 6.2 Prova da rodada (FR-011)
+
+Nenhuma rota nova é necessária: o SSE já publica o compromisso e o seed revelado.
+
+| Momento | Dado no SSE | Uso no client |
+|---|---|---|
+| Rodada em aberto | `serverSeedHash` (snapshot e `round.betting`) | mostrar o compromisso; nunca pedir ou exibir o seed |
+| Após o crash | `serverSeed` e `crashPoint` (snapshot `crashed` e `round.crashed`) | recalcular localmente e comparar com o exibido |
+
+O recálculo em `client/src/fairness.ts` espelha `engine/src/fair.js` e roda no navegador com Web Crypto:
+
+```text
+digest     = HMAC-SHA256(key = serverSeed, message = roundId)
+h          = primeiros 52 bits do digest (13 caracteres hex)
+crashPoint = 1                                            quando h % 100 == 0
+           = floor((100 * 2^52 - h) / (2^52 - h)) / 100    caso contrário
+```
+
+Duas checagens independentes: **compromisso** (`sha256(seed) == serverSeedHash` publicado antes da rodada) e **resultado** (`crashPoint` recalculado == exibido, comparando em centésimos inteiros). Cada uma é `match`, `mismatch` ou `unavailable`; `unavailable` (seed ainda não revelado) nunca é apresentado como sucesso. Divergência mostra alerta vermelho com o roundId para investigação.
+
+O reducer retém a última rodada revelada (`lastRevealed`) com o compromisso capturado antes do crash, porque o `round.betting` seguinte substitui o snapshot. A prova é somente leitura: não envia nada ao operador, não decide aposta/cashout/crédito e não introduz estado financeiro novo.
 
 ## 7. Regras para valores e comandos
 
@@ -305,6 +330,7 @@ Consultas de reconciliação usam backoff limitado e terminam com um controle ex
 | FR-008 Payout local | §§ 2.4, 3.5, 6, dependência F05 |
 | FR-009 Erros/logout | §§ 2.1, 8–9 |
 | FR-010 Diagnóstico local (Should Have) | §§ 3.3, 5, painel colapsado |
+| FR-011 Prova da rodada (Should Have) | §§ 5, 6.2, painel colapsado com verificação no navegador |
 
 ## 11. Verificação proposta
 
@@ -314,6 +340,7 @@ Executar na implementação F06, depois que a API de payout necessária estiver 
 - `cd client && bun test`
 - `cd client && bun run build`
 - Fluxo integrado local com Docker Compose: cadastro/login, reload autenticado, top-up e ledger, apostar/cashout, resultado desconhecido, reconexão `DROP_WS_EVERY`/`REORDER`, payout `processing` → `done` e logout.
+- Prova da rodada: reproduzir vetores gerados pelo engine e conferir uma rodada real do Compose (compromisso e resultado).
 - Verificar manualmente viewport estreito, teclado, leitor de status em reconexão e mensagens de erro.
 
 Testes do client cobrem parsing de dinheiro, status do formulário, reaproveitamento da chave idempotente, restauração de sessão, estados stale/connected, reconciliação e respostas de erro. A stream real não tem replay histórico; testes não devem alegar que eventos perdidos foram reproduzidos.

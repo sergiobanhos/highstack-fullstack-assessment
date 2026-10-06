@@ -46,8 +46,8 @@ services:
       operator-migrate:
         condition: service_completed_successfully
 
-  # Local-only diagnostic page for the Crashsim operator stream. No player
-  # auth exists yet, so the host binding stays on loopback.
+  # Local player client for the Crashsim operator. Player auth now exists, but
+  # this surface stays a local-only UI, so the host binding remains on loopback.
   client:
     build: ./client
     ports:

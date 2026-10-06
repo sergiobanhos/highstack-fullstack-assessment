@@ -28,10 +28,30 @@ export interface ClientGameEvent {
   payload: unknown;
 }
 
+/**
+ * Proof material for a round the operator already finished: the revealed seed,
+ * the commitment published while it was open, and the crash point shown. Kept
+ * after the round ends, because the next `round.betting` replaces the snapshot.
+ */
+export interface RevealedRound {
+  roundId: string;
+  serverSeed: string;
+  serverSeedHash: string | null;
+  crashPoint: number;
+}
+
 export interface OperatorStreamState {
   upstream: UpstreamConnection;
   downstream: DownstreamConnection;
+  /**
+   * Whether the retained snapshot is trusted as live. Opening the browser
+   * connection (`onopen`) never sets it: only a snapshot from the operator, or
+   * an upstream `connected` notice published after a successful resync, does.
+   * Any interruption revokes it.
+   */
+  synchronized: boolean;
   snapshot: ClientRoundState | null;
+  lastRevealed: RevealedRound | null;
   events: ClientGameEvent[];
 }
 
@@ -40,7 +60,9 @@ export const MAX_RETAINED_EVENTS = 100;
 export const initialStreamState: OperatorStreamState = {
   upstream: 'reconnecting',
   downstream: 'connecting',
+  synchronized: false,
   snapshot: null,
+  lastRevealed: null,
   events: [],
 };
 
@@ -170,19 +192,65 @@ function applyGameEventToSnapshot(
   }
 }
 
+/** Proof material a crashed round carries, using the commitment of that round. */
+function revealedFromEvent(
+  event: ClientGameEvent,
+  current: ClientRoundState | null,
+): RevealedRound | null {
+  if (event.type !== 'round.crashed') return null;
+  const payload = isRecord(event.payload) ? event.payload : {};
+  const serverSeed = toStringOrNull(payload.serverSeed);
+  const crashPoint = toNumber(payload.crashPoint);
+  if (serverSeed === null || crashPoint === null) return null;
+  const commitmentOfRound =
+    current !== null && current.roundId === event.roundId ? current.serverSeedHash : null;
+  return { roundId: event.roundId, serverSeed, serverSeedHash: commitmentOfRound, crashPoint };
+}
+
+/** A snapshot taken after the crash already carries the revealed seed. */
+function revealedFromSnapshot(snapshot: ClientRoundState): RevealedRound | null {
+  if (snapshot.serverSeed === null || snapshot.crashPoint === null || snapshot.roundId === null) {
+    return null;
+  }
+  return {
+    roundId: snapshot.roundId,
+    serverSeed: snapshot.serverSeed,
+    serverSeedHash: snapshot.serverSeedHash,
+    crashPoint: snapshot.crashPoint,
+  };
+}
+
+const keepLatestReveal = (
+  current: RevealedRound | null,
+  candidate: RevealedRound | null,
+): RevealedRound | null => {
+  if (candidate === null) return current;
+  if (current !== null && current.roundId === candidate.roundId) {
+    // Prefer the variant that also carries the pre-round commitment.
+    return current.serverSeedHash !== null || candidate.serverSeedHash === null ? current : candidate;
+  }
+  return candidate;
+};
+
 export function streamReducer(state: OperatorStreamState, action: StreamAction): OperatorStreamState {
   switch (action.type) {
     case 'downstream-open':
-      return { ...state, downstream: 'open' };
+      // A reopened connection proves nothing about the displayed snapshot:
+      // only a fresh snapshot with a synchronized upstream clears staleness.
+      return { ...state, downstream: 'open', synchronized: false };
     case 'downstream-error':
-      return { ...state, downstream: 'error' };
+      return { ...state, downstream: 'error', synchronized: false };
     case 'snapshot':
       // A snapshot replaces the displayed state and resets the log baseline:
-      // events at or below its seq belong to older state.
+      // events at or below its seq belong to older state. It is authoritative
+      // even while the upstream is still reported as `synchronizing`, because
+      // the operator only publishes one after reading the current round.
       return {
         ...state,
         upstream: action.upstream,
+        synchronized: true,
         snapshot: action.snapshot,
+        lastRevealed: keepLatestReveal(state.lastRevealed, revealedFromSnapshot(action.snapshot)),
         events: state.events.filter((event) => event.seq > action.snapshot.seq),
       };
     case 'game-event': {
@@ -194,15 +262,25 @@ export function streamReducer(state: OperatorStreamState, action: StreamAction):
       return {
         ...state,
         snapshot: applyGameEventToSnapshot(state.snapshot, action.event),
+        lastRevealed: keepLatestReveal(
+          state.lastRevealed,
+          revealedFromEvent(action.event, state.snapshot),
+        ),
         events,
       };
     }
     case 'connection':
-      return { ...state, upstream: action.upstream };
+      // `connected` is published only after a successful resync, which always
+      // publishes a fresh snapshot first; anything else freezes the screen.
+      return {
+        ...state,
+        upstream: action.upstream,
+        synchronized: action.upstream === 'connected' && state.snapshot !== null,
+      };
   }
 }
 
 /** True while the displayed snapshot must be treated as frozen/stale. */
 export function isSnapshotStale(state: OperatorStreamState): boolean {
-  return state.upstream !== 'connected' || state.downstream !== 'open';
+  return !state.synchronized || state.upstream !== 'connected' || state.downstream !== 'open';
 }

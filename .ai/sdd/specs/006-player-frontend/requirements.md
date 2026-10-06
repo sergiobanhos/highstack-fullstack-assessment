@@ -99,6 +99,17 @@ Payout local faz parte desta interface por decisão do usuário. O design aprova
 - [ ] O painel não mostra operator key, segredo de webhook, token de auth ou dados pessoais de outro jogador.
 - [ ] A lista permanece limitada em memória durante uso prolongado.
 
+### US-008: Conferir a prova de uma rodada finalizada
+
+**Como** jogador, **quero** ver o compromisso do seed antes e o seed revelado depois do crash, com o resultado recalculado no navegador **para** confirmar que a rodada não foi manipulada.
+
+**Critérios de aceitação:**
+
+- [ ] A rodada em aberto mostra apenas o compromisso (`serverSeedHash`), nunca o seed.
+- [ ] Depois do crash, a prova mostra o seed revelado, o ponto de crash e os selos de compromisso e de recálculo.
+- [ ] O recálculo usa o mesmo algoritmo do engine e sinaliza divergência de forma visível, sem afirmar sucesso quando os dados ainda não foram revelados.
+- [ ] A prova continua disponível depois que a rodada seguinte começa.
+
 ## Requisitos funcionais
 
 ### FR-001: Autenticação do jogador — Must Have
@@ -160,6 +171,14 @@ PARA QUE falhas de rede não pareçam sucesso e uma sessão encerrada não conti
 QUANDO um mantenedor expande o painel de diagnóstico no ambiente local
 O SISTEMA DEVE mostrar saúde, identidade/seq da rodada e uma lista limitada de eventos recebidos
 PARA QUE seja possível inspecionar a integração sem transformar o fluxo normal de jogo em uma tela de debug.
+
+### FR-011: Prova da rodada (provably fair) — Should Have
+
+QUANDO o jogador expande a prova da rodada
+O SISTEMA DEVE mostrar o compromisso SHA-256 da rodada em aberto e, depois do crash, o seed revelado, o ponto de crash e o resultado do recálculo local com o mesmo algoritmo do engine
+PARA QUE o resultado de uma rodada finalizada possa ser conferido sem confiar no operador.
+
+A prova é somente leitura: ela nunca decide se uma aposta, cashout ou crédito foi aceito, e o seed de uma rodada em aberto nunca é exibido nem solicitado.
 
 ## Requisitos não funcionais
 

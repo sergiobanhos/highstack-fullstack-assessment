@@ -1,96 +1,271 @@
-import { useEffect, useReducer } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  initialStreamState,
-  isSnapshotStale,
-  parseOperatorFrame,
-  streamReducer,
-} from './operator-events.client';
-
-const STREAM_URL = '/game/events';
-const STREAM_EVENTS = ['snapshot', 'game-event', 'connection'] as const;
+  Alert,
+  AppShell,
+  Badge,
+  Button,
+  Center,
+  Container,
+  Group,
+  Loader,
+  Stack,
+  Tabs,
+  Text,
+} from '@mantine/core';
+import {
+  createOperatorApi,
+  isUnauthenticated,
+  OperatorApiError,
+  type AuthUser,
+  type OperatorApi,
+  type SessionInfo,
+} from './operator-api';
+import { formatCents } from './money';
+import { AuthScreen } from './auth-screen';
+import { GameScreen } from './game-screen';
+import { WalletScreen } from './wallet-screen';
 
 /**
- * Local-only diagnostic page for the Crashsim operator stream.
+ * Player client for the Crashsim operator.
  *
- * Plain text on purpose: connection health, the current synchronized snapshot,
- * and a bounded event log. No betting or cashout controls, no styling scope,
- * and no direct engine access — the browser only talks to the operator.
+ * The browser only talks to the operator: REST for identity, wallet, bets and
+ * payouts, and the operator SSE for the global round. The engine key and
+ * webhook secret stay server-side.
  */
+
+const TOKEN_STORAGE_KEY = 'operator.sessionToken';
+
+interface Session {
+  token: string;
+  user: AuthUser;
+}
+
+type BootState =
+  | { phase: 'checking' }
+  | { phase: 'unavailable'; message: string }
+  | { phase: 'unauthenticated'; notice: string | null }
+  | { phase: 'authenticated'; session: Session };
+
+function readStoredToken(): string | null {
+  try {
+    return sessionStorage.getItem(TOKEN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredToken(token: string): void {
+  try {
+    sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
+  } catch {
+    // The session still works for this tab lifetime.
+  }
+}
+
+function clearStoredToken(): void {
+  try {
+    sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+  } catch {
+    // Nothing else to clean up.
+  }
+}
+
 export function App(): React.JSX.Element {
-  const [state, dispatch] = useReducer(streamReducer, initialStreamState);
-  const stale = isSnapshotStale(state);
+  const api = useMemo(() => createOperatorApi(), []);
+  const [boot, setBoot] = useState<BootState>({ phase: 'checking' });
+  const [bootAttempt, setBootAttempt] = useState(0);
 
   useEffect(() => {
-    const source = new EventSource(STREAM_URL);
-    source.onopen = () => dispatch({ type: 'downstream-open' });
-    source.onerror = () => dispatch({ type: 'downstream-error' });
-    const receive = (message: Event) => {
-      const frame = message as MessageEvent<string>;
-      const action = parseOperatorFrame(frame.data);
-      if (action) dispatch(action);
-    };
-    for (const eventName of STREAM_EVENTS) source.addEventListener(eventName, receive);
+    const storedToken = readStoredToken();
+    if (storedToken === null) {
+      setBoot({ phase: 'unauthenticated', notice: null });
+      return;
+    }
+
+    let cancelled = false;
+    setBoot({ phase: 'checking' });
+    void (async () => {
+      try {
+        const user = await api.me(storedToken);
+        if (!cancelled) setBoot({ phase: 'authenticated', session: { token: storedToken, user } });
+      } catch (error) {
+        if (cancelled) return;
+        if (isUnauthenticated(error)) {
+          // The stored credential is no longer valid; discard it and ask again.
+          clearStoredToken();
+          setBoot({ phase: 'unauthenticated', notice: 'Sua sessão expirou. Entre novamente.' });
+          return;
+        }
+        // The credential may still be valid: keep it and offer a retry.
+        setBoot({
+          phase: 'unavailable',
+          message:
+            error instanceof OperatorApiError
+              ? error.message
+              : 'Não foi possível falar com o operador.',
+        });
+      }
+    })();
     return () => {
-      for (const eventName of STREAM_EVENTS) source.removeEventListener(eventName, receive);
-      source.close();
+      cancelled = true;
     };
+  }, [api, bootAttempt]);
+
+  const handleAuthenticated = useCallback((session: SessionInfo): void => {
+    writeStoredToken(session.token);
+    setBoot({ phase: 'authenticated', session: { token: session.token, user: session.user } });
   }, []);
 
-  const snapshot = state.snapshot;
+  const endSession = useCallback((notice: string | null): void => {
+    clearStoredToken();
+    setBoot({ phase: 'unauthenticated', notice });
+  }, []);
+
+  const dismissNotice = useCallback((): void => {
+    setBoot((current) =>
+      current.phase === 'unauthenticated' ? { ...current, notice: null } : current,
+    );
+  }, []);
+
+  if (boot.phase === 'checking') {
+    return (
+      <Center mih="100dvh">
+        <Stack align="center" gap="xs">
+          <Loader />
+          <Text size="sm" c="dimmed">
+            Carregando sua sessão…
+          </Text>
+        </Stack>
+      </Center>
+    );
+  }
+
+  if (boot.phase === 'unavailable') {
+    return (
+      <Center mih="100dvh" p="md">
+        <Alert color="red" title="Operador indisponível" maw={480}>
+          <Stack gap="sm">
+            <Text size="sm">
+              {boot.message} Sua sessão salva foi mantida; tente novamente quando o operador voltar.
+            </Text>
+            <Button size="xs" onClick={() => setBootAttempt((count) => count + 1)}>
+              Tentar novamente
+            </Button>
+          </Stack>
+        </Alert>
+      </Center>
+    );
+  }
+
+  if (boot.phase === 'unauthenticated') {
+    return (
+      <AuthScreen
+        api={api}
+        notice={boot.notice}
+        onNoticeDismissed={dismissNotice}
+        onAuthenticated={handleAuthenticated}
+      />
+    );
+  }
 
   return (
-    <main>
-      <h1>Crashsim operator — debug stream</h1>
-      <p>Local development only. No betting or cashout controls.</p>
+    <PlayerApp api={api} session={boot.session} onSessionEnded={endSession} />
+  );
+}
 
-      <section>
-        <h2>Connection</h2>
-        <p>
-          Upstream engine: <strong>{state.upstream}</strong>
-          {state.upstream !== 'connected' ? ' (reconnecting — snapshot frozen)' : ''}
-        </p>
-        <p>
-          Downstream operator stream: <strong>{state.downstream}</strong>
-        </p>
-      </section>
+type PlayerView = 'game' | 'wallet';
 
-      <section>
-        <h2>Current snapshot{stale ? ' (stale)' : ''}</h2>
-        {snapshot ? (
-          <dl>
-            <dt>roundId</dt>
-            <dd>{snapshot.roundId ?? '—'}</dd>
-            <dt>state</dt>
-            <dd>{snapshot.state ?? '—'}</dd>
-            <dt>seq</dt>
-            <dd>{snapshot.seq}</dd>
-            <dt>multiplier</dt>
-            <dd>{snapshot.multiplier ?? '—'}</dd>
-            <dt>crashPoint</dt>
-            <dd>{snapshot.crashPoint ?? '—'}</dd>
-            <dt>serverSeed</dt>
-            <dd>{snapshot.serverSeed ?? '—'}</dd>
-          </dl>
-        ) : (
-          <p>Waiting for the first snapshot…</p>
-        )}
-      </section>
+interface PlayerAppProps {
+  api: OperatorApi;
+  session: Session;
+  onSessionEnded(notice: string | null): void;
+}
 
-      <section>
-        <h2>Events ({state.events.length})</h2>
-        {state.events.length === 0 ? (
-          <p>No events yet.</p>
-        ) : (
-          <ol>
-            {state.events.map((event) => (
-              <li key={event.seq}>
-                {event.type} seq={event.seq} roundId={event.roundId}{' '}
-                <code>{JSON.stringify(event.payload)}</code>
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
-    </main>
+function PlayerApp({ api, session, onSessionEnded }: PlayerAppProps): React.JSX.Element {
+  const [view, setView] = useState<PlayerView>('game');
+  const [balanceCents, setBalanceCents] = useState<number | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const handleUnauthorized = useCallback((): void => {
+    onSessionEnded('Sua sessão expirou. Entre novamente.');
+  }, [onSessionEnded]);
+
+  const refreshWallet = useCallback(async (): Promise<void> => {
+    try {
+      const wallet = await api.getWallet(session.token);
+      setBalanceCents(wallet.balanceCents);
+    } catch (error) {
+      if (isUnauthenticated(error)) handleUnauthorized();
+    }
+  }, [api, session.token, handleUnauthorized]);
+
+  useEffect(() => {
+    void refreshWallet();
+  }, [refreshWallet]);
+
+  const logout = async (): Promise<void> => {
+    setLoggingOut(true);
+    let notice: string | null = null;
+    try {
+      await api.logout(session.token);
+    } catch {
+      notice =
+        'Sua sessão foi encerrada neste navegador, mas não foi possível confirmar o logout no operador.';
+    } finally {
+      setLoggingOut(false);
+      onSessionEnded(notice);
+    }
+  };
+
+  return (
+    <AppShell header={{ height: 64 }} padding="md">
+      <AppShell.Header>
+        <Group h="100%" px="md" justify="space-between" wrap="nowrap">
+          <Group gap="xs" wrap="nowrap">
+            <Text fw={700}>Crashsim</Text>
+            <Badge variant="light" visibleFrom="sm">
+              operador local
+            </Badge>
+          </Group>
+          <Group gap="sm" wrap="nowrap">
+            <Tabs value={view} onChange={(value) => setView(value === 'wallet' ? 'wallet' : 'game')}>
+              <Tabs.List>
+                <Tabs.Tab value="game">Jogo</Tabs.Tab>
+                <Tabs.Tab value="wallet">Carteira</Tabs.Tab>
+              </Tabs.List>
+            </Tabs>
+            <Badge size="lg" variant="light" color="teal" title="Saldo disponível (USD)">
+              {balanceCents === null ? '—' : formatCents(balanceCents)}
+            </Badge>
+            <Text size="sm" visibleFrom="md">
+              {session.user.name}
+            </Text>
+            <Button size="xs" variant="default" loading={loggingOut} onClick={() => void logout()}>
+              Sair
+            </Button>
+          </Group>
+        </Group>
+      </AppShell.Header>
+      <AppShell.Main>
+        <Container size="lg">
+          {view === 'game' ? (
+            <GameScreen
+              api={api}
+              token={session.token}
+              onUnauthorized={handleUnauthorized}
+              onWalletChanged={refreshWallet}
+            />
+          ) : (
+            <WalletScreen
+              api={api}
+              token={session.token}
+              balanceCents={balanceCents}
+              onBalanceChange={setBalanceCents}
+              onUnauthorized={handleUnauthorized}
+            />
+          )}
+        </Container>
+      </AppShell.Main>
+    </AppShell>
   );
 }

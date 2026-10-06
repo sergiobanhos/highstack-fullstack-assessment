@@ -206,11 +206,237 @@ describe('streamReducer', () => {
     // Upstream is still reconnecting: the snapshot stays frozen.
     expect(isSnapshotStale(state)).toBe(true);
 
-    state = streamReducer(state, { type: 'connection', upstream: 'connected' });
+    state = streamReducer(state, { type: 'snapshot', upstream: 'connected', snapshot: {
+      roundId: 'r1',
+      state: 'running',
+      seq: 5,
+      multiplier: 1.2,
+      crashPoint: null,
+      serverSeed: null,
+      serverSeedHash: 'h1',
+      bettingEndsAt: null,
+      startedAt: 100,
+    } });
     expect(isSnapshotStale(state)).toBe(false);
 
     state = streamReducer(state, { type: 'downstream-error' });
     expect(state.downstream).toBe('error');
     expect(isSnapshotStale(state)).toBe(true);
+  });
+
+  test('a reopened stream stays stale until the operator sends a fresh snapshot', () => {
+    let state = streamReducer(initialStreamState, { type: 'downstream-open' });
+    state = streamReducer(state, { type: 'snapshot', upstream: 'connected', snapshot: {
+      roundId: 'r1',
+      state: 'running',
+      seq: 5,
+      multiplier: 1.2,
+      crashPoint: null,
+      serverSeed: null,
+      serverSeedHash: 'h1',
+      bettingEndsAt: null,
+      startedAt: 100,
+    } });
+    expect(isSnapshotStale(state)).toBe(false);
+
+    // The stream drops; the last multiplier remains visible but frozen.
+    state = streamReducer(state, { type: 'downstream-error' });
+    expect(isSnapshotStale(state)).toBe(true);
+
+    // Reopening alone must not re-enable actions on the old snapshot.
+    state = streamReducer(state, { type: 'downstream-open' });
+    expect(state.snapshot?.multiplier).toBe(1.2);
+    expect(isSnapshotStale(state)).toBe(true);
+
+    // The snapshot the operator writes on connect restores confidence.
+    state = streamReducer(state, { type: 'snapshot', upstream: 'connected', snapshot: {
+      roundId: 'r1',
+      state: 'running',
+      seq: 9,
+      multiplier: 1.9,
+      crashPoint: null,
+      serverSeed: null,
+      serverSeedHash: 'h1',
+      bettingEndsAt: null,
+      startedAt: 100,
+    } });
+    expect(isSnapshotStale(state)).toBe(false);
+    expect(state.snapshot?.multiplier).toBe(1.9);
+  });
+
+  test('an upstream resync freezes the screen until the operator reports connected', () => {
+    // Exact frame order published by the operator while it resynchronizes
+    // after an engine stream drop (`connection` -> `snapshot` -> `connection`).
+    let state = streamReducer(initialStreamState, { type: 'downstream-open' });
+    state = streamReducer(state, { type: 'snapshot', upstream: 'connected', snapshot: {
+      roundId: 'r1',
+      state: 'running',
+      seq: 5,
+      multiplier: 1.2,
+      crashPoint: null,
+      serverSeed: null,
+      serverSeedHash: 'h1',
+      bettingEndsAt: null,
+      startedAt: 100,
+    } });
+    expect(isSnapshotStale(state)).toBe(false);
+
+    state = streamReducer(state, { type: 'connection', upstream: 'reconnecting' });
+    expect(isSnapshotStale(state)).toBe(true);
+
+    // The snapshot taken during the resync reports `synchronizing`: the state
+    // is current but not yet live, so actions stay blocked.
+    state = streamReducer(state, { type: 'snapshot', upstream: 'synchronizing', snapshot: {
+      roundId: 'r1',
+      state: 'running',
+      seq: 7,
+      multiplier: 1.5,
+      crashPoint: null,
+      serverSeed: null,
+      serverSeedHash: 'h1',
+      bettingEndsAt: null,
+      startedAt: 100,
+    } });
+    expect(state.snapshot?.multiplier).toBe(1.5);
+    expect(isSnapshotStale(state)).toBe(true);
+
+    // The resync finished: the screen is live again instead of staying frozen.
+    state = streamReducer(state, { type: 'connection', upstream: 'connected' });
+    expect(isSnapshotStale(state)).toBe(false);
+  });
+
+  test('a connection notice without any snapshot cannot un-freeze the screen', () => {
+    let state = streamReducer(initialStreamState, { type: 'downstream-open' });
+    state = streamReducer(state, { type: 'connection', upstream: 'connected' });
+
+    expect(state.snapshot).toBeNull();
+    expect(isSnapshotStale(state)).toBe(true);
+  });
+
+  test('a snapshot taken while the upstream is reconnecting is stale', () => {
+    const state = streamReducer(initialStreamState, {
+      type: 'snapshot',
+      upstream: 'reconnecting',
+      snapshot: {
+        roundId: 'r1',
+        state: 'running',
+        seq: 5,
+        multiplier: 2.34,
+        crashPoint: null,
+        serverSeed: null,
+        serverSeedHash: 'h1',
+        bettingEndsAt: null,
+        startedAt: 100,
+      },
+    });
+    expect(state.snapshot?.multiplier).toBe(2.34);
+    expect(isSnapshotStale(state)).toBe(true);
+  });
+});
+
+describe('revealed round retention', () => {
+  const crashedEvent = (
+    seq: number,
+    roundId: string,
+    serverSeed: string,
+    crashPoint: number,
+  ): ClientGameEvent => ({
+    type: 'round.crashed',
+    seq,
+    roundId,
+    payload: { type: 'round.crashed', seq, roundId, crashPoint, serverSeed },
+  });
+
+  test('keeps the revealed seed together with the commitment of that round', () => {
+    let state = withSnapshot(5);
+    state = streamReducer(state, {
+      type: 'game-event',
+      event: crashedEvent(6, 'r1', 'seed-1', 2.34),
+    });
+
+    expect(state.lastRevealed).toEqual({
+      roundId: 'r1',
+      serverSeed: 'seed-1',
+      serverSeedHash: 'h1',
+      crashPoint: 2.34,
+    });
+  });
+
+  test('survives the next round, which replaces the snapshot', () => {
+    let state = withSnapshot(5);
+    state = streamReducer(state, {
+      type: 'game-event',
+      event: crashedEvent(6, 'r1', 'seed-1', 2.34),
+    });
+    state = streamReducer(state, {
+      type: 'game-event',
+      event: {
+        type: 'round.betting',
+        seq: 7,
+        roundId: 'r2',
+        payload: { type: 'round.betting', seq: 7, roundId: 'r2', serverSeedHash: 'h2', bettingEndsAt: 999 },
+      },
+    });
+
+    expect(state.snapshot?.roundId).toBe('r2');
+    expect(state.snapshot?.serverSeed).toBeNull();
+    expect(state.lastRevealed?.roundId).toBe('r1');
+    expect(state.lastRevealed?.serverSeed).toBe('seed-1');
+  });
+
+  test('a crashed snapshot also records the proof material', () => {
+    const state = streamReducer(initialStreamState, {
+      type: 'snapshot',
+      upstream: 'connected',
+      snapshot: {
+        roundId: 'r9',
+        state: 'crashed',
+        seq: 30,
+        multiplier: 3.5,
+        crashPoint: 3.5,
+        serverSeed: 'seed-9',
+        serverSeedHash: 'h9',
+        bettingEndsAt: null,
+        startedAt: 100,
+      },
+    });
+
+    expect(state.lastRevealed).toEqual({
+      roundId: 'r9',
+      serverSeed: 'seed-9',
+      serverSeedHash: 'h9',
+      crashPoint: 3.5,
+    });
+  });
+
+  test('a later snapshot of the same round does not drop the commitment', () => {
+    let state = withSnapshot(5);
+    state = streamReducer(state, {
+      type: 'game-event',
+      event: crashedEvent(6, 'r1', 'seed-1', 2.34),
+    });
+    state = streamReducer(state, {
+      type: 'snapshot',
+      upstream: 'connected',
+      snapshot: {
+        roundId: 'r1',
+        state: 'crashed',
+        seq: 40,
+        multiplier: 2.34,
+        crashPoint: 2.34,
+        serverSeed: 'seed-1',
+        serverSeedHash: null,
+        bettingEndsAt: null,
+        startedAt: 100,
+      },
+    });
+
+    expect(state.lastRevealed?.serverSeedHash).toBe('h1');
+    expect(state.lastRevealed?.serverSeed).toBe('seed-1');
+  });
+
+  test('nothing is recorded while the round is still open', () => {
+    const state = withSnapshot(5);
+    expect(state.lastRevealed).toBeNull();
   });
 });

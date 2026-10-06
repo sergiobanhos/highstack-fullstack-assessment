@@ -1,12 +1,12 @@
 # SDD Handoff Brief: Implementação por dependência — F02 → F06
 
-> Status: F02/F03 concluídas; F04 com smoke test real pendente; F05 revisada — aprovada com follow-up baixo; F06 tasks aprovadas
-> Readiness: F06 T1–T5 prontas para iniciar quando o usuário autorizar; T6 depende de F05 concluída. Implementação F06 ainda não iniciada conforme pedido do usuário.
+> Status: F02/F03 concluídas; F04 com smoke test real pendente; F05 revisada — aprovada com follow-up baixo; F06 implementada e verificada com a stack local
+> Readiness: F06 T1–T6 concluídas (`implementation:done`); próxima etapa é a revisão (`/sdd-review`) antes de novo trabalho.
 > Updated: 2026-10-05
 
 ## Metadata
 
-- **Trabalho ativo:** F05 — `.ai/sdd/specs/005-payout/` (implementação em andamento); F06 tasks aprovadas, aguardando instrução para iniciar.
+- **Trabalho ativo:** F06 — `.ai/sdd/specs/006-player-frontend/` (implementação concluída e verificada); revisão pendente.
 - **F02 aprovado:** `.ai/sdd/specs/002-database-auth/`
 - **F03 requirements:** `.ai/sdd/specs/003-financial-wallet-ledger/requirements.md` (approved)
 - **F03 design:** `.ai/sdd/specs/003-financial-wallet-ledger/design.md` (approved)
@@ -149,10 +149,10 @@ Testes PostgreSQL devem usar banco de teste dedicado e migrado; não apontar com
 
 - **Spec ID:** `006-player-frontend`
 - **Spec Path:** `.ai/sdd/specs/006-player-frontend/`
-- **Current `.status`:** `.ai/sdd/specs/006-player-frontend/.status` (`tasks:approved`)
-- **Requirements:** `.ai/sdd/specs/006-player-frontend/requirements.md` (approved)
-- **Design:** `.ai/sdd/specs/006-player-frontend/design.md` (approved)
-- **Tasks:** `.ai/sdd/specs/006-player-frontend/tasks.md` (approved)
+- **Current `.status`:** `.ai/sdd/specs/006-player-frontend/.status` (`implementation:done`)
+- **Requirements:** `.ai/sdd/specs/006-player-frontend/requirements.md` (approved; US-008/FR-011 prova da rodada)
+- **Design:** `.ai/sdd/specs/006-player-frontend/design.md` (approved; §6.2 prova da rodada)
+- **Tasks:** `.ai/sdd/specs/006-player-frontend/tasks.md` (approved; T1–T7 concluídas com evidências de execução no fim do arquivo)
 - **Decisions:** D-001 payout local incluído; D-002 login automático após cadastro; D-003 client usa somente contratos públicos do operador.
 
 ### Resumo e escopo
@@ -186,18 +186,20 @@ Após F05, validar localmente cadastro/login, reload autenticado, top-up/histór
 
 ### Handoff readiness
 
-- **Ready for Implementation:** T1–T5 estão prontas após as aprovações; T6 aguarda F05 concluída.
-- **Implementation started:** no — o usuário pediu explicitamente para não implementar ainda.
+- **Ready for Implementation:** T1–T6 implementadas e verificadas com a stack local (typecheck, testes, build e fluxos REST/SSE reais).
+- **Implementation started:** yes — concluída em 2026-10-05; `.status` em `implementation:done`.
 - **Open questions:** nenhuma crítica.
-- **Recommended Next Action:** aguardar instrução do usuário antes de iniciar qualquer task F06; manter T6 dependente de F05.
+- **Recommended Next Action:** rodar `/sdd-review` para F06 antes de iniciar novo trabalho; F04 ainda tem smoke test manual pendente.
 
 ## Current implementation handoff: F07 — reconciliação das apostas
 
 - **Requirements:** `.ai/sdd/specs/007-round-bet-reconciliation/requirements.md` (approved).
 - **Design:** `.ai/sdd/specs/007-round-bet-reconciliation/design.md` (approved).
-- **Tasks:** `.ai/sdd/specs/007-round-bet-reconciliation/tasks.md` (approved; T1 complete, T2 in progress, T3 pending).
+- **Tasks:** `.ai/sdd/specs/007-round-bet-reconciliation/tasks.md` (approved; T1–T2 complete, T3 pending).
 - **Status:** `.ai/sdd/specs/007-round-bet-reconciliation/.status` (`implementation:in-progress`).
 - **Scope:** reconcile persisted `active` bets through the existing owned `getBet` flow after an applied Crashsim crash and after a successful snapshot. Never infer `lost`, create credits, add a worker, or alter the engine protocol.
 - **Task order:** T1 authoritative bet lookup, partial active-round index and migration; T2 non-blocking stream/snapshot triggers; T3 client pending-result label and manual verification.
 - **Verification:** operator typecheck and targeted game tests; PostgreSQL integration tests must use a dedicated database name containing `test`; client typecheck/tests/build and manual flow checks for T3.
 - **T1 evidence:** typecheck passed; 30 service/schema integration tests passed against local `operator_test`, including `lost`, `cashed_out`, pending settlement, failed lookup retry, duplicate trigger coalescing, snapshot filtering and partial index migration.
+- **T2 evidence:** typecheck passed; 13 stream/composition tests passed, including non-blocking crash/snapshot callbacks and safe handling of callback failures.
+- **Readiness:** implementation is underway with no open design questions. T2 and T3 remain before F07 can be marked complete.

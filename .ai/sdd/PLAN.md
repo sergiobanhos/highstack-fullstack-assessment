@@ -87,7 +87,7 @@ flowchart LR
 - F04 requirements, design, and tasks are approved in `.ai/sdd/specs/004-crashsim-bet-cashout/`. The engine contract stays unchanged: allow at most one accepted or unknown bet per player/round, never retry an ambiguous `POST /bets`, correlate through the persisted debit where possible, and allow a fresh command key after a definitive `402` while betting remains open. Unknown outcomes block another bet for that player/round. F04 implementation follows completed and verified F02/F03.
 - The user chose not to add automatic compensation for the rare case where the engine rejects a bet after the debit commit but all acknowledgements are lost; the local MVP design records this as a residual risk, without changing approved requirements.
 - F05 payout requirements, design, and tasks are approved at `.ai/sdd/specs/005-payout/`; implementation T1–T5 is complete and verified (`.status`: `implementation:done`) and unblocks the payout portion of F06.
-- F06 is the initial player-facing React integration. Requirements, design, and tasks are approved. The user asked to defer implementation; T1–T5 can start when authorized, and T6 depends on F05 implementation being complete. F07 remains operational reconciliation.
+- F06 is the initial player-facing React integration. Requirements, design, and tasks are approved, and T1–T6 were implemented and verified against the local stack (`.status`: `implementation:done`); the payout task used the completed F05 API. F06 review is the next step. F07 remains operational reconciliation.
 
 ## Next Actions
 
@@ -128,5 +128,5 @@ flowchart LR
 - [ ] Implement F03 T1–T5, then F04 T1–T7
 - [x] Implement F05 local wallet payout and verify its financial flow.
 - [x] Approve F06 player integration requirements, design, and tasks; defer implementation at the user's request.
-- [ ] Implement F06 when authorized; start T6 after the F05 payout API is available.
+- [x] Implement F06 T1–T6 after F05 exposed the payout API; verified against the local stack.
 - [ ] Plan F07 operational reconciliation after the player MVP integration.

@@ -31,12 +31,12 @@
 | 003 | Carteira, ledger e webhooks financeiros | implementation:done | `.ai/sdd/specs/003-financial-wallet-ledger/requirements.md` (approved; Q-001–Q-005 respondidos; D-009 definido) | `.ai/sdd/specs/003-financial-wallet-ledger/design.md` (approved) | `.ai/sdd/specs/003-financial-wallet-ledger/tasks.md` (T1–T5 concluídas e verificadas) | — |
 | 004 | Sessão Crashsim, aposta e cashout | implementation:in-progress | `.ai/sdd/specs/004-crashsim-bet-cashout/requirements.md` (approved; Q-001–Q-002 respondidos) | `.ai/sdd/specs/004-crashsim-bet-cashout/design.md` (approved; risco residual de débito sem estorno no MVP) | `.ai/sdd/specs/004-crashsim-bet-cashout/tasks.md` (T1–T7 implementadas e verificadas; smoke test manual com Crashsim real pendente) | — |
 | 005 | F05 — Payout local de carteira | review:done | `.ai/sdd/specs/005-payout/requirements.md` (approved; Q-001 respondido; D-005 definido) | `.ai/sdd/specs/005-payout/design.md` (approved) | `.ai/sdd/specs/005-payout/tasks.md` (approved; T1–T5 concluídas e verificadas) | `.ai/sdd/specs/005-payout/review.md` (Approved with follow-ups; um achado baixo) |
-| 006 | F06 — Interface inicial do jogador | tasks:approved | `.ai/sdd/specs/006-player-frontend/requirements.md` (approved; inclui payout local) | `.ai/sdd/specs/006-player-frontend/design.md` (approved; contrato de payout conforme F05) | `.ai/sdd/specs/006-player-frontend/tasks.md` (approved; T1–T5 podem avançar, T6 aguarda F05) | — |
-| 007 | F07 — Reconciliação das apostas ao fim da rodada | implementation:in-progress | `.ai/sdd/specs/007-round-bet-reconciliation/requirements.md` (approved) | `.ai/sdd/specs/007-round-bet-reconciliation/design.md` (approved) | `.ai/sdd/specs/007-round-bet-reconciliation/tasks.md` (approved; T1 concluída, T2–T3 em andamento) | — |
+| 006 | F06 — Interface inicial do jogador | implementation:done | `.ai/sdd/specs/006-player-frontend/requirements.md` (approved; inclui payout local e prova da rodada) | `.ai/sdd/specs/006-player-frontend/design.md` (approved; contrato de payout conforme F05; §6.2 prova da rodada) | `.ai/sdd/specs/006-player-frontend/tasks.md` (approved; T1–T7 concluídas e verificadas com a stack local) | pending |
+| 007 | F07 — Reconciliação das apostas ao fim da rodada | implementation:in-progress | `.ai/sdd/specs/007-round-bet-reconciliation/requirements.md` (approved) | `.ai/sdd/specs/007-round-bet-reconciliation/design.md` (approved) | `.ai/sdd/specs/007-round-bet-reconciliation/tasks.md` (approved; T1–T2 concluídas, T3 pendente) | — |
 
 ## Handoff
 
-- `.ai/sdd/handoff/sdd-brief.md`: available (F05 implementation complete; F06 tasks approved; F06 implementation deferred)
+- `.ai/sdd/handoff/sdd-brief.md`: available (F05 review complete; F06 implemented and verified; F06 review pending)
 
 ## Next Actions
 
