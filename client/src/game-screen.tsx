@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Accordion,
@@ -35,20 +35,11 @@ import {
 import { verifyRound, type ProofCheck, type RoundProof } from './fairness';
 import { isBetOutcomePending, shouldRefreshBetsForSnapshot } from './bet-status';
 import { usePlayerBetLookups, usePlayerBets, usePlayerGameCommands, usePlayerGameSession } from './hooks/use-game-data';
+import { useGameStream } from './hooks/use-game-stream';
 import { queryKeys } from './query-keys';
 import { RecentBetsTable } from './components/recent-bets-table';
-import {
-  initialStreamState,
-  isSnapshotStale,
-  MAX_RETAINED_EVENTS,
-  parseOperatorFrame,
-  streamReducer,
-  type DownstreamConnection,
-  type UpstreamConnection,
-} from './operator-events.client';
+import { MAX_RETAINED_EVENTS, type DownstreamConnection, type UpstreamConnection } from './operator-events.client';
 
-const STREAM_URL = '/game/events';
-const STREAM_EVENTS = ['snapshot', 'game-event', 'connection'] as const;
 const BETS_LIMIT = 10;
 /** Bounded read-only reconciliation attempts after an unknown command outcome. */
 const RECONCILE_DELAYS_MS = [1000, 2000, 4000] as const;
@@ -56,16 +47,6 @@ const SETTLEMENT_POLL_MS = 5000;
 const MAX_SETTLEMENT_POLLS = 12;
 /** Grace period before a reconnect blip becomes a full warning in the UI. */
 const STALE_ALERT_DELAY_MS = 2000;
-/** Rebuild a failing subscription instead of relying on the browser retry. */
-const STREAM_RECONNECT_DELAY_MS = 1500;
-/** A running round publishes ticks continuously; silence means a dead stream. */
-const STREAM_SILENCE_MS = 5000;
-/**
- * Betting and crashed windows are legitimately quiet (the engine sends no
- * ticks), so they only need a watchdog that outlives the window itself.
- */
-const STREAM_SILENCE_IDLE_MS = 15000;
-const STREAM_SILENCE_CHECK_MS = 2000;
 /** Engine auto-cashouts are only visible to the operator through an engine read. */
 const ACTIVE_BET_POLL_MS = 3000;
 const MAX_ACTIVE_BET_POLLS = 40;
@@ -195,7 +176,7 @@ export function GameScreen({
 }: GameScreenProps): React.JSX.Element {
   const queryClient = useQueryClient();
   const playerContext = { api, token, playerId, onUnauthorized };
-  const [stream, dispatch] = useReducer(streamReducer, initialStreamState);
+  const { stream, stale } = useGameStream();
   const [sessionAttempt, setSessionAttempt] = useState(0);
   const [betsError, setBetsError] = useState<string | null>(null);
   const [amountText, setAmountText] = useState('');
@@ -205,8 +186,6 @@ export function GameScreen({
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [settlementPolls, setSettlementPolls] = useState(0);
   const [staleAlertVisible, setStaleAlertVisible] = useState(false);
-  const [streamAttempt, setStreamAttempt] = useState(0);
-  const lastFrameAtRef = useRef<number>(Date.now());
   const lastBetsRef = useRef<BetCommandResult[] | null>(null);
   const [checkingBetIds, setCheckingBetIds] = useState<Set<string>>(() => new Set());
   const [failedBetVerifications, setFailedBetVerifications] = useState<Set<string>>(() => new Set());
@@ -218,8 +197,6 @@ export function GameScreen({
   const session = gameSessionMutation.isError
     ? 'unavailable'
     : gameSessionMutation.isSuccess ? 'ready' : 'connecting';
-
-  const stale = isSnapshotStale(stream);
 
   useEffect(() => {
     gameSessionMutation.reset();
@@ -314,54 +291,6 @@ export function GameScreen({
     await loadBets();
     onWalletChanged();
   }, [loadBets, onWalletChanged]);
-
-  // The operator stream is the only source of round state; it is opened while
-  // the game view is mounted and closed on leave.
-  useEffect(() => {
-    lastFrameAtRef.current = Date.now();
-    const source = new EventSource(STREAM_URL);
-    source.onopen = () => dispatch({ type: 'downstream-open' });
-    source.onerror = () => dispatch({ type: 'downstream-error' });
-    const receive = (message: Event): void => {
-      const action = parseOperatorFrame((message as MessageEvent<string>).data);
-      if (action) {
-        lastFrameAtRef.current = Date.now();
-        dispatch(action);
-      }
-    };
-    for (const eventName of STREAM_EVENTS) source.addEventListener(eventName, receive);
-    return () => {
-      for (const eventName of STREAM_EVENTS) source.removeEventListener(eventName, receive);
-      source.close();
-    };
-  }, [streamAttempt]);
-
-  // The browser retries an EventSource on its own, but an operator restart or a
-  // half-open proxy connection can leave the player frozen indefinitely. While
-  // the subscription is failing, rebuild it instead of waiting.
-  useEffect(() => {
-    if (stream.downstream !== 'error') return;
-    const timer = setTimeout(
-      () => setStreamAttempt((count) => count + 1),
-      STREAM_RECONNECT_DELAY_MS,
-    );
-    return () => clearTimeout(timer);
-  }, [stream.downstream, streamAttempt]);
-
-  // Silence watchdog: a long gap with no frame means the stream is dead even if
-  // the browser never reported an error, and a half-open connection would
-  // otherwise stay silent through the next round. Running rounds publish ticks
-  // continuously; betting and crashed windows are quiet by design.
-  useEffect(() => {
-    const threshold = phase === 'running' ? STREAM_SILENCE_MS : STREAM_SILENCE_IDLE_MS;
-    const timer = setInterval(() => {
-      if (stale) return;
-      if (Date.now() - lastFrameAtRef.current > threshold) {
-        setStreamAttempt((count) => count + 1);
-      }
-    }, STREAM_SILENCE_CHECK_MS);
-    return () => clearInterval(timer);
-  }, [phase, stale]);
 
   useEffect(() => {
     if (betsQuery.error !== null) {

@@ -26,6 +26,7 @@ import { AuthScreen } from './auth-screen';
 import { GameScreen } from './game-screen';
 import { WalletScreen } from './wallet-screen';
 import { useAuthCommands } from './hooks/use-auth-commands';
+import { useAuthSessionRestore } from './hooks/use-auth-session';
 import { usePlayerWallet } from './hooks/use-wallet-data';
 import { queryKeys } from './query-keys';
 
@@ -50,14 +51,6 @@ type BootState =
   | { phase: 'unauthenticated'; notice: string | null }
   | { phase: 'authenticated'; session: Session };
 
-function readStoredToken(): string | null {
-  try {
-    return sessionStorage.getItem(TOKEN_STORAGE_KEY);
-  } catch {
-    return null;
-  }
-}
-
 function writeStoredToken(token: string): void {
   try {
     sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
@@ -79,42 +72,33 @@ export function App(): React.JSX.Element {
   const queryClient = useQueryClient();
   const [boot, setBoot] = useState<BootState>({ phase: 'checking' });
   const [bootAttempt, setBootAttempt] = useState(0);
+  const restoreQuery = useAuthSessionRestore(api, bootAttempt);
 
   useEffect(() => {
-    const storedToken = readStoredToken();
-    if (storedToken === null) {
+    if (restoreQuery.isPending) {
+      setBoot({ phase: 'checking' });
+      return;
+    }
+    if (restoreQuery.error !== null) {
+      if (isUnauthenticated(restoreQuery.error)) {
+        clearStoredToken();
+        setBoot({ phase: 'unauthenticated', notice: 'Your session expired. Please sign in again.' });
+      } else {
+        setBoot({
+          phase: 'unavailable',
+          message: restoreQuery.error instanceof OperatorApiError ? restoreQuery.error.message : 'Could not reach the operator.',
+        });
+      }
+      return;
+    }
+    if (restoreQuery.data === null) {
       setBoot({ phase: 'unauthenticated', notice: null });
       return;
     }
-
-    let cancelled = false;
-    setBoot({ phase: 'checking' });
-    void (async () => {
-      try {
-        const user = await api.me(storedToken);
-        if (!cancelled) setBoot({ phase: 'authenticated', session: { token: storedToken, user } });
-      } catch (error) {
-        if (cancelled) return;
-        if (isUnauthenticated(error)) {
-          // The stored credential is no longer valid; discard it and ask again.
-          clearStoredToken();
-          setBoot({ phase: 'unauthenticated', notice: 'Your session expired. Please sign in again.' });
-          return;
-        }
-        // The credential may still be valid: keep it and offer a retry.
-        setBoot({
-          phase: 'unavailable',
-          message:
-            error instanceof OperatorApiError
-              ? error.message
-              : 'Could not reach the operator.',
-        });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [api, bootAttempt]);
+    if (restoreQuery.data !== undefined) {
+      setBoot({ phase: 'authenticated', session: restoreQuery.data });
+    }
+  }, [restoreQuery.data, restoreQuery.error, restoreQuery.isPending]);
 
   const handleAuthenticated = useCallback((session: SessionInfo): void => {
     writeStoredToken(session.token);
@@ -124,6 +108,7 @@ export function App(): React.JSX.Element {
   const endSession = useCallback((notice: string | null): void => {
     clearStoredToken();
     queryClient.removeQueries({ queryKey: queryKeys.player(boot.phase === 'authenticated' ? boot.session.user.id : '') });
+    queryClient.removeQueries({ queryKey: ['auth', 'restore'] });
     setBoot({ phase: 'unauthenticated', notice });
   }, [boot, queryClient]);
 
