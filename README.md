@@ -14,7 +14,53 @@
 
 ## Arquitetura Geral
 
-Player Client -> Operador (Auth, Game, Financial, DB) <-> Crashsim Engine
+```mermaid
+flowchart LR
+  subgraph Browser[Browser]
+    Client[React client<br/>auth, wallet, game]
+  end
+
+  subgraph Operator[Operator — Fastify]
+    Auth[Auth REST<br/>register, login, current user]
+    GameAPI[Game REST<br/>session, bet, cashout, bet reads]
+    GameStream[Game stream service<br/>snapshot sync + reducer]
+    Hub[Event hub + SSE<br/>snapshot, events, health]
+    Financial[Financial module<br/>wallet, ledger, payouts, webhooks]
+    DB[(PostgreSQL<br/>users, sessions, bets, wallet, ledger)]
+  end
+
+  subgraph Engine[Crashsim Engine]
+    EngineHTTP[HTTP API<br/>session, bet, cashout, snapshot]
+    EngineWS[WebSocket event stream]
+    EngineWebhook[Webhook sender<br/>debit and credit]
+  end
+
+  Client -->|REST + bearer token| Auth
+  Client -->|REST + bearer token| GameAPI
+  Client -->|REST + bearer token| Financial
+  Client -->|GET /game/events| Hub
+
+  Auth -->|user and session| DB
+  GameAPI -->|commands and bets| DB
+  Financial -->|wallet, operations, ledger| DB
+  Auth -. authenticated identity .-> GameAPI
+  Auth -. authenticated identity .-> Financial
+
+  GameAPI -->|HTTP + operator key| EngineHTTP
+  GameStream <-->|WebSocket stream| EngineWS
+  GameStream <-->|GET /rounds/current| EngineHTTP
+  EngineWS -->|validated round events| GameStream
+  GameStream -->|reduced state + connection health| Hub
+  Hub -->|SSE snapshot first, then updates| Client
+
+  EngineWebhook -->|HMAC-signed HTTP webhooks| Financial
+  GameAPI -->|checks settlement status| Financial
+  Financial -->|cashout credit recorded| GameAPI
+```
+
+O client fala somente com o operador. A aplicação usa três caminhos: REST para autenticação, carteira e comandos do jogo; SSE para estado realtime e saúde da conexão; webhooks HMAC da Engine para débito e crédito. O operador conversa com a Crashsim por HTTP e WebSocket, mantendo `ENGINE_OPERATOR_KEY` e `ENGINE_WEBHOOK_SECRET` no servidor.
+
+No caminho realtime, `game-stream.service` sincroniza o snapshot e reduz os eventos antes de publicá-los pelo event hub e SSE. No caminho de aposta, o operador autentica o jogador, persiste o comando e coordena a chamada HTTP para a Engine. No caminho financeiro, o webhook aplica saldo e ledger numa transação idempotente; a confirmação do crédito também atualiza o estado persistido da aposta.
 
 ## Operador
 
