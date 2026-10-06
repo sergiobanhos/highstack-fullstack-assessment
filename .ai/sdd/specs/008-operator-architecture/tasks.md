@@ -99,17 +99,17 @@ T2 é independente das demais até a integração final. As outras tarefas têm 
 
 ### Trabalho
 
-- [ ] Criar `modules/auth/usecases/` para registro, login, logout e resolução/consulta de sessão.
-- [ ] Reduzir `auth.service.ts` a fachada tipada que constrói/exibe esses casos de uso sem duplicar regras.
-- [ ] Manter `requireUser` e o cache request-scoped `WeakMap` na composição de auth, usando a fachada para resolver a sessão.
-- [ ] Manter no fluxo correspondente normalização de email, hash de senha/token, limite de concorrência de hash, TTL e mapeamento de email único.
-- [ ] Reorganizar os testes existentes sem perder os casos de autenticação e segurança.
+- [x] Criar `modules/auth/usecases/` para registro, login, logout e resolução/consulta de sessão.
+- [x] Reduzir `auth.service.ts` a fachada tipada que constrói/exibe esses casos de uso sem duplicar regras.
+- [x] Manter `requireUser` e o cache request-scoped `WeakMap` na composição de auth, usando a fachada para resolver a sessão.
+- [x] Manter no fluxo correspondente normalização de email, hash de senha/token, limite de concorrência de hash, TTL e mapeamento de email único.
+- [x] Reorganizar os testes existentes sem perder os casos de autenticação e segurança.
 
 ### Critérios de aceite
 
-- [ ] `auth.controller.ts` continua usando a API do `AuthService`, sem importar use cases diretamente.
-- [ ] Registro, login, logout e resolução de bearer token mantêm respostas, sessões e tratamento de erros atuais.
-- [ ] Os use cases implementam operações reais e têm dependências explícitas; não são wrappers de forwarding.
+- [x] `auth.controller.ts` continua usando a API do `AuthService`, sem importar use cases diretamente.
+- [x] Registro, login, logout e resolução de bearer token mantêm respostas, sessões e tratamento de erros atuais.
+- [x] Os use cases implementam operações reais e têm dependências explícitas; não são wrappers de forwarding.
 
 ### Arquivos prováveis
 
@@ -121,9 +121,9 @@ T2 é independente das demais até a integração final. As outras tarefas têm 
 
 ### Verificação
 
-- [ ] `cd operator && bun run typecheck`
-- [ ] `cd operator && bun test src/modules/auth`
-- [ ] Confirmar que token bruto não é persistido e erros de credencial continuam indistinguíveis externamente.
+- [x] `cd operator && bun run typecheck` — exit code 0.
+- [x] `cd operator && bun run test:e2e` — exit code 0, 162 testes e 940 expectativas passaram em PostgreSQL temporário.
+- [x] Testes confirmaram hash de sessão persistido, resposta genérica para credenciais inválidas, expiração/revogação e limite de hashing.
 
 ## Task T3: Extrair os casos de uso Financial e sua fachada
 
