@@ -1,0 +1,34 @@
+:root {
+  color-scheme: dark;
+  --hs-bg: #06110f;
+  --hs-bg-raised: #081714;
+  --hs-surface: #0b1b18;
+  --hs-surface-raised: #10231f;
+  --hs-surface-soft: rgb(12 36 30 / 78%);
+  --hs-border: rgb(95 153 135 / 20%);
+  --hs-border-strong: rgb(0 232 181 / 48%);
+  --hs-text: #f2f7f5;
+  --hs-text-secondary: #a5b5b0;
+  --hs-text-muted: #75847f;
+  --hs-accent: #00e6b2;
+  --hs-accent-strong: #00f0bd;
+  --hs-accent-ink: #05251e;
+  --hs-success: #43d9a4;
+  --hs-warning: #f3b64a;
+  --hs-danger: #ff6c76;
+  --hs-focus: #9effe6;
+  --hs-radius-sm: 0.5rem;
+  --hs-radius-md: 0.75rem;
+  --hs-radius-lg: 1rem;
+  --hs-radius-xl: 1.5rem;
+  --hs-space-1: 0.25rem;
+  --hs-space-2: 0.5rem;
+  --hs-space-3: 0.75rem;
+  --hs-space-4: 1rem;
+  --hs-space-6: 1.5rem;
+  --hs-space-8: 2rem;
+  --hs-shadow-card: 0 18px 55px rgb(0 0 0 / 24%);
+  --hs-shadow-modal: 0 32px 100px rgb(0 0 0 / 56%);
+  --hs-z-header: 20;
+  --hs-z-toast: 1100;
+}
