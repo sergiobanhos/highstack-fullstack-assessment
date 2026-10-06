@@ -134,19 +134,19 @@ T2 é independente das demais até a integração final. As outras tarefas têm 
 
 ### Trabalho
 
-- [ ] Criar `modules/financial/usecases/` para provisioning/leitura de wallet, ledger, top-up, payout, débito/crédito de webhook, consultas de operações associadas a bet e conclusão de payouts devidos.
-- [ ] Transformar `financial.service.ts` na fachada pública dos fluxos efetivamente usados por controllers e game.
-- [ ] Separar helpers de erro/normalização junto ao fluxo responsável; compartilhar somente utilitários realmente usados por mais de um use case.
-- [ ] Preservar Drizzle e a transação atômica que reserva idempotency key, atualiza wallet e registra ledger.
-- [ ] Manter tipos de entrada/saída públicos atuais no contrato de `FinancialModule` sem expor detalhes internos dos use cases.
-- [ ] Mover/adaptar testes atuais para cobrir os use cases e a fachada, incluindo duplicidade, concorrência e limites de valor.
+- [x] Criar `modules/financial/usecases/` para provisioning/leitura de wallet, ledger, top-up, payout, débito/crédito de webhook, consultas de operações associadas a bet e conclusão de payouts devidos.
+- [x] Transformar `financial.service.ts` na fachada pública dos fluxos efetivamente usados por controllers e game.
+- [x] Separar helpers de erro/normalização junto ao fluxo responsável; compartilhar somente utilitários realmente usados por mais de um use case.
+- [x] Preservar Drizzle e a transação atômica que reserva idempotency key, atualiza wallet e registra ledger.
+- [x] Manter tipos de entrada/saída públicos atuais no contrato de `FinancialModule` sem expor detalhes internos dos use cases.
+- [x] Mover/adaptar testes atuais para cobrir os use cases e a fachada, incluindo duplicidade, concorrência e limites de valor.
 
 ### Critérios de aceite
 
-- [ ] O contrato consumido por auth/game e pelos endpoints financeiros não muda.
-- [ ] Webhook repetido com o mesmo `txId` não gera saldo/ledger duplicado; dois débitos concorrentes não deixam saldo negativo.
-- [ ] Crédito de cashout, status de crédito e lookup de débito associado a comando preservam o comportamento atual.
-- [ ] `financial.service.ts` apenas compõe e expõe a API, sem reter o fluxo de negócio monolítico.
+- [x] O contrato consumido por auth/game e pelos endpoints financeiros não muda.
+- [x] Webhook repetido com o mesmo `txId` não gera saldo/ledger duplicado; dois débitos concorrentes não deixam saldo negativo.
+- [x] Crédito de cashout, status de crédito e lookup de débito associado a comando preservam o comportamento atual.
+- [x] `financial.service.ts` apenas compõe e expõe a API, sem reter o fluxo de negócio monolítico.
 
 ### Arquivos prováveis
 
@@ -159,9 +159,9 @@ T2 é independente das demais até a integração final. As outras tarefas têm 
 
 ### Verificação
 
-- [ ] `cd operator && bun run typecheck`
-- [ ] `cd operator && bun test src/modules/financial/financial.service.test.ts src/modules/financial/financial.module.test.ts`
-- [ ] Verificar explicitamente dedupe por `txId`, `cashout:<betId>`, atomicidade saldo/ledger e saldo nunca negativo.
+- [x] `cd operator && bun run typecheck` — exit code 0.
+- [x] `cd operator && bun run test:e2e` — exit code 0, 162 testes e 940 expectativas passaram em PostgreSQL temporário.
+- [x] Suíte financeira confirmou dedupe por `txId`, `cashout:<betId>`, atomicidade saldo/ledger, rollback e saldo nunca negativo.
 
 ## Task T4: Separar controllers Financial por confiança e transporte
 
