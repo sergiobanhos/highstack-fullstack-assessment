@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -124,6 +124,20 @@ if (!testDatabaseUrl) {
   });
 
   describe('game schema', () => {
+    test('creates a partial index for active bets by round', async () => {
+      const indexes = await connection.db.execute(sql`
+        SELECT indexdef
+        FROM pg_indexes
+        WHERE schemaname = current_schema()
+          AND indexname = 'game_bets_active_round_id_idx'
+      `);
+      const definition = indexes.map((row) => String(row.indexdef)).join('\n');
+      expect(definition).toContain('game_bets_active_round_id_idx');
+      expect(definition).toContain('round_id');
+      expect(definition).toContain('engine_status');
+      expect(definition).toContain('active');
+    });
+
     test('creates additive tables, preserves game records across repeated migrations, and stores no session ID', async () => {
       const playerId = randomUUID();
       const roundId = `migration-round-${randomUUID()}`;

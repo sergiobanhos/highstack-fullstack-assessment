@@ -1,0 +1,1109 @@
+{
+  "id": "527ec9f8-1c3e-425f-94c8-943b9ec23280",
+  "prevId": "301acba9-67eb-45dc-ac24-8ba2f73fbc47",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.auth_sessions": {
+      "name": "auth_sessions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "player_id": {
+          "name": "player_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "auth_sessions_player_id_idx": {
+          "name": "auth_sessions_player_id_idx",
+          "columns": [
+            {
+              "expression": "player_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "auth_sessions_player_id_players_id_fk": {
+          "name": "auth_sessions_player_id_players_id_fk",
+          "tableFrom": "auth_sessions",
+          "tableTo": "players",
+          "columnsFrom": [
+            "player_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "auth_sessions_token_hash_unique": {
+          "name": "auth_sessions_token_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token_hash"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "auth_sessions_expiry_after_creation": {
+          "name": "auth_sessions_expiry_after_creation",
+          "value": "\"auth_sessions\".\"expires_at\" > \"auth_sessions\".\"created_at\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.players": {
+      "name": "players",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(254)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "password_hash": {
+          "name": "password_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "players_email_unique": {
+          "name": "players_email_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "email"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "players_email_canonical": {
+          "name": "players_email_canonical",
+          "value": "\"players\".\"email\" = lower(btrim(\"players\".\"email\"))"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.financial_operations": {
+      "name": "financial_operations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "player_id": {
+          "name": "player_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "varchar(24)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount_cents": {
+          "name": "amount_cents",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "engine_tx_id": {
+          "name": "engine_tx_id",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "business_key": {
+          "name": "business_key",
+          "type": "varchar(512)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bet_id": {
+          "name": "bet_id",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "round_id": {
+          "name": "round_id",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "response_balance_cents": {
+          "name": "response_balance_cents",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "financial_operations_engine_tx_id_unique": {
+          "name": "financial_operations_engine_tx_id_unique",
+          "columns": [
+            {
+              "expression": "engine_tx_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"financial_operations\".\"engine_tx_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "financial_operations_business_key_unique": {
+          "name": "financial_operations_business_key_unique",
+          "columns": [
+            {
+              "expression": "business_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"financial_operations\".\"business_key\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "financial_operations_player_created_at_id_idx": {
+          "name": "financial_operations_player_created_at_id_idx",
+          "columns": [
+            {
+              "expression": "player_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "financial_operations_bet_id_idx": {
+          "name": "financial_operations_bet_id_idx",
+          "columns": [
+            {
+              "expression": "bet_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"financial_operations\".\"bet_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "financial_operations_player_id_wallets_player_id_fk": {
+          "name": "financial_operations_player_id_wallets_player_id_fk",
+          "tableFrom": "financial_operations",
+          "tableTo": "wallets",
+          "columnsFrom": [
+            "player_id"
+          ],
+          "columnsTo": [
+            "player_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "financial_operations_kind_check": {
+          "name": "financial_operations_kind_check",
+          "value": "\"financial_operations\".\"kind\" IN ('debit', 'credit', 'test_top_up')"
+        },
+        "financial_operations_source_check": {
+          "name": "financial_operations_source_check",
+          "value": "\"financial_operations\".\"source\" IN ('engine', 'reconciliation', 'test', 'payout')"
+        },
+        "financial_operations_kind_source_check": {
+          "name": "financial_operations_kind_source_check",
+          "value": "(\"financial_operations\".\"source\" = 'engine' AND \"financial_operations\".\"kind\" IN ('debit', 'credit')) OR (\"financial_operations\".\"source\" = 'reconciliation' AND \"financial_operations\".\"kind\" = 'credit') OR (\"financial_operations\".\"source\" = 'test' AND \"financial_operations\".\"kind\" = 'test_top_up') OR (\"financial_operations\".\"source\" = 'payout' AND \"financial_operations\".\"kind\" = 'debit')"
+        },
+        "financial_operations_amount_cents_range": {
+          "name": "financial_operations_amount_cents_range",
+          "value": "\"financial_operations\".\"amount_cents\" BETWEEN 1 AND 9007199254740991"
+        },
+        "financial_operations_outcome_check": {
+          "name": "financial_operations_outcome_check",
+          "value": "\"financial_operations\".\"outcome\" IN ('applied', 'insufficient_funds', 'balance_limit')"
+        },
+        "financial_operations_response_balance_cents_range": {
+          "name": "financial_operations_response_balance_cents_range",
+          "value": "\"financial_operations\".\"response_balance_cents\" BETWEEN 0 AND 9007199254740991"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.payouts": {
+      "name": "payouts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "complete_after": {
+          "name": "complete_after",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "payouts_processing_complete_after_id_idx": {
+          "name": "payouts_processing_complete_after_id_idx",
+          "columns": [
+            {
+              "expression": "complete_after",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"payouts\".\"status\" = 'processing'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "payouts_id_financial_operations_id_fk": {
+          "name": "payouts_id_financial_operations_id_fk",
+          "tableFrom": "payouts",
+          "tableTo": "financial_operations",
+          "columnsFrom": [
+            "id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "payouts_status_check": {
+          "name": "payouts_status_check",
+          "value": "\"payouts\".\"status\" IN ('processing', 'done')"
+        },
+        "payouts_status_timestamps_check": {
+          "name": "payouts_status_timestamps_check",
+          "value": "(\"payouts\".\"status\" = 'processing' AND \"payouts\".\"completed_at\" IS NULL) OR (\"payouts\".\"status\" = 'done' AND \"payouts\".\"completed_at\" IS NOT NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.wallet_ledger_entries": {
+      "name": "wallet_ledger_entries",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "player_id": {
+          "name": "player_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "direction": {
+          "name": "direction",
+          "type": "varchar(8)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "varchar(24)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount_cents": {
+          "name": "amount_cents",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "balance_after_cents": {
+          "name": "balance_after_cents",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bet_id": {
+          "name": "bet_id",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "round_id": {
+          "name": "round_id",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "wallet_ledger_entries_operation_id_unique": {
+          "name": "wallet_ledger_entries_operation_id_unique",
+          "columns": [
+            {
+              "expression": "operation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "wallet_ledger_entries_player_created_at_id_idx": {
+          "name": "wallet_ledger_entries_player_created_at_id_idx",
+          "columns": [
+            {
+              "expression": "player_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "wallet_ledger_entries_operation_id_financial_operations_id_fk": {
+          "name": "wallet_ledger_entries_operation_id_financial_operations_id_fk",
+          "tableFrom": "wallet_ledger_entries",
+          "tableTo": "financial_operations",
+          "columnsFrom": [
+            "operation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "wallet_ledger_entries_player_id_wallets_player_id_fk": {
+          "name": "wallet_ledger_entries_player_id_wallets_player_id_fk",
+          "tableFrom": "wallet_ledger_entries",
+          "tableTo": "wallets",
+          "columnsFrom": [
+            "player_id"
+          ],
+          "columnsTo": [
+            "player_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "wallet_ledger_entries_direction_check": {
+          "name": "wallet_ledger_entries_direction_check",
+          "value": "\"wallet_ledger_entries\".\"direction\" IN ('debit', 'credit')"
+        },
+        "wallet_ledger_entries_source_check": {
+          "name": "wallet_ledger_entries_source_check",
+          "value": "\"wallet_ledger_entries\".\"source\" IN ('engine', 'reconciliation', 'test', 'payout')"
+        },
+        "wallet_ledger_entries_source_direction_check": {
+          "name": "wallet_ledger_entries_source_direction_check",
+          "value": "\"wallet_ledger_entries\".\"source\" <> 'payout' OR \"wallet_ledger_entries\".\"direction\" = 'debit'"
+        },
+        "wallet_ledger_entries_amount_cents_range": {
+          "name": "wallet_ledger_entries_amount_cents_range",
+          "value": "\"wallet_ledger_entries\".\"amount_cents\" BETWEEN 1 AND 9007199254740991"
+        },
+        "wallet_ledger_entries_balance_after_cents_range": {
+          "name": "wallet_ledger_entries_balance_after_cents_range",
+          "value": "\"wallet_ledger_entries\".\"balance_after_cents\" BETWEEN 0 AND 9007199254740991"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.wallets": {
+      "name": "wallets",
+      "schema": "",
+      "columns": {
+        "player_id": {
+          "name": "player_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "balance_cents": {
+          "name": "balance_cents",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "wallets_balance_cents_range": {
+          "name": "wallets_balance_cents_range",
+          "value": "\"wallets\".\"balance_cents\" BETWEEN 0 AND 9007199254740991"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.game_bets": {
+      "name": "game_bets",
+      "schema": "",
+      "columns": {
+        "bet_id": {
+          "name": "bet_id",
+          "type": "varchar(255)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "command_id": {
+          "name": "command_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "player_id": {
+          "name": "player_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "round_id": {
+          "name": "round_id",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount_cents": {
+          "name": "amount_cents",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "auto_cashout_hundredths": {
+          "name": "auto_cashout_hundredths",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "engine_status": {
+          "name": "engine_status",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "multiplier_hundredths": {
+          "name": "multiplier_hundredths",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payout_cents": {
+          "name": "payout_cents",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "settlement_status": {
+          "name": "settlement_status",
+          "type": "varchar(24)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "game_bets_command_id_unique": {
+          "name": "game_bets_command_id_unique",
+          "columns": [
+            {
+              "expression": "command_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "game_bets_player_created_at_bet_id_idx": {
+          "name": "game_bets_player_created_at_bet_id_idx",
+          "columns": [
+            {
+              "expression": "player_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "bet_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "game_bets_player_round_id_idx": {
+          "name": "game_bets_player_round_id_idx",
+          "columns": [
+            {
+              "expression": "player_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "round_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "game_bets_active_round_id_idx": {
+          "name": "game_bets_active_round_id_idx",
+          "columns": [
+            {
+              "expression": "round_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"game_bets\".\"engine_status\" = 'active'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "game_bets_command_id_game_commands_id_fk": {
+          "name": "game_bets_command_id_game_commands_id_fk",
+          "tableFrom": "game_bets",
+          "tableTo": "game_commands",
+          "columnsFrom": [
+            "command_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "game_bets_amount_cents_range_check": {
+          "name": "game_bets_amount_cents_range_check",
+          "value": "\"game_bets\".\"amount_cents\" BETWEEN 1 AND 1000000000"
+        },
+        "game_bets_auto_cashout_range_check": {
+          "name": "game_bets_auto_cashout_range_check",
+          "value": "\"game_bets\".\"auto_cashout_hundredths\" IS NULL OR \"game_bets\".\"auto_cashout_hundredths\" BETWEEN 101 AND 100000000"
+        },
+        "game_bets_engine_status_check": {
+          "name": "game_bets_engine_status_check",
+          "value": "\"game_bets\".\"engine_status\" IN ('active', 'lost', 'cashed_out')"
+        },
+        "game_bets_multiplier_hundredths_range_check": {
+          "name": "game_bets_multiplier_hundredths_range_check",
+          "value": "\"game_bets\".\"multiplier_hundredths\" IS NULL OR \"game_bets\".\"multiplier_hundredths\" BETWEEN 100 AND 9007199254740991"
+        },
+        "game_bets_payout_cents_range_check": {
+          "name": "game_bets_payout_cents_range_check",
+          "value": "\"game_bets\".\"payout_cents\" IS NULL OR \"game_bets\".\"payout_cents\" BETWEEN 0 AND 9007199254740991"
+        },
+        "game_bets_settlement_status_check": {
+          "name": "game_bets_settlement_status_check",
+          "value": "\"game_bets\".\"settlement_status\" IN ('not_applicable', 'pending', 'confirmed', 'precision_incident')"
+        },
+        "game_bets_settlement_consistency_check": {
+          "name": "game_bets_settlement_consistency_check",
+          "value": "(\"game_bets\".\"engine_status\" = 'cashed_out' AND \"game_bets\".\"settlement_status\" IN ('pending', 'confirmed', 'precision_incident')) OR (\"game_bets\".\"engine_status\" IN ('active', 'lost') AND \"game_bets\".\"settlement_status\" = 'not_applicable')"
+        },
+        "game_bets_payout_requires_cashout_check": {
+          "name": "game_bets_payout_requires_cashout_check",
+          "value": "\"game_bets\".\"payout_cents\" IS NULL OR \"game_bets\".\"engine_status\" = 'cashed_out'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.game_commands": {
+      "name": "game_commands",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "player_id": {
+          "name": "player_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "command_type": {
+          "name": "command_type",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "request_hash": {
+          "name": "request_hash",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "round_id": {
+          "name": "round_id",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bet_id": {
+          "name": "bet_id",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "amount_cents": {
+          "name": "amount_cents",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "auto_cashout_hundredths": {
+          "name": "auto_cashout_hundredths",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "result_code": {
+          "name": "result_code",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "resolved_at": {
+          "name": "resolved_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "game_commands_player_idempotency_key_unique": {
+          "name": "game_commands_player_idempotency_key_unique",
+          "columns": [
+            {
+              "expression": "player_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "idempotency_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "game_commands_player_round_active_bet_unique": {
+          "name": "game_commands_player_round_active_bet_unique",
+          "columns": [
+            {
+              "expression": "player_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "round_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"game_commands\".\"command_type\" = 'bet' AND \"game_commands\".\"status\" IN ('pending', 'unknown', 'accepted')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "game_commands_pending_cashout_bet_unique": {
+          "name": "game_commands_pending_cashout_bet_unique",
+          "columns": [
+            {
+              "expression": "bet_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"game_commands\".\"command_type\" = 'cashout' AND \"game_commands\".\"status\" IN ('pending', 'unknown')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "game_commands_player_created_at_id_idx": {
+          "name": "game_commands_player_created_at_id_idx",
+          "columns": [
+            {
+              "expression": "player_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "game_commands_bet_id_idx": {
+          "name": "game_commands_bet_id_idx",
+          "columns": [
+            {
+              "expression": "bet_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"game_commands\".\"bet_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "game_commands_type_check": {
+          "name": "game_commands_type_check",
+          "value": "\"game_commands\".\"command_type\" IN ('bet', 'cashout')"
+        },
+        "game_commands_status_check": {
+          "name": "game_commands_status_check",
+          "value": "\"game_commands\".\"status\" IN ('pending', 'accepted', 'rejected', 'unknown')"
+        },
+        "game_commands_request_hash_check": {
+          "name": "game_commands_request_hash_check",
+          "value": "\"game_commands\".\"request_hash\" ~ '^[a-f0-9]{64}$'"
+        },
+        "game_commands_bet_fields_check": {
+          "name": "game_commands_bet_fields_check",
+          "value": "(\"game_commands\".\"command_type\" = 'bet' AND \"game_commands\".\"round_id\" IS NOT NULL AND \"game_commands\".\"amount_cents\" IS NOT NULL AND \"game_commands\".\"amount_cents\" BETWEEN 1 AND 1000000000) OR (\"game_commands\".\"command_type\" = 'cashout' AND \"game_commands\".\"bet_id\" IS NOT NULL AND \"game_commands\".\"amount_cents\" IS NULL AND \"game_commands\".\"auto_cashout_hundredths\" IS NULL)"
+        },
+        "game_commands_auto_cashout_range_check": {
+          "name": "game_commands_auto_cashout_range_check",
+          "value": "\"game_commands\".\"auto_cashout_hundredths\" IS NULL OR \"game_commands\".\"auto_cashout_hundredths\" BETWEEN 101 AND 100000000"
+        },
+        "game_commands_accepted_bet_id_check": {
+          "name": "game_commands_accepted_bet_id_check",
+          "value": "\"game_commands\".\"command_type\" <> 'bet' OR \"game_commands\".\"status\" <> 'accepted' OR \"game_commands\".\"bet_id\" IS NOT NULL"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

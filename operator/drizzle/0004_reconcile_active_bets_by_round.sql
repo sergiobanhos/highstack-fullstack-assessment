@@ -1,0 +1,1 @@
+CREATE INDEX "game_bets_active_round_id_idx" ON "game_bets" USING btree ("round_id") WHERE "game_bets"."engine_status" = 'active';

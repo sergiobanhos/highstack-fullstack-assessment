@@ -136,11 +136,13 @@ if (!testDatabaseUrl) {
     };
   }
 
-  async function createOwnedBet(playerId: string): Promise<{ betId: string; commandId: string }> {
-    const created = await createHarness().service.placeBet({
+  async function createOwnedBet(playerId: string, roundId = 'round-current'): Promise<{ betId: string; commandId: string }> {
+    const created = await createHarness({
+      async placeBet() { return { betId: `bet-${randomUUID()}`, status: 'active' }; },
+    }, connectedSnapshot(roundId)).service.placeBet({
       playerId,
       idempotencyKey: randomUUID(),
-      roundId: 'round-current',
+      roundId,
       amount: 100,
     });
     return { betId: created.betId!, commandId: created.commandId };
@@ -936,6 +938,128 @@ if (!testDatabaseUrl) {
           bet: { engineStatus: 'active', settlementStatus: 'not_applicable' },
         });
         expect(afterEngineRestart.engineStats()).toMatchObject({ placeBetCalls: 0, getBetCalls: 1 });
+      });
+    });
+
+    test('reconciles closed-round bets from authoritative state without creating wallet credits', async () => {
+      await withPlayer(async (firstPlayerId) => {
+        await withPlayer(async (secondPlayerId) => {
+          const roundId = `closed-round-${randomUUID()}`;
+          const lostBet = await createOwnedBet(firstPlayerId, roundId);
+          const cashedBet = await createOwnedBet(secondPlayerId, roundId);
+          const reconciler = createHarness({
+            async getBet(input) {
+              if (input.betId === lostBet.betId) {
+                return {
+                  betId: lostBet.betId, playerId: firstPlayerId, roundId, amount: 100,
+                  status: 'lost', multiplierHundredths: null, payoutCents: null,
+                  payoutPrecision: 'not_provided',
+                };
+              }
+              return {
+                betId: cashedBet.betId, playerId: secondPlayerId, roundId, amount: 100,
+                status: 'cashed_out', multiplierHundredths: 175, payoutCents: 175,
+                payoutPrecision: 'safe',
+              };
+            },
+          });
+
+          await reconciler.service.reconcileBetsForRound(roundId);
+
+          const [storedLost] = await connection.db.select().from(gameBets).where(eq(gameBets.betId, lostBet.betId));
+          const [storedCashedOut] = await connection.db.select().from(gameBets).where(eq(gameBets.betId, cashedBet.betId));
+          expect(storedLost).toMatchObject({ engineStatus: 'lost', settlementStatus: 'not_applicable' });
+          expect(storedCashedOut).toMatchObject({
+            engineStatus: 'cashed_out',
+            multiplierHundredths: 175n,
+            payoutCents: 175n,
+            settlementStatus: 'pending',
+          });
+          expect(await financial.getBalance(secondPlayerId)).toEqual({ playerId: secondPlayerId, balanceCents: 0n });
+          expect(reconciler.engineStats()).toMatchObject({ getBetCalls: 2, cashoutCalls: 0, placeBetCalls: 0 });
+        });
+      });
+    });
+
+    test('isolates failed bets, coalesces duplicate round reconciliation, and retries pending outcomes', async () => {
+      await withPlayer(async (firstPlayerId) => {
+        await withPlayer(async (secondPlayerId) => {
+          const roundId = `retry-round-${randomUUID()}`;
+          const retryBet = await createOwnedBet(firstPlayerId, roundId);
+          const completedBet = await createOwnedBet(secondPlayerId, roundId);
+          let retryBetCalls = 0;
+          const reconciler = createHarness({
+            async getBet(input) {
+              if (input.betId === retryBet.betId) {
+                retryBetCalls += 1;
+                if (retryBetCalls === 1) throw new CrashsimHttpError('unavailable');
+                return {
+                  betId: retryBet.betId, playerId: firstPlayerId, roundId, amount: 100,
+                  status: 'lost', multiplierHundredths: null, payoutCents: null,
+                  payoutPrecision: 'not_provided',
+                };
+              }
+              return {
+                betId: completedBet.betId, playerId: secondPlayerId, roundId, amount: 100,
+                status: 'lost', multiplierHundredths: null, payoutCents: null,
+                payoutPrecision: 'not_provided',
+              };
+            },
+          });
+
+          await Promise.all([
+            reconciler.service.reconcileBetsForRound(roundId),
+            reconciler.service.reconcileBetsForRound(roundId),
+          ]);
+
+          const [pending] = await connection.db.select().from(gameBets).where(eq(gameBets.betId, retryBet.betId));
+          const [completed] = await connection.db.select().from(gameBets).where(eq(gameBets.betId, completedBet.betId));
+          expect(pending?.engineStatus).toBe('active');
+          expect(completed?.engineStatus).toBe('lost');
+          expect(reconciler.engineStats().getBetCalls).toBe(2);
+
+          await reconciler.service.reconcileBetsForRound(roundId);
+          const [retried] = await connection.db.select().from(gameBets).where(eq(gameBets.betId, retryBet.betId));
+          expect(retried?.engineStatus).toBe('lost');
+          expect(reconciler.engineStats().getBetCalls).toBe(3);
+        });
+      });
+    });
+
+    test('snapshot reconciliation excludes the open current round and includes it after crash', async () => {
+      await withPlayer(async (oldPlayerId) => {
+        await withPlayer(async (currentPlayerId) => {
+          const currentRoundId = `current-round-${randomUUID()}`;
+          const oldRoundId = `old-round-${randomUUID()}`;
+          const oldBet = await createOwnedBet(oldPlayerId, oldRoundId);
+          const currentBet = await createOwnedBet(currentPlayerId, currentRoundId);
+          const reconciler = createHarness({
+            async getBet(input) {
+              return {
+                betId: input.betId,
+                playerId: input.playerId!,
+                roundId: input.roundId!,
+                amount: 100,
+                status: 'lost',
+                multiplierHundredths: null,
+                payoutCents: null,
+                payoutPrecision: 'not_provided',
+              };
+            },
+          });
+
+          await reconciler.service.reconcileClosedBets({ currentRoundId, currentRoundState: 'running' });
+          let [storedOld] = await connection.db.select().from(gameBets).where(eq(gameBets.betId, oldBet.betId));
+          let [storedCurrent] = await connection.db.select().from(gameBets).where(eq(gameBets.betId, currentBet.betId));
+          expect(storedOld?.engineStatus).toBe('lost');
+          expect(storedCurrent?.engineStatus).toBe('active');
+          expect(reconciler.engineStats().getBetCalls).toBe(1);
+
+          await reconciler.service.reconcileClosedBets({ currentRoundId, currentRoundState: 'crashed' });
+          [storedCurrent] = await connection.db.select().from(gameBets).where(eq(gameBets.betId, currentBet.betId));
+          expect(storedCurrent?.engineStatus).toBe('lost');
+          expect(reconciler.engineStats().getBetCalls).toBe(2);
+        });
       });
     });
   });

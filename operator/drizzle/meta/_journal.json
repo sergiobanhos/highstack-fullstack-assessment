@@ -29,6 +29,13 @@
       "when": 1791236297598,
       "tag": "0003_local_payouts",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791245518682,
+      "tag": "0004_reconcile_active_bets_by_round",
+      "breakpoints": true
     }
   ]
 }

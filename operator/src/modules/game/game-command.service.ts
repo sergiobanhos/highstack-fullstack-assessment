@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { Logger } from '../../config';
 import type { OperatorDatabase } from '../../db';
 import type { FinancialModule } from '../financial/financial.module';
@@ -102,6 +102,11 @@ export interface GetGameBetInput {
   betId: string;
 }
 
+export interface ReconcileClosedBetsInput {
+  currentRoundId: string;
+  currentRoundState: 'betting' | 'running' | 'crashed';
+}
+
 export interface GameCommandService {
   createSession(playerId: string): Promise<{ status: 'ready' }>;
   placeBet(input: PlaceBetCommandInput): Promise<BetCommandResult>;
@@ -109,6 +114,8 @@ export interface GameCommandService {
   listBets(input: ListBetsInput): Promise<BetCommandResult[]>;
   getCommand(input: GetGameCommandInput): Promise<BetCommandResult | null>;
   getBet(input: GetGameBetInput): Promise<BetCommandResult | null>;
+  reconcileBetsForRound(roundId: string): Promise<void>;
+  reconcileClosedBets(input: ReconcileClosedBetsInput): Promise<void>;
 }
 
 export interface GameCommandServiceDeps {
@@ -120,6 +127,7 @@ export interface GameCommandServiceDeps {
 }
 
 const reservedAt = sql<string>`to_char(${gameCommands.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+const RECONCILIATION_CONCURRENCY = 5;
 const commandProjection = {
   id: gameCommands.id,
   playerId: gameCommands.playerId,
@@ -229,6 +237,8 @@ export function createGameCommandService({ db, financial, engine, stream, logger
   const sessionCreations = new Map<string, Promise<string>>();
   const cashoutRequests = new Map<string, Promise<BetCommandResult | null>>();
   const cashoutInFlight = new Map<string, Promise<BetCommandResult>>();
+  const betReconciliations = new Map<string, Promise<void>>();
+  const roundReconciliations = new Map<string, Promise<void>>();
 
   async function withStorageErrors<T>(run: () => Promise<T>): Promise<T> {
     try {
@@ -627,6 +637,134 @@ export function createGameCommandService({ db, financial, engine, stream, logger
     }
 
     return resultForCommand(command);
+  }
+
+  async function reconcileOneBet(bet: { betId: string; playerId: string; roundId: string }): Promise<void> {
+    const current = betReconciliations.get(bet.betId);
+    if (current) return current;
+
+    const reconciliation = (async () => {
+      try {
+        const result = await getBet({ playerId: bet.playerId, betId: bet.betId });
+        if (!result?.bet) {
+          logger.warn('game.bet.reconciliation_pending', {
+            betId: bet.betId,
+            roundId: bet.roundId,
+            reason: 'bet_not_found_locally',
+          });
+          return;
+        }
+        if (result.bet.engineStatus === 'active') {
+          logger.info('game.bet.reconciliation_pending', {
+            betId: bet.betId,
+            roundId: bet.roundId,
+            reason: 'engine_still_active',
+          });
+          return;
+        }
+        logger.info('game.bet.reconciled', {
+          betId: bet.betId,
+          roundId: bet.roundId,
+          engineStatus: result.bet.engineStatus,
+          settlementStatus: result.bet.settlementStatus,
+        });
+      } catch (error) {
+        logger.warn('game.bet.reconciliation_pending', {
+          betId: bet.betId,
+          roundId: bet.roundId,
+          reason: error instanceof GameCommandError ? error.code : 'unexpected_error',
+        });
+      }
+    })();
+
+    betReconciliations.set(bet.betId, reconciliation);
+    try {
+      await reconciliation;
+    } finally {
+      if (betReconciliations.get(bet.betId) === reconciliation) betReconciliations.delete(bet.betId);
+    }
+  }
+
+  async function processReconciliationCandidates(
+    candidates: { betId: string; playerId: string; roundId: string }[],
+  ): Promise<void> {
+    let nextIndex = 0;
+    const workerCount = Math.min(RECONCILIATION_CONCURRENCY, candidates.length);
+    await Promise.all(Array.from({ length: workerCount }, async () => {
+      while (nextIndex < candidates.length) {
+        const candidate = candidates[nextIndex];
+        nextIndex += 1;
+        if (candidate) await reconcileOneBet(candidate);
+      }
+    }));
+  }
+
+  async function reconcileCandidates(
+    scope: { roundId: string } | { currentRoundId: string; includeCurrentRound: boolean },
+  ): Promise<void> {
+    const conditions = [eq(gameBets.engineStatus, 'active')];
+    if ('roundId' in scope) {
+      conditions.push(eq(gameBets.roundId, scope.roundId));
+    } else if (!scope.includeCurrentRound) {
+      conditions.push(ne(gameBets.roundId, scope.currentRoundId));
+    }
+
+    const candidates = await withStorageErrors(() => db
+      .select({ betId: gameBets.betId, playerId: gameBets.playerId, roundId: gameBets.roundId })
+      .from(gameBets)
+      .where(and(...conditions)));
+
+    logger.info('game.bet.reconciliation_started', {
+      scope: 'roundId' in scope ? 'round' : 'closed_rounds',
+      roundId: 'roundId' in scope ? scope.roundId : scope.currentRoundId,
+      candidates: candidates.length,
+    });
+    await processReconciliationCandidates(candidates);
+  }
+
+  function coalesceRoundReconciliation(key: string, run: () => Promise<void>): Promise<void> {
+    const current = roundReconciliations.get(key);
+    if (current) return current;
+
+    const reconciliation = run();
+    roundReconciliations.set(key, reconciliation);
+    void reconciliation.finally(() => {
+      if (roundReconciliations.get(key) === reconciliation) roundReconciliations.delete(key);
+    }).catch(() => {});
+    return reconciliation;
+  }
+
+  function reconcileBetsForRound(roundId: string): Promise<void> {
+    return coalesceRoundReconciliation(`round:${roundId}`, async () => {
+      try {
+        await reconcileCandidates({ roundId });
+      } catch (error) {
+        logger.error('game.bet.reconciliation_failed', {
+          roundId,
+          reason: error instanceof GameCommandError ? error.code : 'unexpected_error',
+        });
+        throw error;
+      }
+    });
+  }
+
+  function reconcileClosedBets(input: ReconcileClosedBetsInput): Promise<void> {
+    const includeCurrentRound = input.currentRoundState === 'crashed';
+    const key = `snapshot:${input.currentRoundId}:${includeCurrentRound ? 'crashed' : 'open'}`;
+    return coalesceRoundReconciliation(key, async () => {
+      try {
+        await reconcileCandidates({
+          currentRoundId: input.currentRoundId,
+          includeCurrentRound,
+        });
+      } catch (error) {
+        logger.error('game.bet.reconciliation_failed', {
+          roundId: input.currentRoundId,
+          reason: error instanceof GameCommandError ? error.code : 'unexpected_error',
+        });
+        throw error;
+      }
+    });
   }
 
   async function persistUnknown(
@@ -1210,5 +1348,7 @@ export function createGameCommandService({ db, financial, engine, stream, logger
     listBets,
     getCommand,
     getBet,
+    reconcileBetsForRound,
+    reconcileClosedBets,
   };
 }

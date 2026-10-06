@@ -190,3 +190,14 @@ Após F05, validar localmente cadastro/login, reload autenticado, top-up/histór
 - **Implementation started:** no — o usuário pediu explicitamente para não implementar ainda.
 - **Open questions:** nenhuma crítica.
 - **Recommended Next Action:** aguardar instrução do usuário antes de iniciar qualquer task F06; manter T6 dependente de F05.
+
+## Current implementation handoff: F07 — reconciliação das apostas
+
+- **Requirements:** `.ai/sdd/specs/007-round-bet-reconciliation/requirements.md` (approved).
+- **Design:** `.ai/sdd/specs/007-round-bet-reconciliation/design.md` (approved).
+- **Tasks:** `.ai/sdd/specs/007-round-bet-reconciliation/tasks.md` (approved; T1 complete, T2 in progress, T3 pending).
+- **Status:** `.ai/sdd/specs/007-round-bet-reconciliation/.status` (`implementation:in-progress`).
+- **Scope:** reconcile persisted `active` bets through the existing owned `getBet` flow after an applied Crashsim crash and after a successful snapshot. Never infer `lost`, create credits, add a worker, or alter the engine protocol.
+- **Task order:** T1 authoritative bet lookup, partial active-round index and migration; T2 non-blocking stream/snapshot triggers; T3 client pending-result label and manual verification.
+- **Verification:** operator typecheck and targeted game tests; PostgreSQL integration tests must use a dedicated database name containing `test`; client typecheck/tests/build and manual flow checks for T3.
+- **T1 evidence:** typecheck passed; 30 service/schema integration tests passed against local `operator_test`, including `lost`, `cashed_out`, pending settlement, failed lookup retry, duplicate trigger coalescing, snapshot filtering and partial index migration.

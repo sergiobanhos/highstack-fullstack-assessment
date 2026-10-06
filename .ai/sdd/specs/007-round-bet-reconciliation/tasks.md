@@ -2,7 +2,7 @@
 
 > Requirements: @requirements.md
 > Design: @design.md
-> Status: Approved
+> Status: Implementation in progress — T1 complete
 
 ## Cobertura dos requisitos
 
@@ -25,7 +25,7 @@
 | Perguntas críticas foram respondidas | Pass | `requirements.md` não possui questões críticas abertas |
 | Tasks têm dependências, critérios, arquivos e verificação | Pass | Detalhes abaixo |
 | Comandos de verificação são conhecidos | Pass | Scripts Bun existentes; testes de banco exigem `TEST_DATABASE_URL` dedicado |
-| Design aprovado para implementação | Pass | Design F07 explicitamente aprovado pelo usuário |
+| Design aprovado para implementação | Pass | Design e tasks F07 explicitamente aprovados pelo usuário |
 
 ## Fatia MVP
 
@@ -43,21 +43,21 @@
 
 ### Trabalho
 
-- [ ] Adicionar ao `GameCommandService` uma operação interna que localiza bets persistidas com `engineStatus = 'active'` em rodadas fechadas.
-- [ ] Para cada bet, chamar a lógica existente de `getBet` usando `playerId` e `betId` persistidos, sem aceitar IDs do browser.
-- [ ] Incluir a rodada atual somente quando o estado conhecido for `crashed`; em `betting`/`running`, deixar as bets da rodada atual fora da reconciliação.
-- [ ] Coalescer chamadas concorrentes para uma mesma rodada/aposta e isolar a falha de cada bet para continuar o lote.
-- [ ] Persistir somente o estado confirmado pela engine; não chamar cashout, não criar crédito e não reabrir status terminal.
-- [ ] Adicionar índice parcial por `round_id` para linhas com `engine_status = 'active'` e gerar a migração Drizzle aditiva.
-- [ ] Cobrir estados `lost`, `cashed_out`, settlement pendente/confirmado, engine indisponível/404, bet ainda `active` e retry idempotente.
+- [x] Adicionar ao `GameCommandService` uma operação interna que localiza bets persistidas com `engineStatus = 'active'` em rodadas fechadas.
+- [x] Para cada bet, chamar a lógica existente de `getBet` usando `playerId` e `betId` persistidos, sem aceitar IDs do browser.
+- [x] Incluir a rodada atual somente quando o estado conhecido for `crashed`; em `betting`/`running`, deixar as bets da rodada atual fora da reconciliação.
+- [x] Coalescer chamadas concorrentes para uma mesma rodada/aposta e isolar a falha de cada bet para continuar o lote.
+- [x] Persistir somente o estado confirmado pela engine; não chamar cashout, não criar crédito e não reabrir status terminal.
+- [x] Adicionar índice parcial por `round_id` para linhas com `engine_status = 'active'` e gerar a migração Drizzle aditiva.
+- [x] Cobrir estados `lost`, `cashed_out`, settlement pendente/confirmado, engine indisponível/404, bet ainda `active` e retry idempotente.
 
 ### Critérios de aceitação
 
-- [ ] Uma bet consultada como `lost` persiste como `lost`; uma bet consultada como `cashed_out` persiste multiplicador, payout seguro e settlement atual.
-- [ ] O processo não transforma `active` em `lost` por inferência e não chama uma operação financeira de crédito.
-- [ ] Falha em uma consulta deixa essa bet sem falso resultado final e não interrompe as demais.
-- [ ] Repetir o método mantém estados terminais e não cria movimentação financeira duplicada.
-- [ ] Migração e schema registram o índice parcial; dados e contratos atuais permanecem compatíveis.
+- [x] Uma bet consultada como `lost` persiste como `lost`; uma bet consultada como `cashed_out` persiste multiplicador, payout seguro e settlement atual.
+- [x] O processo não transforma `active` em `lost` por inferência e não chama uma operação financeira de crédito.
+- [x] Falha em uma consulta deixa essa bet sem falso resultado final e não interrompe as demais.
+- [x] Repetir o método mantém estados terminais e não cria movimentação financeira duplicada.
+- [x] Migração e schema registram o índice parcial; dados e contratos atuais permanecem compatíveis.
 
 ### Arquivos prováveis
 
@@ -70,10 +70,11 @@
 
 ### Verificação
 
-- [ ] `cd operator && bun run typecheck`
-- [ ] `cd operator && bun test src/modules/game/game-command.service.test.ts`
-- [ ] Com `TEST_DATABASE_URL` configurada para um banco dedicado cujo nome contém `test`: `cd operator && bun test src/modules/game/game.schema.test.ts`
-- [ ] Inspecionar SQL gerado e confirmar que a migração contém apenas o índice aditivo esperado.
+- [x] `cd operator && bun run typecheck`
+- [x] Com `TEST_DATABASE_URL` configurada para um banco dedicado cujo nome contém `test`: `cd operator && bun test src/modules/game/game-command.service.test.ts src/modules/game/game.schema.test.ts`
+- [x] Inspecionar SQL gerado e confirmar que a migração contém apenas o índice aditivo esperado.
+
+**Evidência T1:** typecheck passou; 30 testes de serviço/schema passaram em `operator_test`, incluindo índice parcial, resultados `lost`/`cashed_out`, falha isolada, retry e snapshot. Migração `0004_reconcile_active_bets_by_round.sql` contém somente o índice parcial novo.
 
 ## Task T2: Disparar reconciliação no crash e na ressincronização
 

@@ -146,6 +146,9 @@ export const gameBets = pgTable(
       table.betId,
     ),
     index('game_bets_player_round_id_idx').on(table.playerId, table.roundId),
+    index('game_bets_active_round_id_idx')
+      .on(table.roundId)
+      .where(sql`${table.engineStatus} = 'active'`),
   ],
 );
 
