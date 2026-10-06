@@ -288,18 +288,18 @@ T2 é independente das demais até a integração final. As outras tarefas têm 
 
 ### Trabalho
 
-- [ ] Mover listagem de bets, consulta de comando, consulta de bet, reconciliação por crash/snapshot e registro de cashout credit para use cases próprios ou grupos coesos.
-- [ ] Deixar em `game.service.ts` somente composição e API pública desses fluxos, removendo a implementação monolítica original.
-- [ ] Preservar queries por jogador/ownership e a integração financeira para estado de settlement.
-- [ ] Manter reconciliação limitada em concorrência, isolada por bet e acionada sem bloquear publicação SSE.
-- [ ] Adaptar callbacks do stream e teste de integração do módulo para chamar a fachada.
+- [x] Mover listagem de bets, consulta de comando, consulta de bet, reconciliação por crash/snapshot e registro de cashout credit para use cases próprios ou grupos coesos.
+- [x] Deixar em `game.service.ts` somente composição e API pública desses fluxos, removendo a implementação monolítica original.
+- [x] Preservar queries por jogador/ownership e a integração financeira para estado de settlement.
+- [x] Manter reconciliação limitada em concorrência, isolada por bet e acionada sem bloquear publicação SSE.
+- [x] Adaptar callbacks do stream e teste de integração do módulo para chamar a fachada.
 
 ### Critérios de aceite
 
-- [ ] O fluxo de crash/snapshot confirma resultado pela consulta Crashsim e nunca deduz loss nem cria crédito a partir de `round.crashed`.
-- [ ] Estado persistido terminal não regride; falha/404/time-out conserva o estado anterior e permite consulta/reconciliação posterior.
-- [ ] Listener de crédito continua atualizando bet após crédito financeiro idempotente e preserva o comportamento de retry do webhook.
-- [ ] `game.service.ts` não contém a antiga sequência monolítica de comandos e reconciliação.
+- [x] O fluxo de crash/snapshot confirma resultado pela consulta Crashsim e nunca deduz loss nem cria crédito a partir de `round.crashed`.
+- [x] Estado persistido terminal não regride; falha/404/time-out conserva o estado anterior e permite consulta/reconciliação posterior.
+- [x] Listener de crédito continua atualizando bet após crédito financeiro idempotente e preserva o comportamento de retry do webhook.
+- [x] `game.service.ts` não contém a antiga sequência monolítica de comandos e reconciliação.
 
 ### Arquivos prováveis
 
@@ -313,9 +313,9 @@ T2 é independente das demais até a integração final. As outras tarefas têm 
 
 ### Verificação
 
-- [ ] `cd operator && bun run typecheck`
-- [ ] `cd operator && bun test src/modules/game`
-- [ ] Preservar testes de crash e snapshot, cashout reconciliado, resultado desconhecido/404, concorrência limitada e settlement confirmado.
+- [x] `cd operator && bun run typecheck` — exit code 0.
+- [x] `cd operator && bun test src/modules/game` — 41 testes passaram; 2 testes de banco ignorados sem `TEST_DATABASE_URL`.
+- [x] Preservar testes de crash e snapshot, cashout reconciliado, resultado desconhecido/404, concorrência limitada e settlement confirmado.
 
 ## Task T8: Consolidar composição, contratos, documentação e validação final
 
