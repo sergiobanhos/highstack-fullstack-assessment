@@ -8,13 +8,13 @@
 
 ## Architecture Patterns
 
-- Organize business capabilities as modules under `operator/src/modules/<module>`. In the initial feature, `game` supports Crashsim only and contains the engine clients, stream coordination, round reducer, event hub, and SSE controller.
+- Organize business capabilities as modules under `operator/src/modules/<module>`. Current modules are `auth`, `financial`, and `game`; keep each module's use cases and public service facade inside that module.
 - Keep `operator/src/server.ts` as the composition root. Cross-module dependencies use explicitly exported contracts; module internals stay private.
-- Keep `game.module.ts` as direct wiring for the Crashsim stream service and SSE route. Do not create generic game/provider ports, type folders, catalogs, registries, plugins, or use-case layers for hypothetical games.
-- Keep transport controllers thin. The game stream service owns the concrete Crashsim connection, synchronization, reconnect, and event publication workflow.
-- Keep Crashsim HTTP/WebSocket details and validation at the concrete client boundary. Keep internal event/state types specific to the current Crashsim flow.
+- Keep module files consistent: `*.module.ts` registers routes and composes dependencies; `*.service.ts` is the module's public facade and composition point for its use cases; `usecases/` contains cohesive business flows, not forwarding wrappers.
+- Keep transport controllers thin. Game commands go through `game.service`; the realtime stream service owns the upstream connection, snapshot synchronization, reconnect, reduction, and publication workflow. The SSE controller depends on the stream subscription contract, not on the fan-out implementation.
+- Keep Crashsim HTTP/WebSocket details and external payload validation in the concrete clients under `operator/src/integrations/crashsim/`. Keep internal event/state types specific to the current Crashsim flow.
 - Maintain one upstream Crashsim stream per operator process, not one per browser.
-- Future auth and financial work belong in sibling top-level modules `modules/auth` and `modules/financial`, added by their own specs. Supporting a second game requires an explicit future design based on its actual needs.
+- Do not create generic game/provider ports, catalogs, registries, plugins, or scaffolding for hypothetical games. Supporting a second game requires an explicit future design based on its actual protocol and needs.
 
 ## Testing Rules
 

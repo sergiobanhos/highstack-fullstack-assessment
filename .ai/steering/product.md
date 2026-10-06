@@ -11,14 +11,14 @@ The operator is the server-side boundary between player clients and third-party 
 
 ## Current State
 
-The repository contains the Crashsim engine, PostgreSQL in Docker Compose, and a Bun/TypeScript smoke client that connects to the engine stream and prints events. The operator API, player client, authentication, and wallet are not implemented yet.
+The repository contains the Crashsim engine, the Bun/TypeScript Fastify operator, PostgreSQL with Drizzle migrations, and a React diagnostic/player client. The operator provides player auth, wallet and ledger operations, game commands, and Crashsim realtime state over SSE.
 
 ## Goals
 
 - Keep engine credentials on the server and prevent browsers from calling the engine directly.
 - Keep game state correct during disconnects, reconnects, delayed events, and out-of-order delivery.
 - Make wallet operations safe under retries and concurrent requests.
-- Isolate provider-specific behavior behind adapters while starting with Crashsim only.
+- Keep the current Crashsim integration concrete and direct; do not add a generic provider layer before another real integration requires it.
 
 ## Non-Goals
 

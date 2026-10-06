@@ -326,12 +326,12 @@ T2 é independente das demais até a integração final. As outras tarefas têm 
 
 ### Trabalho
 
-- [ ] Revisar exports de auth/financial/game e atualizar `server.ts` para compor somente contratos públicos, sem imports em pastas privadas.
-- [ ] Confirmar que wiring do callback de cashout continua visível em `server.ts`, sem ciclo entre módulos ou novo bus genérico.
-- [ ] Atualizar `.ai/steering/conventions.md` e `.ai/steering/product.md` removendo orientações factualmente superadas e documentando a arquitetura aprovada.
-- [ ] Atualizar diagramas e explicação do README: módulos, integração Crashsim, serviço realtime, fan-out privado e SSE; preservar os diagramas dos edge cases existentes.
-- [ ] Remover imports/arquivos/testes obsoletos e confirmar que nenhuma dependência cruza para arquivos privados de outro módulo.
-- [ ] Executar a suíte e typecheck finais e registrar qualquer ambiente E2E indisponível sem declarar esse teste como aprovado.
+- [x] Revisar exports de auth/financial/game e atualizar `server.ts` para compor somente contratos públicos, sem imports em pastas privadas.
+- [x] Confirmar que wiring do callback de cashout continua visível em `server.ts`, sem ciclo entre módulos ou novo bus genérico.
+- [x] Atualizar `.ai/steering/conventions.md` e `.ai/steering/product.md` removendo orientações factualmente superadas e documentando a arquitetura aprovada.
+- [x] Atualizar diagramas e explicação do README: módulos, integração Crashsim, serviço realtime, fan-out privado e SSE; preservar os diagramas dos edge cases existentes.
+- [x] Remover imports/arquivos/testes obsoletos e confirmar que nenhuma dependência cruza para arquivos privados de outro módulo.
+- [x] Executar a suíte e typecheck finais; a suíte E2E passou após corrigir a espera da porta PostgreSQL publicada.
 
 ### Critérios de aceite
 
@@ -351,11 +351,10 @@ T2 é independente das demais até a integração final. As outras tarefas têm 
 
 ### Verificação
 
-- [ ] `cd operator && bun run typecheck`
-- [ ] `cd operator && bun test`
-- [ ] `cd operator && bun run test:e2e` com banco e serviços locais de teste configurados.
-- [ ] `git diff --check`
-- [ ] Revisar diff contra FR-001–FR-012, NFR-001–NFR-003 e decisões TD-001–TD-005.
+- [x] `cd operator && bun run typecheck`
+- [x] `cd operator && bun run test:e2e` — 163 testes passaram, 944 expectativas, incluindo as migrations num PostgreSQL temporário.
+- [x] `git diff --check`
+- [x] Revisar diff contra FR-001–FR-012, NFR-001–NFR-003 e decisões TD-001–TD-005.
 
 ## Fatiamento de implementação
 

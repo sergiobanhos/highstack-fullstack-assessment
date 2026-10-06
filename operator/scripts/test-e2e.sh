@@ -50,6 +50,23 @@ if [[ ! "$published_port" =~ ^[0-9]+$ ]]; then
   exit 1
 fi
 
+# pg_isready inside the container can succeed just before Docker publishes the
+# host port. Wait for that forwarding path too, so Bun does not race the port.
+host_ready=0
+for attempt in {1..60}; do
+  if (echo >"/dev/tcp/127.0.0.1/${published_port}") >/dev/null 2>&1; then
+    host_ready=1
+    break
+  fi
+  sleep 0.25
+done
+
+if [[ "$host_ready" != 1 ]]; then
+  compose logs --no-color postgres-test >&2 || true
+  printf 'The temporary PostgreSQL host port did not become available in 15 seconds.\n' >&2
+  exit 1
+fi
+
 printf 'Running the full Bun test suite against a temporary PostgreSQL database on port %s.\n' "$published_port"
 cd "$OPERATOR_DIR"
 TEST_DATABASE_URL="postgres://operator_test:operator_test@127.0.0.1:${published_port}/operator_test" bun test

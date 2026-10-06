@@ -23,8 +23,8 @@ flowchart LR
   subgraph Operator[Operator — Fastify]
     Auth[Auth REST<br/>register, login, current user]
     GameAPI[Game REST<br/>session, bet, cashout, bet reads]
-    GameStream[Game stream service<br/>snapshot sync + reducer]
-    Hub[Event hub + SSE<br/>snapshot, events, health]
+    GameStream[game/realtime/stream.service<br/>snapshot sync + reducer]
+    Hub[GameEventFanout<br/>snapshot, events, health]
     Financial[Financial module<br/>wallet, ledger, payouts, webhooks]
     DB[(PostgreSQL<br/>users, sessions, bets, wallet, ledger)]
   end
@@ -60,7 +60,7 @@ flowchart LR
 
 O client fala somente com o operador. A aplicação usa três caminhos: REST para autenticação, carteira e comandos do jogo; SSE para estado realtime e saúde da conexão; webhooks HMAC da Engine para débito e crédito. O operador conversa com a Crashsim por HTTP e WebSocket, mantendo `ENGINE_OPERATOR_KEY` e `ENGINE_WEBHOOK_SECRET` no servidor.
 
-No caminho realtime, `game-stream.service` sincroniza o snapshot e reduz os eventos antes de publicá-los pelo event hub e SSE. No caminho de aposta, o operador autentica o jogador, persiste o comando e coordena a chamada HTTP para a Engine. No caminho financeiro, o webhook aplica saldo e ledger numa transação idempotente; a confirmação do crédito também atualiza o estado persistido da aposta.
+No caminho realtime, `modules/game/realtime/stream.service.ts` sincroniza o snapshot e reduz os eventos antes de publicá-los pelo `GameEventFanout` e SSE. No caminho de aposta, o operador autentica o jogador, persiste o comando e coordena a chamada HTTP para a Engine. No caminho financeiro, o webhook aplica saldo e ledger numa transação idempotente; a confirmação do crédito também atualiza o estado persistido da aposta.
 
 ## Operador
 
@@ -114,26 +114,6 @@ Payout
 - tax: Integer
 - netValue: Integer
 
-# Fluxos de Casos de Uso (Fazer diagramas)
-
-TODO: Fazer diagramas
-
-## Login
-
-## Registro
-
-## Current User
-
-## Iniciar sessão do jogo
-
-Player Cliente -> POST /game/crashsim (Header Berarer Auth Token) (Operator) -> Engine | POST /players/:id/session -> Redirect to /session/:sessionId or /game/crashsim?sessionId=:sessionId
-
-## Criar transacao por PlayerId
-
-Verifica se saldo vai ficar menor que 0 -> Lock no banco -> Criar transação -> Commit -> Recalcula balance -> Atualiza cache
-
-##
-
 # Fluxo de Desenvolvimento
 
 - Vou usar SDD para o desenvolivmento assistido por IA
@@ -150,27 +130,33 @@ Verifica se saldo vai ficar menor que 0 -> Lock no banco -> Criar transação ->
 - Inicializei o framework SDD no repositorio
 - Criei a primeira spec, definindo arquitetura do operador, do cliente, pensando já na expansão, edge cases, etc.
 
-## Como eventos e comandos atravessam o operador
+## Arquitetura do Operator: módulos, comandos e realtime
 
 ```mermaid
 flowchart LR
   Browser["Cliente React<br/>EventSource"]
 
-  subgraph Operator[Operador — módulo game]
-    EventsController["game-events.controller<br/>GET /game/events"]
-    CommandsController["game-commands.controller<br/>REST autenticada"]
-    Hub["game-event-hub<br/>fan-out SSE"]
-    Service["game-stream.service<br/>sync, reconnect, reduce"]
-    Commands["game-command.service<br/>sessão, bet, cashout, reconciliação"]
-    Reducer["round-state<br/>transições da rodada"]
-    WsClient["crashsim-stream.client<br/>WebSocket + validação"]
-    HttpClient["crashsim-http.client<br/>snapshot, session, bet, cashout"]
-    Module["game.module<br/>composição"]
+  subgraph Operator[Operator]
+    subgraph Game[modules/game]
+      EventsController["events.controller<br/>SSE HTTP"]
+      CommandsController["commands.controller<br/>REST HTTP"]
+      Hub["GameEventFanout<br/>snapshot + fan-out"]
+      Service["realtime/stream.service<br/>connect, sync, reconnect, publish"]
+      Commands["game.service<br/>fachada + composição dos use cases"]
+      UC["usecases/<br/>bet, cashout, consulta, reconciliação"]
+      Reducer["realtime/round-state<br/>estado monotônico"]
+      Module["game.module<br/>wiring local"]
+    end
+    subgraph Integrations["integrations/crashsim"]
+      WsClient["stream.client<br/>WebSocket + validação"]
+      HttpClient["http.client<br/>snapshot e comandos"]
+      Webhook["webhook-auth<br/>HMAC e frescor"]
+    end
   end
 
-  subgraph Shared[Operador — módulos compartilhados]
-    Auth["auth.requireUser"]
-    Financial["financial<br/>wallet + webhook"]
+  subgraph Modules["Módulos de negócio"]
+    Auth["auth module<br/>identidade e sessão"]
+    Financial["financial module<br/>wallet, ledger e webhooks"]
     DB[(PostgreSQL)]
   end
 
@@ -191,8 +177,10 @@ flowchart LR
   Commands -->|persistência idempotente| DB
   Commands -->|status do crédito| Financial
   Commands -->|HTTP autenticado server-side| HttpClient
-  Engine -->|webhook de débito/crédito| Financial
+  Engine -->|webhook de débito/crédito| Webhook
+  Webhook -->|payload autenticado| Financial
   Financial -->|ledger e saldo| DB
+  Financial -. contrato após crédito .-> Commands
 
   Engine -->|eventos WS| WsClient
   WsClient -->|eventos validados| Service
@@ -203,15 +191,17 @@ flowchart LR
   Engine -->|snapshot + seq| HttpClient
 
   Module -. instancia e liga .-> Service
-  Module -. instancia e liga .-> Commands
-  Module -. instancia e liga .-> Hub
+  Module -. compõe .-> Commands
+  Module -. instancia .-> Hub
   Module -. registra .-> EventsController
   Module -. registra .-> CommandsController
 ```
 
-O browser faz um `GET /game/events` para abrir SSE. Depois da requisição, os dados fluem do operador para o browser; o browser não conecta à engine. Dentro do operador, o serviço mantém uma única conexão WebSocket upstream, busca o snapshot por HTTP ao conectar ou ressincronizar, aplica o reducer e publica eventos e saúde no hub. O hub atende vários clientes SSE e entrega a cada novo cliente o snapshot antes dos eventos concorrentes.
+`server.ts` é a raiz de composição da aplicação e monta os módulos por seus contratos exportados. Cada módulo registra seus controllers e expõe uma fachada `*.service.ts`; seus fluxos coesos ficam em `usecases/`. Controllers cuidam da validação e tradução HTTP, sem implementar o fluxo de negócio.
 
-As ações de jogo usam REST autenticada. O controller valida a entrada e obtém a identidade em `auth.requireUser`; `game-command.service` coordena o snapshot, os comandos persistidos, o contrato público de financial e as chamadas Crashsim. O status do cashout no jogo fica separado do status do crédito no ledger. Uma resposta ambígua leva a uma consulta `GET /bets/:id`; se ainda não for possível confirmar, o comando fica `unknown` e uma nova tentativa fica bloqueada.
+Para realtime, `game.module` cria uma única conexão WebSocket upstream por processo. `realtime/stream.service` valida e ordena os eventos, ressincroniza pelo snapshot HTTP após desconexão ou lacuna de sequência, atualiza `round-state` e publica estado/health pelo `GameEventFanout`. Cada conexão SSE recebe primeiro um snapshot consistente e depois eventos novos. A stream não tem replay histórico.
+
+Para comandos, `commands.controller` obtém a identidade autenticada do módulo auth e chama `game.service`. A fachada compõe casos de uso de sessão, aposta, cashout e reconciliação, que persistem comandos e consultam a integração concreta Crashsim e o contrato público de financial quando necessário. O status do cashout no jogo fica separado do crédito no ledger. Uma resposta ambígua leva a `GET /bets/:id`; se ainda não for possível confirmar, o comando fica `unknown` e nova tentativa fica bloqueada.
 
 # Crashsim realtime proxy (spec 001) — local run
 
