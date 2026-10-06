@@ -6,8 +6,8 @@ import { registerGameCommandsController } from './commands.controller';
 import {
   GameCommandError,
   type BetCommandResult,
-  type GameCommandService,
-} from '../game-command.service';
+  type GameService,
+} from '../game.service';
 
 const player: AuthenticatedPlayer = {
   id: '0e3c026b-2b1b-4229-96c8-10cd01cdf35a',
@@ -40,7 +40,7 @@ function result(overrides: Partial<BetCommandResult> = {}): BetCommandResult {
 function createHarness(options: {
   authorized?: boolean;
   authUnavailable?: boolean;
-  service?: Partial<GameCommandService>;
+  service?: Partial<GameService>;
 } = {}) {
   const calls: Record<string, unknown[]> = {
     createSession: [], placeBet: [], cashout: [], listBets: [], getCommand: [], getBet: [],
@@ -50,7 +50,7 @@ function createHarness(options: {
   const logger: Pick<Logger, 'warn'> = {
     warn(message, fields) { logs.push({ message, fields }); },
   };
-  const defaults: GameCommandService = {
+  const defaults: GameService = {
     async createSession(playerId) {
       calls.createSession!.push({ playerId });
       if (options.service?.createSession) return options.service.createSession(playerId);

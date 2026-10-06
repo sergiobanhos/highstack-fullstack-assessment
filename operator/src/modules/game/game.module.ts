@@ -6,7 +6,7 @@ import type { FinancialModule } from '../financial/financial.module';
 import { CrashsimHttpClient } from '../../integrations/crashsim/http.client';
 import { registerGameCommandsController } from './controllers/commands.controller';
 import type { BackoffOptions, Scheduler, UpstreamSocketFactory } from '../../integrations/crashsim/stream.client';
-import { createGameCommandService, type GameCommandService, type RecordCashoutCreditInput } from './game-command.service';
+import { createGameService, type GameService, type RecordCashoutCreditInput } from './game.service';
 import { registerGameEventsRoute } from './controllers/events.controller';
 import { createGameStreamService } from './realtime/stream.service';
 
@@ -40,7 +40,7 @@ export interface GameModule {
 
 /** Wires the Crashsim stream, authenticated commands, and downstream SSE route. */
 export function createGameModule({ app, db, auth, financial, ...deps }: GameModuleDeps): GameModule {
-  let commands: GameCommandService | null = null;
+  let commands: GameService | null = null;
   const stream = createGameStreamService({
     ...deps,
     onRoundCrashed: (roundId) => commands?.reconcileBetsForRound(roundId) ?? Promise.resolve(),
@@ -57,7 +57,7 @@ export function createGameModule({ app, db, auth, financial, ...deps }: GameModu
     operatorKey: deps.config.engine.operatorKey,
     fetchImpl: deps.fetchImpl,
   });
-  const commandService = createGameCommandService({
+  const commandService = createGameService({
     db,
     financial,
     engine,

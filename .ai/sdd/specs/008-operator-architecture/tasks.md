@@ -247,19 +247,19 @@ T2 é independente das demais até a integração final. As outras tarefas têm 
 
 ### Trabalho
 
-- [ ] Criar `modules/game/usecases/` e mover garantia/criação de sessão, normalização e criação de aposta e cashout para fluxos nomeados.
-- [ ] Introduzir a fachada pública `game.service.ts` e atualizar controllers para chamá-la sem importar implementações privadas.
-- [ ] Manter no fluxo de bet a reserva de comando, idempotency key/hash, regra de uma aposta por jogador/rodada, débito, chamada Crashsim, persistência e tratamento de resultado desconhecido.
-- [ ] Manter no fluxo de cashout as validações de ownership/rodada/status, reserva idempotente, consulta após timeout e sem retry às cegas.
-- [ ] Passar somente contratos públicos de auth/financial/realtime e o client Crashsim concreto como dependências explícitas.
-- [ ] Reorganizar testes de comando sem remover os casos de erro/concorrência existentes.
+- [x] Criar `modules/game/usecases/` e mover garantia/criação de sessão, normalização e criação de aposta e cashout para fluxos nomeados.
+- [x] Introduzir a fachada pública `game.service.ts` e atualizar controllers para chamá-la sem importar implementações privadas.
+- [x] Manter no fluxo de bet a reserva de comando, idempotency key/hash, regra de uma aposta por jogador/rodada, débito, chamada Crashsim, persistência e tratamento de resultado desconhecido.
+- [x] Manter no fluxo de cashout as validações de ownership/rodada/status, reserva idempotente, consulta após timeout e sem retry às cegas.
+- [x] Passar somente contratos públicos de auth/financial/realtime e o client Crashsim concreto como dependências explícitas.
+- [x] Reorganizar testes de comando sem remover os casos de erro/concorrência existentes.
 
 ### Critérios de aceite
 
-- [ ] `game-commands.controller` permanece fina e não conhece Drizzle, Engine key, schema ou transações.
-- [ ] Bet não é duplicada em resposta perdida; tentativa desconhecida continua reconciliável e bloqueia repetição insegura.
-- [ ] Cashout ambíguo consulta `GET /bets/:id` e não reporta falha/repete mutation antes de reconciliar.
-- [ ] Rotas e respostas atuais continuam idênticas.
+- [x] `game-commands.controller` permanece fina e não conhece Drizzle, Engine key, schema ou transações.
+- [x] Bet não é duplicada em resposta perdida; tentativa desconhecida continua reconciliável e bloqueia repetição insegura.
+- [x] Cashout ambíguo consulta `GET /bets/:id` e não reporta falha/repete mutation antes de reconciliar.
+- [x] Rotas e respostas atuais continuam idênticas.
 
 ### Arquivos prováveis
 
@@ -274,9 +274,10 @@ T2 é independente das demais até a integração final. As outras tarefas têm 
 
 ### Verificação
 
-- [ ] `cd operator && bun run typecheck`
-- [ ] `cd operator && bun test src/modules/game/game-command.service.test.ts src/modules/game/game-commands.controller.test.ts`
-- [ ] Preservar testes de idempotência, débito confirmado/recusado, bet/cashout unknown, timeout, ownership e corrida com mudança da rodada.
+- [x] `cd operator && bun run typecheck` — exit code 0.
+- [x] `cd operator && bun test src/modules/game/game.service.test.ts src/modules/game/controllers/commands.controller.test.ts` — 6 testes passaram; o teste de banco foi ignorado sem `TEST_DATABASE_URL`.
+- [x] `cd operator && bun run test:e2e` — 163 testes passaram, 944 expectativas, incluindo idempotência, débito, bet/cashout unknown, timeout, ownership e concorrência.
+- [x] Preservar testes de idempotência, débito confirmado/recusado, bet/cashout unknown, timeout, ownership e corrida com mudança da rodada.
 
 ## Task T7: Extrair consulta, reconciliação e callback de crédito do Game
 

@@ -8,7 +8,7 @@ import { createFinancialService } from '../financial/financial.service';
 import type { PlaceBetInput, PlaceBetResult, CashoutInput, CashoutResult, CrashsimBet } from '../../integrations/crashsim/http.client';
 import { CrashsimHttpError } from '../../integrations/crashsim/http.client';
 import { gameBets, gameCommands } from './game.schema';
-import { createGameCommandService } from './game-command.service';
+import { createGameService } from './game.service';
 import type { Logger } from '../../config';
 import type { OperatorSnapshot } from './realtime/round-state';
 import { financialOperations, walletLedgerEntries, wallets } from '../financial/financial.schema';
@@ -123,7 +123,7 @@ if (!testDatabaseUrl) {
         };
       },
     };
-    const service = createGameCommandService({
+    const service = createGameService({
       db: connection.db,
       financial,
       engine,

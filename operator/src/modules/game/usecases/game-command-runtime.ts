@@ -1,58 +1,28 @@
 import { createHash } from 'node:crypto';
 import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
-import type { Logger } from '../../config';
-import type { OperatorDatabase } from '../../db';
-import type { FinancialModule } from '../financial/financial.module';
+import type { Logger } from '../../../config';
+import type { OperatorDatabase } from '../../../db';
+import type { FinancialModule } from '../../financial/financial.module';
 import {
   CrashsimHttpClient,
   CrashsimHttpError,
   type CashoutResult,
   type CrashsimBet,
-} from '../../integrations/crashsim/http.client';
-import { gameBets, gameCommands, type GameCommandStatus, type GameEngineBetStatus, type GameSettlementStatus } from './game.schema';
-import type { GameStreamService } from './realtime/stream.service';
+} from '../../../integrations/crashsim/http.client';
+import { gameBets, gameCommands, type GameCommandStatus, type GameEngineBetStatus, type GameSettlementStatus } from '../game.schema';
+import type { GameStreamService } from '../realtime/stream.service';
+import { GameCommandError } from '../game.errors';
+export { GameCommandError } from '../game.errors';
+export type { GameCommandErrorCode } from '../game.errors';
+import { createEnsurePlayerSession } from './ensure-player-session';
+import { createPlaceBetUseCase } from './place-bet';
+import { createCashoutBetUseCase, createRunCashoutBetUseCase } from './cashout-bet';
 
 const MAX_BET_CENTS = 1_000_000_000;
 const MIN_AUTO_CASHOUT_HUNDREDTHS = 101;
 const MAX_AUTO_CASHOUT_HUNDREDTHS = 100_000_000;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ENGINE_ID_PATTERN = /^[A-Za-z0-9_-]{1,255}$/;
-
-export type GameCommandErrorCode =
-  | 'INVALID_BET'
-  | 'INVALID_IDEMPOTENCY_KEY'
-  | 'IDEMPOTENCY_KEY_REUSED'
-  | 'GAME_NOT_SYNCHRONIZED'
-  | 'ROUND_NOT_ACCEPTING_BETS'
-  | 'BET_ALREADY_EXISTS'
-  | 'BET_OUTCOME_UNKNOWN'
-  | 'BET_NOT_ACTIVE'
-  | 'ROUND_NOT_RUNNING'
-  | 'CASHOUT_OUTCOME_UNKNOWN'
-  | 'INVALID_QUERY'
-  | 'SERVICE_UNAVAILABLE';
-
-const ERROR_MESSAGES: Record<GameCommandErrorCode, string> = {
-  INVALID_BET: 'Bet request is invalid',
-  INVALID_IDEMPOTENCY_KEY: 'Idempotency key is invalid',
-  IDEMPOTENCY_KEY_REUSED: 'Idempotency key was already used for a different command',
-  GAME_NOT_SYNCHRONIZED: 'Game is reconnecting and cannot accept commands',
-  ROUND_NOT_ACCEPTING_BETS: 'The current round is not accepting bets',
-  BET_ALREADY_EXISTS: 'A bet already exists for this player and round',
-  BET_OUTCOME_UNKNOWN: 'A previous bet for this player and round is still being resolved',
-  BET_NOT_ACTIVE: 'Bet is no longer active',
-  ROUND_NOT_RUNNING: 'The bet round is not running',
-  CASHOUT_OUTCOME_UNKNOWN: 'A cashout for this bet is still being resolved',
-  INVALID_QUERY: 'Game query is invalid',
-  SERVICE_UNAVAILABLE: 'Game service is unavailable',
-};
-
-export class GameCommandError extends Error {
-  constructor(readonly code: GameCommandErrorCode) {
-    super(ERROR_MESSAGES[code]);
-    this.name = 'GameCommandError';
-  }
-}
 
 export interface PlaceBetCommandInput {
   playerId: string;
@@ -156,7 +126,7 @@ const commandProjection = {
   reservedAt,
 };
 
-type StoredCommand = {
+export type StoredCommand = {
   id: string;
   playerId: string;
   commandType: 'bet' | 'cashout';
@@ -262,30 +232,7 @@ export function createGameCommandService({ db, financial, engine, stream, logger
     }
   }
 
-  async function createOrReuseSession(playerId: string): Promise<string> {
-    const existing = sessions.get(playerId);
-    if (existing) return existing;
-
-    const inFlight = sessionCreations.get(playerId);
-    if (inFlight) return inFlight;
-
-    const creation = (async () => {
-      try {
-        await financial.ensureWallet(playerId);
-        const session = await engine.createSession(playerId);
-        sessions.set(playerId, session.sessionId);
-        return session.sessionId;
-      } catch {
-        throw new GameCommandError('SERVICE_UNAVAILABLE');
-      }
-    })();
-    sessionCreations.set(playerId, creation);
-    try {
-      return await creation;
-    } finally {
-      if (sessionCreations.get(playerId) === creation) sessionCreations.delete(playerId);
-    }
-  }
+  const ensurePlayerSession = createEnsurePlayerSession({ financial, engine, sessions, sessionCreations });
 
   function assertRoundAcceptingBets(roundId: string): void {
     const snapshot = stream.getSnapshot();
@@ -1236,77 +1183,27 @@ export function createGameCommandService({ db, financial, engine, stream, logger
     }
   }
 
-  async function runCashout(input: CashoutCommandInput): Promise<BetCommandResult | null> {
-    const requestHash = createHash('sha256')
-      .update(JSON.stringify({ commandType: 'cashout', betId: input.betId }))
-      .digest('hex');
-    const existing = await loadByIdempotencyKey(input.playerId, input.idempotencyKey);
-    if (existing) {
-      assertMatchingCommand(existing, 'cashout', requestHash);
-      if (existing.status === 'pending' || existing.status === 'unknown') {
-        return cashoutInFlight.get(existing.id) ?? reconcileCashout(existing);
-      }
-      return resultForCommand(existing);
-    }
-
-    const bet = await withStorageErrors(async () => {
-      const [ownedBet] = await db
+  const runCashout = createRunCashoutBetUseCase({
+    loadByIdempotencyKey,
+    assertMatchingCommand,
+    reconcileCashout,
+    cashoutInFlight,
+    loadOwnedBet: (playerId, betId) => withStorageErrors(async () => {
+      const [bet] = await db
         .select()
         .from(gameBets)
-        .where(and(
-          eq(gameBets.betId, input.betId),
-          eq(gameBets.playerId, input.playerId),
-        ))
+        .where(and(eq(gameBets.betId, betId), eq(gameBets.playerId, playerId)))
         .limit(1);
-      return ownedBet;
-    });
-    if (!bet) return null;
+      return bet;
+    }),
+    getSnapshot: () => stream.getSnapshot(),
+    reserve: reserveCashoutCommand,
+    resultForCommand,
+    post: postCashout,
+    logger,
+  });
 
-    const snapshot = stream.getSnapshot();
-    if (snapshot.connection !== 'connected') throw new GameCommandError('GAME_NOT_SYNCHRONIZED');
-    if (snapshot.state.state !== 'running' || snapshot.state.roundId !== bet.roundId) {
-      throw new GameCommandError('ROUND_NOT_RUNNING');
-    }
-    if (bet.engineStatus !== 'active') throw new GameCommandError('BET_NOT_ACTIVE');
-
-    const reservation = await reserveCashoutCommand(input, requestHash, bet.roundId);
-    if (!reservation.created) {
-      if (reservation.command.status === 'pending' || reservation.command.status === 'unknown') {
-        return cashoutInFlight.get(reservation.command.id) ?? reconcileCashout(reservation.command);
-      }
-      return resultForCommand(reservation.command);
-    }
-
-    const operation = postCashout(reservation.command, bet);
-    logger.info('game.cashout.requested', {
-      commandId: reservation.command.id,
-      betId: bet.betId,
-      roundId: bet.roundId,
-    });
-    cashoutInFlight.set(reservation.command.id, operation);
-    try {
-      return await operation;
-    } finally {
-      if (cashoutInFlight.get(reservation.command.id) === operation) {
-        cashoutInFlight.delete(reservation.command.id);
-      }
-    }
-  }
-
-  async function cashout(input: CashoutCommandInput): Promise<BetCommandResult | null> {
-    if (!UUID_PATTERN.test(input.idempotencyKey)) throw new GameCommandError('INVALID_IDEMPOTENCY_KEY');
-    if (!ENGINE_ID_PATTERN.test(input.betId)) throw new GameCommandError('INVALID_BET');
-    const requestKey = input.playerId + ':' + input.idempotencyKey;
-    const existing = cashoutRequests.get(requestKey);
-    if (existing) return existing;
-    const operation = runCashout(input);
-    cashoutRequests.set(requestKey, operation);
-    try {
-      return await operation;
-    } finally {
-      if (cashoutRequests.get(requestKey) === operation) cashoutRequests.delete(requestKey);
-    }
-  }
+  const cashout = createCashoutBetUseCase({ requests: cashoutRequests, run: runCashout });
 
   async function replayOrReconcile(command: StoredCommand, requestHash: string): Promise<BetCommandResult> {
     assertMatchingCommand(command, 'bet', requestHash);
@@ -1341,7 +1238,7 @@ export function createGameCommandService({ db, financial, engine, stream, logger
         if (sessions.get(command.playerId) === sessionId) sessions.delete(command.playerId);
         let refreshedSession: string;
         try {
-          refreshedSession = await createOrReuseSession(command.playerId);
+          refreshedSession = await ensurePlayerSession(command.playerId);
         } catch {
           return persistRejected(command, 'engine_unavailable');
         }
@@ -1381,31 +1278,26 @@ export function createGameCommandService({ db, financial, engine, stream, logger
     }
   }
 
+  const placeBet = createPlaceBetUseCase({
+    normalize: normalizeBet,
+    loadByIdempotencyKey,
+    replayOrReconcile,
+    assertRoundAcceptingBets,
+    ensurePlayerSession,
+    reserve: reserveBetCommand,
+    post: postBet,
+  });
+
   return {
     async createSession(playerId) {
-      await createOrReuseSession(playerId);
-      return { status: 'ready' };
-    },
-
-    async placeBet(input) {
-      if (!UUID_PATTERN.test(input.idempotencyKey)) throw new GameCommandError('INVALID_IDEMPOTENCY_KEY');
-      const bet = normalizeBet(input);
-      const existing = await loadByIdempotencyKey(input.playerId, input.idempotencyKey);
-      if (existing) return replayOrReconcile(existing, bet.requestHash);
-
-      assertRoundAcceptingBets(bet.roundId);
-      let sessionId: string;
       try {
-        sessionId = await createOrReuseSession(input.playerId);
+        await ensurePlayerSession(playerId);
       } catch {
         throw new GameCommandError('SERVICE_UNAVAILABLE');
       }
-      assertRoundAcceptingBets(bet.roundId);
-
-      const reservation = await reserveBetCommand(input, bet);
-      if (!reservation.created) return replayOrReconcile(reservation.command, bet.requestHash);
-      return postBet(reservation.command, sessionId, bet);
+      return { status: 'ready' };
     },
+    placeBet,
     cashout,
     listBets,
     getCommand,
