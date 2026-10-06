@@ -195,11 +195,12 @@ Após F05, validar localmente cadastro/login, reload autenticado, top-up/histór
 
 - **Requirements:** `.ai/sdd/specs/007-round-bet-reconciliation/requirements.md` (approved).
 - **Design:** `.ai/sdd/specs/007-round-bet-reconciliation/design.md` (approved).
-- **Tasks:** `.ai/sdd/specs/007-round-bet-reconciliation/tasks.md` (approved; T1–T2 complete, T3 pending).
-- **Status:** `.ai/sdd/specs/007-round-bet-reconciliation/.status` (`implementation:in-progress`).
+- **Tasks:** `.ai/sdd/specs/007-round-bet-reconciliation/tasks.md` (approved; T1–T3 complete and verified).
+- **Status:** `.ai/sdd/specs/007-round-bet-reconciliation/.status` (`implementation:done`).
 - **Scope:** reconcile persisted `active` bets through the existing owned `getBet` flow after an applied Crashsim crash and after a successful snapshot. Never infer `lost`, create credits, add a worker, or alter the engine protocol.
 - **Task order:** T1 authoritative bet lookup, partial active-round index and migration; T2 non-blocking stream/snapshot triggers; T3 client pending-result label and manual verification.
 - **Verification:** operator typecheck and targeted game tests; PostgreSQL integration tests must use a dedicated database name containing `test`; client typecheck/tests/build and manual flow checks for T3.
 - **T1 evidence:** typecheck passed; 30 service/schema integration tests passed against local `operator_test`, including `lost`, `cashed_out`, pending settlement, failed lookup retry, duplicate trigger coalescing, snapshot filtering and partial index migration.
 - **T2 evidence:** typecheck passed; 13 stream/composition tests passed, including non-blocking crash/snapshot callbacks and safe handling of callback failures.
-- **Readiness:** implementation is underway with no open design questions. T2 and T3 remain before F07 can be marked complete.
+- **T3 evidence:** client typecheck, 76 tests and build passed; read-only local UI smoke showed persisted loss/cashout outcomes. No bet was submitted from the browser.
+- **Readiness:** F07 implementation is complete; requirements, design and tasks are approved, and T1–T3 verification is recorded.

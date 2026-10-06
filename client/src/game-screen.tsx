@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import {
   Accordion,
   Alert,
@@ -21,7 +21,6 @@ import {
   OperatorApiError,
   type BetCommandResult,
   type BetCommandStatus,
-  type EngineBetStatus,
   type OperatorApi,
   type SettlementStatus,
 } from './operator-api';
@@ -35,6 +34,7 @@ import {
   projectPayoutCents,
 } from './money';
 import { verifyRound, type ProofCheck, type RoundProof } from './fairness';
+import { getBetGameStatusLabel, isBetOutcomePending, shouldRefreshBetsForSnapshot } from './bet-status';
 import {
   initialStreamState,
   isSnapshotStale,
@@ -113,12 +113,6 @@ const COMMAND_STATUS_COLORS: Record<BetCommandStatus, string> = {
   accepted: 'teal',
   rejected: 'red',
   unknown: 'yellow',
-};
-
-const ENGINE_STATUS_LABELS: Record<EngineBetStatus, string> = {
-  active: 'Em andamento',
-  lost: 'Perdida',
-  cashed_out: 'Cashout',
 };
 
 const SETTLEMENT_LABELS: Record<SettlementStatus, string> = {
@@ -205,21 +199,62 @@ export function GameScreen({
   const [pending, setPending] = useState<PendingGameCommand | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [settlementPolls, setSettlementPolls] = useState(0);
+  const [checkingBetIds, setCheckingBetIds] = useState<Set<string>>(() => new Set());
+  const [failedBetVerifications, setFailedBetVerifications] = useState<Set<string>>(() => new Set());
 
   const stale = isSnapshotStale(stream);
   const snapshot = stream.snapshot;
   const phase = snapshot?.state ?? null;
   const roundId = snapshot?.roundId ?? null;
+  const betRoundContextRef = useRef({ roundId, phase });
+  betRoundContextRef.current = { roundId, phase };
+  const previousConnectedBetRound = useRef<string | null>(null);
   const multiplierText =
     snapshot?.multiplier !== null && snapshot?.multiplier !== undefined
       ? `${snapshot.multiplier.toFixed(2)}x`
       : '—';
+
+  const refreshBet = useCallback(async (betId: string): Promise<void> => {
+    setCheckingBetIds((current) => new Set(current).add(betId));
+    setFailedBetVerifications((current) => {
+      const next = new Set(current);
+      next.delete(betId);
+      return next;
+    });
+    try {
+      const fresh = await api.getBet(token, betId);
+      if (fresh === null) {
+        setFailedBetVerifications((current) => new Set(current).add(betId));
+        return;
+      }
+      setBets((current) =>
+        current === null
+          ? current
+          : current.map((bet) => (bet.commandId === fresh.commandId ? fresh : bet)),
+      );
+      if (fresh.bet?.settlementStatus === 'confirmed') onWalletChanged();
+    } catch (error) {
+      if (isUnauthenticated(error)) onUnauthorized();
+      else setFailedBetVerifications((current) => new Set(current).add(betId));
+    } finally {
+      setCheckingBetIds((current) => {
+        const next = new Set(current);
+        next.delete(betId);
+        return next;
+      });
+    }
+  }, [api, token, onUnauthorized, onWalletChanged]);
 
   const loadBets = useCallback(async (): Promise<void> => {
     try {
       const list = await api.listBets(token, BETS_LIMIT);
       setBets(list);
       setBetsError(null);
+      const context = betRoundContextRef.current;
+      const closedActiveBets = list.filter(
+        (item) => item.betId !== null && isBetOutcomePending(item, context),
+      );
+      await Promise.all(closedActiveBets.map((item) => refreshBet(item.betId!)));
     } catch (error) {
       if (isUnauthenticated(error)) {
         onUnauthorized();
@@ -227,7 +262,7 @@ export function GameScreen({
       }
       setBetsError(describeGameError(error));
     }
-  }, [api, token, onUnauthorized]);
+  }, [api, token, onUnauthorized, refreshBet]);
 
   const afterMutation = useCallback(async (): Promise<void> => {
     setSettlementPolls(0);
@@ -277,10 +312,19 @@ export function GameScreen({
     void loadBets();
   }, [loadBets]);
 
-  // Round transitions invalidate the personal view of bets: refresh on crash.
+  // Refresh personal bets after a crash, initial synchronization, or a new
+  // connected round. Primitive dependencies keep ticks from reloading the list.
   useEffect(() => {
-    if (phase === 'crashed' && roundId !== null) void loadBets();
-  }, [phase, roundId, loadBets]);
+    const connected = stream.synchronized && stream.upstream === 'connected';
+    if (!connected || roundId === null) return;
+    const shouldRefresh = shouldRefreshBetsForSnapshot(
+      previousConnectedBetRound.current,
+      { roundId, phase },
+      connected,
+    );
+    previousConnectedBetRound.current = roundId;
+    if (shouldRefresh) void loadBets();
+  }, [stream.synchronized, stream.upstream, phase, roundId, loadBets]);
 
   const reconcile = useCallback(
     async (command: PendingGameCommand): Promise<void> => {
@@ -751,6 +795,8 @@ export function GameScreen({
             ) : (
               bets.map((item) => {
                 const settlementBetId = item.bet?.betId ?? null;
+                const verificationBetId = item.bet?.betId ?? item.betId;
+                const outcomePending = isBetOutcomePending(item, { roundId, phase });
                 const multiplier =
                   item.bet?.payoutCents !== null && item.bet?.payoutCents !== undefined
                     ? formatCents(item.bet.payoutCents)
@@ -777,7 +823,7 @@ export function GameScreen({
                       )}
                     </Table.Td>
                     <Table.Td>
-                      {item.bet === null ? '—' : ENGINE_STATUS_LABELS[item.bet.engineStatus]}
+                      {getBetGameStatusLabel(item, { roundId, phase })}
                     </Table.Td>
                     <Table.Td>{multiplier}</Table.Td>
                     <Table.Td>
@@ -792,6 +838,21 @@ export function GameScreen({
                         >
                           Verificar crédito
                         </Button>
+                      )}
+                      {outcomePending && verificationBetId !== null && (
+                        <Stack gap={2} align="flex-start">
+                          <Button
+                            size="compact-xs"
+                            variant="light"
+                            disabled={checkingBetIds.has(verificationBetId)}
+                            onClick={() => void refreshBet(verificationBetId)}
+                          >
+                            {checkingBetIds.has(verificationBetId) ? 'Checking…' : 'Check result'}
+                          </Button>
+                          {failedBetVerifications.has(verificationBetId) && (
+                            <Text size="xs" c="dimmed">Could not verify right now. Try again.</Text>
+                          )}
+                        </Stack>
                       )}
                     </Table.Td>
                   </Table.Tr>

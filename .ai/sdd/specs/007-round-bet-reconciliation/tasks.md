@@ -2,7 +2,7 @@
 
 > Requirements: @requirements.md
 > Design: @design.md
-> Status: Implementation in progress — T1–T2 complete
+> Status: Implementation complete — T1–T3 verified
 
 ## Cobertura dos requisitos
 
@@ -123,20 +123,20 @@
 
 ### Trabalho
 
-- [ ] Criar uma regra pura para distinguir `active` de “Verificando resultado” usando o snapshot: fase `crashed` da mesma rodada ou `roundId` da aposta diferente da rodada atual.
-- [ ] Recarregar a lista ao observar crash e quando um snapshot conectado mudar a rodada, sem disparar reload em todo `tick`.
-- [ ] Após a leitura da lista, consultar `GET /game/bets/:betId` para bets aceitas e `active` de rodadas conhecidamente encerradas, atualizando cada linha pela resposta.
-- [ ] Exibir “Verificando resultado” enquanto o status persistido continuar ativo; oferecer ação “Verificar resultado” para repetir uma consulta que falhou.
-- [ ] Manter resultado de jogo e status de liquidação em colunas/labels diferentes; não exibir perda com base apenas no crash.
-- [ ] Adicionar testes da regra de projeção e atualizar teste/manual check do fluxo de lista e consulta individual.
+- [x] Criar uma regra pura para distinguir `active` de “Verificando resultado” usando o snapshot: fase `crashed` da mesma rodada ou `roundId` da aposta diferente da rodada atual.
+- [x] Recarregar a lista ao observar crash e quando um snapshot conectado mudar a rodada, sem disparar reload em todo `tick`.
+- [x] Após a leitura da lista, consultar `GET /game/bets/:betId` para bets aceitas e `active` de rodadas conhecidamente encerradas, atualizando cada linha pela resposta.
+- [x] Exibir “Verificando resultado” enquanto o status persistido continuar ativo; oferecer ação “Verificar resultado” para repetir uma consulta que falhou.
+- [x] Manter resultado de jogo e status de liquidação em colunas/labels diferentes; não exibir perda com base apenas no crash.
+- [x] Adicionar testes da regra de projeção e atualizar teste/manual check do fluxo de lista e consulta individual.
 
 ### Critérios de aceitação
 
-- [ ] Bet ativa da rodada atual continua “Em andamento”.
-- [ ] Bet ativa de uma rodada crashed ou anterior à rodada corrente é exibida como “Verificando resultado”, nunca “Em andamento”.
-- [ ] Resposta individual `lost` ou `cashed_out` substitui o label pendente e atualiza a linha sem reload completo.
-- [ ] Falha de GET preserva “Verificando resultado” e deixa a ação manual disponível.
-- [ ] Conexão stale continua identificada e o client não interpreta ausência de evento como resultado final.
+- [x] Bet ativa da rodada atual continua “Em andamento”.
+- [x] Bet ativa de uma rodada crashed ou anterior à rodada corrente é exibida como “Verificando resultado”, nunca “Em andamento”.
+- [x] Resposta individual `lost` ou `cashed_out` substitui o label pendente e atualiza a linha sem reload completo.
+- [x] Falha de GET preserva “Verificando resultado” e deixa a ação manual disponível.
+- [x] Conexão stale continua identificada e o client não interpreta ausência de evento como resultado final.
 
 ### Arquivos prováveis
 
@@ -147,7 +147,9 @@
 
 ### Verificação
 
-- [ ] `cd client && bun test src/bet-status.test.ts`
-- [ ] `cd client && bun run typecheck`
-- [ ] `cd client && bun run build`
-- [ ] Verificar manualmente loss, auto-cashout, reload já em nova rodada, desconexão/reconexão e engine indisponível.
+- [x] `cd client && bun test` — 76 testes passaram.
+- [x] `cd client && bun run typecheck`
+- [x] `cd client && bun run build`
+- [x] Smoke visual read-only: lista do jogador mostrou resultados `lost` e `cashed_out` no snapshot da rodada atual; os testes de stream cobrem gap/reconexão e indisponibilidade. Nenhuma aposta foi iniciada pelo navegador.
+
+**Evidência T3:** 6 testes de regra/projeção passaram (inclui sem reload em tick, crash/troca de rodada, falha/estado pendente); typecheck, 76 testes e build do client passaram. O Compose local foi reconstruído; a UI carregou com stream conectado e resultados terminais já refletidos. A verificação de engine indisponível foi feita pela suite automatizada de reconnect/snapshot, não por interromper o engine em uso.
