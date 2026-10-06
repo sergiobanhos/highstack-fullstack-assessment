@@ -1,8 +1,8 @@
-# SDD Handoff Brief: Implementação por dependência — F02 → F06
+# SDD Handoff Brief: Implementação por dependência — F02 → F08
 
-> Status: F02/F03 concluídas; F04 com smoke test real pendente; F05 revisada — aprovada com follow-up baixo; F06 implementada e verificada com a stack local
-> Readiness: F06 T1–T6 concluídas (`implementation:done`); próxima etapa é a revisão (`/sdd-review`) antes de novo trabalho.
-> Updated: 2026-10-05
+> Status: F02/F03 concluídas; F04 com smoke test real pendente; F05 revisada; F06/F07 implementadas; F08 — refatoração arquitetural aprovada para implementação
+> Readiness: F08 requirements, design e tasks aprovados; próxima etapa é implementação em `.ai/sdd/specs/008-operator-architecture/`.
+> Updated: 2026-10-06
 
 ## Metadata
 
@@ -204,3 +204,17 @@ Após F05, validar localmente cadastro/login, reload autenticado, top-up/histór
 - **T2 evidence:** typecheck passed; 13 stream/composition tests passed, including non-blocking crash/snapshot callbacks and safe handling of callback failures.
 - **T3 evidence:** client typecheck, 76 tests and build passed; read-only local UI smoke showed persisted loss/cashout outcomes. No bet was submitted from the browser.
 - **Readiness:** F07 implementation is complete; requirements, design and tasks are approved, and T1–T3 verification is recorded.
+
+## Current implementation handoff: F08 — refatoração arquitetural do Operator
+
+- **Spec ID:** `008-operator-architecture`
+- **Spec Path:** `.ai/sdd/specs/008-operator-architecture/`
+- **Current `.status`:** `tasks:approved`
+- **Requirements:** `.ai/sdd/specs/008-operator-architecture/requirements.md` (approved)
+- **Design:** `.ai/sdd/specs/008-operator-architecture/design.md` (approved)
+- **Tasks:** `.ai/sdd/specs/008-operator-architecture/tasks.md` (approved; T1–T8)
+- **Scope:** organize use cases/facades for auth, financial, and game; centralize the concrete Crashsim integration; hide realtime fan-out behind snapshot-first SSE subscription; preserve REST/SSE/webhook/engine contracts and critical money/stream guarantees.
+- **Task order:** T1 Crashsim integration; T2 auth use cases; T3 financial use cases; T4 financial controllers; T5 realtime/SSE boundary; T6 game session/bet/cashout; T7 game reads/reconciliation; T8 composition, documentation, and final verification.
+- **Verification:** targeted module checks per task; final `cd operator && bun run typecheck`, `cd operator && bun test`, and `cd operator && bun run test:e2e` when local test services are available.
+- **Constraints:** no engine/client contract changes, schema/migration changes, generic provider abstractions, repositories, DI framework, or distributed event infrastructure.
+- **Readiness:** ready for implementation; no open requirements questions.
