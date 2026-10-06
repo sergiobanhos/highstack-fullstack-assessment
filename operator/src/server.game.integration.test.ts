@@ -276,6 +276,38 @@ if (!testDatabaseUrl) {
         });
         expect(credit.statusCode).toBe(200);
 
+        // The credit webhook settles the bet by itself: the row must stop
+        // looking active without any engine read or player request.
+        const settledRows = await connection.db
+          .select({
+            engineStatus: gameBets.engineStatus,
+            settlementStatus: gameBets.settlementStatus,
+            payoutCents: gameBets.payoutCents,
+          })
+          .from(gameBets)
+          .where(eq(gameBets.betId, betId));
+        expect(settledRows).toHaveLength(1);
+        expect(settledRows[0]?.engineStatus).toBe('cashed_out');
+        expect(settledRows[0]?.settlementStatus).toBe('confirmed');
+        expect(Number(settledRows[0]?.payoutCents)).toBe(2_500);
+
+        // A retried webhook (same txId) must stay a no-op for both the wallet
+        // and the bet.
+        const creditReplay = await operator.app.inject({
+          method: 'POST', url: '/wallet/credit', headers: signWebhook(creditBody), payload: creditBody,
+        });
+        expect(creditReplay.statusCode).toBe(200);
+        const afterReplay = await connection.db
+          .select({
+            engineStatus: gameBets.engineStatus,
+            settlementStatus: gameBets.settlementStatus,
+            payoutCents: gameBets.payoutCents,
+          })
+          .from(gameBets)
+          .where(eq(gameBets.betId, betId));
+        expect(afterReplay[0]).toMatchObject({ engineStatus: 'cashed_out', settlementStatus: 'confirmed' });
+        expect(Number(afterReplay[0]?.payoutCents)).toBe(2_500);
+
         const refreshedBet = await operator.app.inject({
           method: 'GET', url: `/game/bets/${betId}`, headers: authorization,
         });

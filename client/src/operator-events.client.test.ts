@@ -380,8 +380,32 @@ describe('revealed round retention', () => {
 
     expect(state.snapshot?.roundId).toBe('r2');
     expect(state.snapshot?.serverSeed).toBeNull();
-    expect(state.lastRevealed?.roundId).toBe('r1');
-    expect(state.lastRevealed?.serverSeed).toBe('seed-1');
+    expect(state.lastRevealed).toEqual({
+      roundId: 'r1',
+      serverSeed: 'seed-1',
+      serverSeedHash: 'h1',
+      crashPoint: 2.34,
+    });
+  });
+
+  test('a snapshot with a seed but no crashed state is not treated as revealed', () => {
+    const state = streamReducer(initialStreamState, {
+      type: 'snapshot',
+      upstream: 'connected',
+      snapshot: {
+        roundId: 'r1',
+        state: 'running',
+        seq: 12,
+        multiplier: 1.4,
+        crashPoint: null,
+        serverSeed: 'leaked-seed',
+        serverSeedHash: 'h1',
+        bettingEndsAt: null,
+        startedAt: 100,
+      },
+    });
+
+    expect(state.lastRevealed).toBeNull();
   });
 
   test('a crashed snapshot also records the proof material', () => {

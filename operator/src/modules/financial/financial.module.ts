@@ -14,6 +14,14 @@ export type {
 /** Public financial contract for game and authenticated API modules. */
 export type FinancialModule = FinancialService;
 
+/** Called after an engine cashout credit was applied to the wallet. */
+export type CashoutCreditListener = (credit: {
+  betId: string;
+  playerId: string;
+  payoutCents: number;
+  roundId: string;
+}) => Promise<unknown>;
+
 /** Composes the financial service without exposing schema or persistence details. */
 export interface FinancialModuleOptions {
   app: FastifyInstance;
@@ -21,6 +29,12 @@ export interface FinancialModuleOptions {
   config: OperatorConfig;
   logger: Logger;
   auth: Pick<AuthModule, 'requireUser'>;
+  /**
+   * The game module records the cashout on the bet itself. Failures surface as
+   * a 503 so the engine retries the idempotent webhook instead of leaving the
+   * wallet credited while the bet still looks active.
+   */
+  onCashoutCredited?: CashoutCreditListener;
   /** Optional override for focused module tests. */
   payoutMockEnabled?: boolean;
 }
@@ -32,6 +46,7 @@ export function createFinancialModule({
   config,
   logger,
   auth,
+  onCashoutCredited,
   payoutMockEnabled = config.payoutMockEnabled,
 }: FinancialModuleOptions): FinancialModule {
   const service = createFinancialService({ db });
@@ -41,6 +56,7 @@ export function createFinancialModule({
     webhookSecret: config.engine.webhookSecret,
     walletTestTopupEnabled: config.walletTestTopupEnabled,
     payoutMockEnabled,
+    onCashoutCredited,
     requireUser: auth.requireUser,
     logger,
   });

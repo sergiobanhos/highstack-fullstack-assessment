@@ -76,7 +76,7 @@ describe('createGameModule', () => {
         return socket;
       },
     });
-    expect(Object.keys(game).sort()).toEqual(['start', 'stop']);
+    expect(Object.keys(game).sort()).toEqual(['recordCashoutCredit', 'start', 'stop']);
     await app.ready();
     expect(app.hasRoute({ method: 'GET', url: GAME_EVENTS_ROUTE })).toBe(true);
     expect(app.hasRoute({ method: 'POST', url: '/game/session' })).toBe(true);

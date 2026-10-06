@@ -5,7 +5,7 @@ import type { AuthModule } from '../auth/auth.module';
 import type { FinancialModule } from '../financial/financial.module';
 import { registerGameCommandsController } from './game-commands.controller';
 import type { BackoffOptions, Scheduler, UpstreamSocketFactory } from './crashsim-stream.client';
-import { createGameCommandService, type GameCommandService } from './game-command.service';
+import { createGameCommandService, type GameCommandService, type RecordCashoutCreditInput } from './game-command.service';
 import { GameEventHub } from './game-event-hub';
 import { registerGameEventsRoute } from './game-events.controller';
 import { CrashsimHttpClient } from './crashsim-http.client';
@@ -27,9 +27,16 @@ export interface GameModuleDeps {
   fetchImpl?: typeof fetch;
 }
 
+export type { RecordCashoutCreditInput };
+
 export interface GameModule {
   start(): void;
   stop(): Promise<void>;
+  /**
+   * Records an engine cashout credit the financial module already applied, so
+   * the bet reflects the cashout without waiting for an engine reconciliation.
+   */
+  recordCashoutCredit(input: RecordCashoutCreditInput): Promise<'applied' | 'ignored'>;
 }
 
 /** Wires the Crashsim stream, authenticated commands, and downstream SSE route. */
@@ -67,5 +74,6 @@ export function createGameModule({ app, db, auth, financial, ...deps }: GameModu
   return {
     start: () => stream.start(),
     stop: () => stream.stop(),
+    recordCashoutCredit: (input) => commandService.recordCashoutCredit(input),
   };
 }

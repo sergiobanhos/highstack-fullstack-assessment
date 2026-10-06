@@ -59,12 +59,16 @@ export function buildOperatorApp(
     sessionTtlSeconds: config.authSessionTtlSeconds,
     logger,
   });
+  // The game module is created after the financial one, so the engine's cashout
+  // credit reaches the bet through this late-bound contract (no module cycle).
+  let gameRef: GameModule | null = null;
   const financial = createFinancialModule({
     app,
     db: database.db,
     config,
     logger,
     auth,
+    onCashoutCredited: (credit) => gameRef?.recordCashoutCredit(credit) ?? Promise.resolve(),
   });
   const game = createGameModule({
     app,
@@ -75,6 +79,7 @@ export function buildOperatorApp(
     logger,
     ...gameOverrides,
   });
+  gameRef = game;
 
   app.get("/health", async () => ({ status: "ok" }));
   app.get("/ready", async (_request, reply) => {

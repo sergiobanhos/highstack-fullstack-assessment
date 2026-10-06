@@ -276,6 +276,12 @@ Duas checagens independentes: **compromisso** (`sha256(seed) == serverSeedHash` 
 
 O reducer retém a última rodada revelada (`lastRevealed`) com o compromisso capturado antes do crash, porque o `round.betting` seguinte substitui o snapshot. A prova é somente leitura: não envia nada ao operador, não decide aposta/cashout/crédito e não introduz estado financeiro novo.
 
+### 6.3 Auto-cashout visível sem dirigir reconciliação
+
+O engine pode dar cashout sozinho enquanto a rodada continua. Quem registra isso é o **operador**, no mesmo evento que credita a carteira (`POST /wallet/credit`): o handler financeiro chama o contrato exportado do módulo `game` (`recordCashoutCredit`), que marca a bet como `cashed_out`/`confirmed` de forma idempotente e só depois responde ao engine — se o registro falhar, o webhook responde 503 e o engine reenvia o mesmo evento idempotente.
+
+Com isso, o client não precisa de nenhuma leitura no engine para ver o auto-cashout: enquanto existe bet aceita e ativa na rodada corrente, ele relê a lista (`GET /game/bets?limit=10`) a cada 3s, limitado a 40 leituras por rodada, e atualiza o saldo quando a bet sai do estado ativo. O browser nunca dispara `GET /game/bets/:betId` em background; essa reconciliação continua sendo do operador (no crash e na consulta explícita).
+
 ## 7. Regras para valores e comandos
 
 - O input USD aceita no máximo duas casas decimais; converter por parsing decimal para centavos inteiros, sem `parseFloat * 100` como autoridade.

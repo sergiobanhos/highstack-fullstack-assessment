@@ -107,6 +107,18 @@ export interface ReconcileClosedBetsInput {
   currentRoundState: 'betting' | 'running' | 'crashed';
 }
 
+/**
+ * A cashout credit the operator already applied for the engine (webhook). The
+ * money came from the engine, so the bet row can be settled from the event
+ * instead of waiting for a later engine read.
+ */
+export interface RecordCashoutCreditInput {
+  betId: string;
+  playerId: string;
+  payoutCents: number;
+  roundId: string;
+}
+
 export interface GameCommandService {
   createSession(playerId: string): Promise<{ status: 'ready' }>;
   placeBet(input: PlaceBetCommandInput): Promise<BetCommandResult>;
@@ -116,6 +128,7 @@ export interface GameCommandService {
   getBet(input: GetGameBetInput): Promise<BetCommandResult | null>;
   reconcileBetsForRound(roundId: string): Promise<void>;
   reconcileClosedBets(input: ReconcileClosedBetsInput): Promise<void>;
+  recordCashoutCredit(input: RecordCashoutCreditInput): Promise<'applied' | 'ignored'>;
 }
 
 export interface GameCommandServiceDeps {
@@ -767,6 +780,55 @@ export function createGameCommandService({ db, financial, engine, stream, logger
     });
   }
 
+  /**
+   * Settles a bet from the credit the engine already delivered: the wallet was
+   * credited in the same webhook call, so the bet row can move to
+   * `cashed_out`/`confirmed` without asking the engine again. This is what
+   * makes an engine auto-cashout visible without a reconcile, and it is
+   * idempotent: an already confirmed settlement is left untouched.
+   */
+  async function recordCashoutCredit(
+    input: RecordCashoutCreditInput,
+  ): Promise<'applied' | 'ignored'> {
+    let updated: { betId: string }[];
+    try {
+      updated = await db
+        .update(gameBets)
+        .set({
+          engineStatus: 'cashed_out',
+          payoutCents: BigInt(input.payoutCents),
+          settlementStatus: 'confirmed',
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(gameBets.betId, input.betId),
+          eq(gameBets.playerId, input.playerId),
+          inArray(gameBets.engineStatus, ['active', 'cashed_out']),
+          ne(gameBets.settlementStatus, 'confirmed'),
+        ))
+        .returning({ betId: gameBets.betId });
+    } catch {
+      throw new GameCommandError('SERVICE_UNAVAILABLE');
+    }
+
+    if (updated.length === 0) {
+      logger.info('game.bet.credit_recorded', {
+        betId: input.betId,
+        roundId: input.roundId,
+        outcome: 'already_settled',
+      });
+      return 'ignored';
+    }
+
+    logger.info('game.bet.credit_recorded', {
+      betId: input.betId,
+      roundId: input.roundId,
+      outcome: 'applied',
+      payoutCents: input.payoutCents,
+    });
+    return 'applied';
+  }
+
   async function persistUnknown(
     command: StoredCommand,
     betId: string | null,
@@ -1350,5 +1412,6 @@ export function createGameCommandService({ db, financial, engine, stream, logger
     getBet,
     reconcileBetsForRound,
     reconcileClosedBets,
+    recordCashoutCredit,
   };
 }

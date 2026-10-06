@@ -52,6 +52,16 @@ const BETS_LIMIT = 10;
 const RECONCILE_DELAYS_MS = [1000, 2000, 4000] as const;
 const SETTLEMENT_POLL_MS = 5000;
 const MAX_SETTLEMENT_POLLS = 12;
+/** Grace period before a reconnect blip becomes a full warning in the UI. */
+const STALE_ALERT_DELAY_MS = 2000;
+/** Rebuild a failing subscription instead of relying on the browser retry. */
+const STREAM_RECONNECT_DELAY_MS = 1500;
+/** A running round publishes ticks continuously; silence means a dead stream. */
+const STREAM_SILENCE_MS = 5000;
+const STREAM_SILENCE_CHECK_MS = 2000;
+/** Engine auto-cashouts are only visible to the operator through an engine read. */
+const ACTIVE_BET_POLL_MS = 3000;
+const MAX_ACTIVE_BET_POLLS = 40;
 
 interface PendingGameCommand {
   type: 'bet' | 'cashout';
@@ -78,9 +88,9 @@ export interface GameScreenProps {
 }
 
 const PHASE_LABELS: Record<string, string> = {
-  betting: 'Apostas abertas',
-  running: 'Rodada em andamento',
-  crashed: 'Crashou',
+  betting: 'Betting open',
+  running: 'Round running',
+  crashed: 'Crashed',
 };
 
 const PHASE_COLORS: Record<string, string> = {
@@ -90,22 +100,22 @@ const PHASE_COLORS: Record<string, string> = {
 };
 
 const UPSTREAM_LABELS: Record<UpstreamConnection, string> = {
-  connected: 'engine conectado',
-  reconnecting: 'engine reconectando',
-  synchronizing: 'engine sincronizando',
+  connected: 'engine connected',
+  reconnecting: 'engine reconnecting',
+  synchronizing: 'engine syncing',
 };
 
 const DOWNSTREAM_LABELS: Record<DownstreamConnection, string> = {
-  connecting: 'stream conectando',
-  open: 'stream aberto',
-  error: 'stream com erro',
+  connecting: 'stream connecting',
+  open: 'stream open',
+  error: 'stream error',
 };
 
 const COMMAND_STATUS_LABELS: Record<BetCommandStatus, string> = {
-  pending: 'Pendente',
-  accepted: 'Aceita',
-  rejected: 'Recusada',
-  unknown: 'Em confirmação',
+  pending: 'Pending',
+  accepted: 'Accepted',
+  rejected: 'Rejected',
+  unknown: 'Confirming',
 };
 
 const COMMAND_STATUS_COLORS: Record<BetCommandStatus, string> = {
@@ -117,32 +127,32 @@ const COMMAND_STATUS_COLORS: Record<BetCommandStatus, string> = {
 
 const SETTLEMENT_LABELS: Record<SettlementStatus, string> = {
   not_applicable: '—',
-  pending: 'Crédito pendente',
-  confirmed: 'Creditado',
-  precision_incident: 'Divergência registrada',
+  pending: 'Credit pending',
+  confirmed: 'Credited',
+  precision_incident: 'Precision incident logged',
 };
 
 const RESULT_CODE_MESSAGES: Record<string, string> = {
-  insufficient_funds: 'Saldo insuficiente no engine para essa aposta.',
-  engine_unavailable: 'O engine ficou indisponível; nenhuma aposta nova foi confirmada.',
-  debit_applied_engine_rejected: 'O engine recusou a aposta e o valor será devolvido à carteira.',
-  betting_closed: 'A rodada já não aceitava mais apostas.',
-  bet_not_found: 'A aposta não foi encontrada no engine.',
-  bet_not_active: 'A aposta não está mais ativa no engine.',
-  round_not_running: 'A rodada já não estava em andamento.',
-  session_not_found: 'A sessão com o engine expirou.',
-  accepted_bet_missing: 'O engine confirmou o débito mas a aposta não apareceu; o valor será devolvido.',
-  unsafe_stored_amount: 'O valor registrado não pôde ser usado com segurança; nada foi debitado.',
+  insufficient_funds: 'The engine reported insufficient funds for this bet.',
+  engine_unavailable: 'The engine became unavailable; no new bet was confirmed.',
+  debit_applied_engine_rejected: 'The engine rejected the bet and the amount will be returned to the wallet.',
+  betting_closed: 'The round was no longer accepting bets.',
+  bet_not_found: 'The bet was not found in the engine.',
+  bet_not_active: 'The bet is no longer active in the engine.',
+  round_not_running: 'The round was no longer running.',
+  session_not_found: 'The engine session expired.',
+  accepted_bet_missing: 'The engine confirmed the debit but the bet is missing; the amount will be returned.',
+  unsafe_stored_amount: 'The stored amount could not be used safely; nothing was debited.',
 };
 
 function describeBetResult(resultCode: string | null): string {
-  if (resultCode === null) return 'O operador recusou a operação.';
-  return RESULT_CODE_MESSAGES[resultCode] ?? `O operador recusou a operação (${resultCode}).`;
+  if (resultCode === null) return 'The operator refused the operation.';
+  return RESULT_CODE_MESSAGES[resultCode] ?? `The operator refused the operation (${resultCode}).`;
 }
 
 function ProofBadge({ check, label }: { check: ProofCheck; label: string }): React.JSX.Element {
   const color = check === 'match' ? 'teal' : check === 'mismatch' ? 'red' : 'gray';
-  const text = check === 'match' ? 'confere' : check === 'mismatch' ? 'divergência' : 'indisponível';
+  const text = check === 'match' ? 'matches' : check === 'mismatch' ? 'mismatch' : 'unavailable';
   return (
     <Badge color={color} variant="light">
       {label}: {text}
@@ -154,32 +164,32 @@ export function describeGameError(error: unknown): string {
   if (error instanceof OperatorApiError) {
     switch (error.code) {
       case 'INSUFFICIENT_FUNDS':
-        return 'Saldo insuficiente para essa aposta. Adicione saldo na carteira.';
+        return 'Insufficient balance for this bet. Add balance in your wallet.';
       case 'ROUND_NOT_ACCEPTING_BETS':
-        return 'A rodada não aceita mais apostas.';
+        return 'The round is no longer accepting bets.';
       case 'BET_ALREADY_EXISTS':
-        return 'Você já tem uma aposta nesta rodada.';
+        return 'You already have a bet in this round.';
       case 'BET_OUTCOME_UNKNOWN':
-        return 'Sua aposta anterior nesta rodada ainda está sendo confirmada.';
+        return 'Your previous bet in this round is still being confirmed.';
       case 'GAME_NOT_SYNCHRONIZED':
-        return 'A conexão do operador com o engine ainda não está sincronizada.';
+        return 'The operator is not yet synchronized with the engine.';
       case 'ROUND_NOT_RUNNING':
-        return 'A rodada não está mais em andamento.';
+        return 'The round is no longer running.';
       case 'BET_NOT_ACTIVE':
-        return 'A aposta não está mais ativa para cashout.';
+        return 'The bet is no longer active for cashout.';
       case 'BET_NOT_FOUND':
-        return 'A aposta não foi encontrada.';
+        return 'The bet was not found.';
       case 'IDEMPOTENCY_KEY_REUSED':
-        return 'Esta solicitação conflita com uma operação anterior. Consulte suas apostas.';
+        return 'This request conflicts with an earlier operation. Check your bets.';
       case 'SERVICE_UNAVAILABLE':
-        return 'O operador está indisponível no momento.';
+        return 'The operator is currently unavailable.';
       case 'RATE_LIMITED':
-        return 'Muitas tentativas em pouco tempo. Aguarde e tente novamente.';
+        return 'Too many attempts in a short time. Wait and try again.';
       default:
         return error.message;
     }
   }
-  return 'Não foi possível falar com o operador. Verifique a conexão.';
+  return 'Could not reach the operator. Check your connection.';
 }
 
 export function GameScreen({
@@ -199,10 +209,26 @@ export function GameScreen({
   const [pending, setPending] = useState<PendingGameCommand | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [settlementPolls, setSettlementPolls] = useState(0);
+  const [staleAlertVisible, setStaleAlertVisible] = useState(false);
+  const [streamAttempt, setStreamAttempt] = useState(0);
+  const lastFrameAtRef = useRef<number>(Date.now());
+  const lastBetsRef = useRef<BetCommandResult[] | null>(null);
   const [checkingBetIds, setCheckingBetIds] = useState<Set<string>>(() => new Set());
   const [failedBetVerifications, setFailedBetVerifications] = useState<Set<string>>(() => new Set());
 
   const stale = isSnapshotStale(stream);
+
+  // A brief reconnect blip must not throw a full-width warning at the player:
+  // the frozen badge and the disabled controls already carry that state, and
+  // the alert only appears once the loss of synchronization is not momentary.
+  useEffect(() => {
+    if (!stale) {
+      setStaleAlertVisible(false);
+      return;
+    }
+    const timer = setTimeout(() => setStaleAlertVisible(true), STALE_ALERT_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [stale]);
   const snapshot = stream.snapshot;
   const phase = snapshot?.state ?? null;
   const roundId = snapshot?.roundId ?? null;
@@ -248,8 +274,20 @@ export function GameScreen({
   const loadBets = useCallback(async (): Promise<void> => {
     try {
       const list = await api.listBets(token, BETS_LIMIT);
+      const previous = lastBetsRef.current;
+      lastBetsRef.current = list;
       setBets(list);
       setBetsError(null);
+
+      // A bet that stopped being active is exactly the moment the operator
+      // credited it (engine auto-cashout included), so the balance must be
+      // re-read instead of being left stale in the header.
+      const settledNow = list.some((item) => {
+        const before = previous?.find((bet) => bet.commandId === item.commandId);
+        return before?.bet?.engineStatus === 'active' && item.bet?.engineStatus !== 'active';
+      });
+      if (settledNow) onWalletChanged();
+
       const context = betRoundContextRef.current;
       const closedActiveBets = list.filter(
         (item) => item.betId !== null && isBetOutcomePending(item, context),
@@ -262,7 +300,7 @@ export function GameScreen({
       }
       setBetsError(describeGameError(error));
     }
-  }, [api, token, onUnauthorized, refreshBet]);
+  }, [api, token, onUnauthorized, refreshBet, onWalletChanged]);
 
   const afterMutation = useCallback(async (): Promise<void> => {
     setSettlementPolls(0);
@@ -273,19 +311,47 @@ export function GameScreen({
   // The operator stream is the only source of round state; it is opened while
   // the game view is mounted and closed on leave.
   useEffect(() => {
+    lastFrameAtRef.current = Date.now();
     const source = new EventSource(STREAM_URL);
     source.onopen = () => dispatch({ type: 'downstream-open' });
     source.onerror = () => dispatch({ type: 'downstream-error' });
     const receive = (message: Event): void => {
       const action = parseOperatorFrame((message as MessageEvent<string>).data);
-      if (action) dispatch(action);
+      if (action) {
+        lastFrameAtRef.current = Date.now();
+        dispatch(action);
+      }
     };
     for (const eventName of STREAM_EVENTS) source.addEventListener(eventName, receive);
     return () => {
       for (const eventName of STREAM_EVENTS) source.removeEventListener(eventName, receive);
       source.close();
     };
-  }, []);
+  }, [streamAttempt]);
+
+  // The browser retries an EventSource on its own, but an operator restart or a
+  // half-open proxy connection can leave the player frozen indefinitely. While
+  // the subscription is failing, rebuild it instead of waiting.
+  useEffect(() => {
+    if (stream.downstream !== 'error') return;
+    const timer = setTimeout(
+      () => setStreamAttempt((count) => count + 1),
+      STREAM_RECONNECT_DELAY_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [stream.downstream, streamAttempt]);
+
+  // Silence watchdog: ticks are continuous while the round runs, so a long gap
+  // means the stream is dead even if the browser never reported an error.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (phase !== 'running' || stale) return;
+      if (Date.now() - lastFrameAtRef.current > STREAM_SILENCE_MS) {
+        setStreamAttempt((count) => count + 1);
+      }
+    }, STREAM_SILENCE_CHECK_MS);
+    return () => clearInterval(timer);
+  }, [phase, stale]);
 
   useEffect(() => {
     let cancelled = false;
@@ -344,7 +410,7 @@ export function GameScreen({
           setPending((current) =>
             current === null
               ? null
-              : { ...current, attempts: current.attempts + 1, note: 'Ainda não há confirmação do operador para esta operação.' },
+              : { ...current, attempts: current.attempts + 1, note: 'The operator has not confirmed this operation yet.' },
           );
           return;
         }
@@ -354,8 +420,8 @@ export function GameScreen({
           setFeedback({
             color: 'green',
             text: command.type === 'bet'
-              ? 'Aposta confirmada pelo operador.'
-              : 'Cashout confirmado pelo operador.',
+              ? 'Bet confirmed by the operator.'
+              : 'Cashout confirmed by the operator.',
           });
           await afterMutation();
           return;
@@ -369,7 +435,7 @@ export function GameScreen({
         setPending((current) =>
           current === null
             ? null
-            : { ...current, attempts: current.attempts + 1, note: 'O operador ainda está resolvendo esta operação.' },
+            : { ...current, attempts: current.attempts + 1, note: 'The operator is still resolving this operation.' },
         );
       } catch (error) {
         if (isUnauthenticated(error)) {
@@ -379,7 +445,7 @@ export function GameScreen({
         setPending((current) =>
           current === null
             ? null
-            : { ...current, attempts: current.attempts + 1, note: 'Não foi possível consultar o operador agora.' },
+            : { ...current, attempts: current.attempts + 1, note: 'Could not reach the operator right now.' },
         );
       }
     },
@@ -467,6 +533,34 @@ export function GameScreen({
     roundBets.find((item) => item.bet?.engineStatus === 'active' && item.betCommandStatus === 'accepted') ??
     null;
 
+  // The engine can cash a bet out on its own (auto-cashout) while the round
+  // keeps running. The operator records that from the credit webhook, so the
+  // list read below is enough — no engine reconcile is triggered from here.
+  const polledActiveBetId = activeBet?.betId ?? null;
+  const activeBetPollRef = useRef<{ roundId: string | null; count: number }>({
+    roundId: null,
+    count: 0,
+  });
+
+  useEffect(() => {
+    if (stale || phase !== 'running' || roundId === null || polledActiveBetId === null) return;
+    if (activeBetPollRef.current.roundId !== roundId) {
+      activeBetPollRef.current = { roundId, count: 0 };
+    }
+    if (activeBetPollRef.current.count >= MAX_ACTIVE_BET_POLLS) return;
+
+    const timer = setTimeout(() => {
+      activeBetPollRef.current = {
+        roundId,
+        count: activeBetPollRef.current.count + 1,
+      };
+      // `loadBets` re-reads the balance when a bet stops being active, which is
+      // how an engine auto-cashout reaches the header without a manual refresh.
+      void loadBets();
+    }, ACTIVE_BET_POLL_MS);
+    return () => clearTimeout(timer);
+  }, [stale, phase, roundId, polledActiveBetId, bets, loadBets]);
+
   const parsedAmount = amountText.trim().length === 0
     ? null
     : parseUsdToCents(amountText, { maxCents: MAX_BET_CENTS });
@@ -502,6 +596,23 @@ export function GameScreen({
       ? 'Cashout'
       : `Cashout (USD ${formatCentsInput(predictedPayoutCents)})`;
 
+  // The engine cashes the bet out the instant the multiplier reaches the
+  // target, and the operator records it from the credit webhook. Crossing the
+  // target is therefore the moment to re-read the list instead of waiting for
+  // the next cadence tick — the row still only changes when the operator says so.
+  const crossedAutoCashout =
+    activeBet !== null &&
+    activeBet.autoCashoutHundredths !== null &&
+    liveMultiplierHundredths !== null &&
+    liveMultiplierHundredths >= activeBet.autoCashoutHundredths;
+  const crossedBetId = crossedAutoCashout ? (activeBet?.betId ?? null) : null;
+  const crossedReadRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (crossedBetId === null || crossedReadRef.current === crossedBetId) return;
+    crossedReadRef.current = crossedBetId;
+    void loadBets();
+  }, [crossedBetId, loadBets]);
+
   const submitBet = async (): Promise<void> => {
     if (roundId === null || parsedAmount === null || !parsedAmount.ok) return;
     if (parsedAutoCashout !== null && !parsedAutoCashout.ok) return;
@@ -529,13 +640,13 @@ export function GameScreen({
       if (outcome.kind === 'accepted') {
         setAmountText('');
         setAutoCashoutText('');
-        setFeedback({ color: 'green', text: `Aposta de ${formatCents(command.amountCents)} aceita.` });
+        setFeedback({ color: 'green', text: `Bet of ${formatCents(command.amountCents)} accepted.` });
         await afterMutation();
       } else if (outcome.kind === 'unknown') {
         setPending({
           ...command,
           commandId: outcome.command?.commandId ?? null,
-          note: 'O operador ainda está confirmando esta aposta. Não envie uma nova aposta nesta rodada.',
+          note: 'The operator is still confirming this bet. Do not place another bet in this round.',
         });
         await afterMutation();
       } else {
@@ -555,7 +666,7 @@ export function GameScreen({
       setPending({
         ...command,
         commandId: null,
-        note: 'A resposta não chegou. Não enviamos uma nova aposta: confirme antes de tentar de novo.',
+        note: 'The response never arrived. No new bet was sent: confirm before trying again.',
       });
       await afterMutation();
     } finally {
@@ -586,13 +697,13 @@ export function GameScreen({
         idempotencyKey: command.idempotencyKey,
       });
       if (outcome.kind === 'accepted') {
-        setFeedback({ color: 'green', text: 'Cashout aceito. O crédito é confirmado pelo operador.' });
+        setFeedback({ color: 'green', text: 'Cashout accepted. The credit is confirmed by the operator.' });
         await afterMutation();
       } else if (outcome.kind === 'unknown') {
         setPending({
           ...command,
           commandId: outcome.command?.commandId ?? null,
-          note: 'O operador ainda está confirmando este cashout.',
+          note: 'The operator is still confirming this cashout.',
         });
         await afterMutation();
       } else {
@@ -610,26 +721,11 @@ export function GameScreen({
       setPending({
         ...command,
         commandId: null,
-        note: 'A resposta não chegou. Não enviamos um novo cashout: confirme antes de tentar de novo.',
+        note: 'The response never arrived. No new cashout was sent: confirm before trying again.',
       });
       await afterMutation();
     } finally {
       setBusy(false);
-    }
-  };
-
-  const refreshBet = async (betId: string): Promise<void> => {
-    try {
-      const fresh = await api.getBet(token, betId);
-      if (fresh === null) return;
-      setBets((current) =>
-        current === null
-          ? current
-          : current.map((bet) => (bet.commandId === fresh.commandId ? fresh : bet)),
-      );
-      if (fresh.bet?.settlementStatus === 'confirmed') onWalletChanged();
-    } catch (error) {
-      if (isUnauthenticated(error)) onUnauthorized();
     }
   };
 
@@ -645,15 +741,15 @@ export function GameScreen({
           <div>
             <Group gap="xs">
               <Badge size="lg" color={phase === null ? 'gray' : (PHASE_COLORS[phase] ?? 'gray')}>
-                {phase === null ? 'Aguardando estado' : (PHASE_LABELS[phase] ?? phase)}
+                {phase === null ? 'Waiting for state' : (PHASE_LABELS[phase] ?? phase)}
               </Badge>
-              {stale && <Badge color="yellow">Reconectando — estado congelado</Badge>}
+              {stale && <Badge color="yellow">Reconnecting — frozen state</Badge>}
             </Group>
             <Title order={1} mt="xs" aria-live="polite">
               {multiplierText}
             </Title>
             <Text size="sm" c="dimmed">
-              Rodada {roundId ?? '—'} · seq {snapshot?.seq ?? '—'}
+              Round {roundId ?? '—'} · seq {snapshot?.seq ?? '—'}
             </Text>
           </div>
           <Stack gap={4} miw={220}>
@@ -671,19 +767,19 @@ export function GameScreen({
         </Group>
       </Paper>
 
-      {stale && (
-        <Alert color="yellow" title="Estado não sincronizado">
-          A última atualização recebida está congelada e apostas/cashouts ficam bloqueados até o
-          operador voltar a sincronizar o estado da rodada.
+      {stale && staleAlertVisible && (
+        <Alert color="yellow" title="State not synchronized">
+          The last update received is frozen and bets/cashouts stay blocked until the
+          operator synchronizes the round state again.
         </Alert>
       )}
 
       {session === 'unavailable' && (
-        <Alert color="yellow" title="Sessão de jogo indisponível">
+        <Alert color="yellow" title="Game session unavailable">
           <Group justify="space-between">
-            <Text size="sm">Não foi possível preparar sua sessão com o engine agora.</Text>
+            <Text size="sm">Could not prepare your engine session right now.</Text>
             <Button size="xs" variant="light" onClick={() => setSessionAttempt((count) => count + 1)}>
-              Tentar novamente
+              Try again
             </Button>
           </Group>
         </Alert>
@@ -696,15 +792,15 @@ export function GameScreen({
       )}
 
       {pending !== null && (
-        <Alert color="yellow" title={pending.type === 'bet' ? 'Aposta em confirmação' : 'Cashout em confirmação'}>
+        <Alert color="yellow" title={pending.type === 'bet' ? 'Bet awaiting confirmation' : 'Cashout awaiting confirmation'}>
           <Stack gap="xs">
             <Text size="sm">
-              {pending.note} Operação mantida com a mesma chave de idempotência
+              {pending.note} The operation keeps the same idempotency key
               {pending.amountCents > 0 ? ` (${formatCents(pending.amountCents)})` : ''}.
             </Text>
             <Group>
               <Button size="xs" variant="light" onClick={() => void reconcile(pending)}>
-                Consultar novamente
+                Check again
               </Button>
             </Group>
           </Stack>
@@ -712,11 +808,11 @@ export function GameScreen({
       )}
 
       <Paper withBorder p="md" radius="md">
-        <Title order={4}>Aposta</Title>
+        <Title order={4}>Bet</Title>
         <Stack gap="sm" mt="sm">
           <Group align="flex-end" wrap="wrap">
             <TextInput
-              label="Valor (USD)"
+              label="Amount (USD)"
               placeholder="10.00"
               inputMode="decimal"
               w={160}
@@ -726,7 +822,7 @@ export function GameScreen({
               onChange={(event) => setAmountText(event.currentTarget.value)}
             />
             <TextInput
-              label="Auto-cashout (opcional)"
+              label="Auto-cashout (optional)"
               placeholder="1.50"
               inputMode="decimal"
               w={200}
@@ -736,7 +832,7 @@ export function GameScreen({
               onChange={(event) => setAutoCashoutText(event.currentTarget.value)}
             />
             <Button onClick={() => void submitBet()} loading={busy} disabled={!canBet}>
-              Apostar
+              Place bet
             </Button>
             <Button
               variant="light"
@@ -751,19 +847,19 @@ export function GameScreen({
           </Group>
           <Text size="sm" c="dimmed">
             {conflictingBet !== null
-              ? `Nesta rodada você já tem uma aposta (${COMMAND_STATUS_LABELS[conflictingBet.betCommandStatus]}).`
+              ? `You already have a bet in this round (${COMMAND_STATUS_LABELS[conflictingBet.betCommandStatus]}).`
               : phase === 'betting'
-                ? 'Aposte enquanto as apostas estão abertas.'
-                : 'Aguarde a próxima janela de apostas.'}
+                ? 'Place your bet while betting is open.'
+                : 'Wait for the next betting window.'}
           </Text>
         </Stack>
       </Paper>
 
       <Paper withBorder p="md" radius="md">
         <Group justify="space-between">
-          <Title order={4}>Suas apostas recentes</Title>
+          <Title order={4}>Your recent bets</Title>
           <Button size="xs" variant="default" onClick={() => void loadBets()}>
-            Atualizar
+            Refresh
           </Button>
         </Group>
         {betsError !== null && (
@@ -774,12 +870,12 @@ export function GameScreen({
         <Table mt="sm" striped withTableBorder highlightOnHover>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>Rodada</Table.Th>
-              <Table.Th>Valor</Table.Th>
-              <Table.Th>Comando</Table.Th>
-              <Table.Th>Jogo</Table.Th>
-              <Table.Th>Resultado</Table.Th>
-              <Table.Th>Liquidação</Table.Th>
+              <Table.Th>Round</Table.Th>
+              <Table.Th>Amount</Table.Th>
+              <Table.Th>Command</Table.Th>
+              <Table.Th>Game</Table.Th>
+              <Table.Th>Result</Table.Th>
+              <Table.Th>Settlement</Table.Th>
               <Table.Th />
             </Table.Tr>
           </Table.Thead>
@@ -788,7 +884,7 @@ export function GameScreen({
               <Table.Tr>
                 <Table.Td colSpan={7}>
                   <Text size="sm" c="dimmed">
-                    {bets === null ? 'Carregando…' : 'Nenhuma aposta registrada ainda.'}
+                    {bets === null ? 'Loading…' : 'No bets recorded yet.'}
                   </Text>
                 </Table.Td>
               </Table.Tr>
@@ -797,6 +893,11 @@ export function GameScreen({
                 const settlementBetId = item.bet?.betId ?? null;
                 const verificationBetId = item.bet?.betId ?? item.betId;
                 const outcomePending = isBetOutcomePending(item, { roundId, phase });
+                const autoCashoutCrossed =
+                  item.bet?.engineStatus === 'active' &&
+                  item.autoCashoutHundredths !== null &&
+                  liveMultiplierHundredths !== null &&
+                  liveMultiplierHundredths >= item.autoCashoutHundredths;
                 const multiplier =
                   item.bet?.payoutCents !== null && item.bet?.payoutCents !== undefined
                     ? formatCents(item.bet.payoutCents)
@@ -824,6 +925,11 @@ export function GameScreen({
                     </Table.Td>
                     <Table.Td>
                       {getBetGameStatusLabel(item, { roundId, phase })}
+                      {autoCashoutCrossed && (
+                        <Text size="xs" c="dimmed">
+                          cashing out…
+                        </Text>
+                      )}
                     </Table.Td>
                     <Table.Td>{multiplier}</Table.Td>
                     <Table.Td>
@@ -836,7 +942,7 @@ export function GameScreen({
                           variant="light"
                           onClick={() => void refreshBet(settlementBetId)}
                         >
-                          Verificar crédito
+                          Check credit
                         </Button>
                       )}
                       {outcomePending && verificationBetId !== null && (
@@ -865,17 +971,17 @@ export function GameScreen({
 
       <Accordion variant="contained">
         <Accordion.Item value="fairness">
-          <Accordion.Control>Prova da rodada (provably fair)</Accordion.Control>
+          <Accordion.Control>Round proof (provably fair)</Accordion.Control>
           <Accordion.Panel>
             <Stack gap="xs">
               <Text size="xs" c="dimmed">
-                O operador publica o compromisso SHA-256 do seed antes da rodada e revela o seed ao
-                final. A verificação recalcula o ponto de crash aqui no navegador, com o mesmo
-                algoritmo do engine, sem confiar no servidor.
+                The operator publishes the SHA-256 commitment of the seed before the round and reveals it
+                after the crash. The verification recomputes the crash point in this browser, with the same
+                engine algorithm, without trusting the server.
               </Text>
               <Group gap="xs">
                 <Text size="sm" fw={500}>
-                  Compromisso da rodada atual:
+                  Current round commitment:
                 </Text>
                 <Text size="xs" ff="monospace" title={commitmentHash ?? undefined}>
                   {commitmentHash === null ? '—' : `${commitmentHash.slice(0, 16)}…`}
@@ -884,13 +990,13 @@ export function GameScreen({
               <Divider />
               {revealed === null ? (
                 <Text size="sm" c="dimmed">
-                  Nenhuma rodada finalizada desde que esta tela foi aberta.
+                  No round has finished since this screen was opened.
                 </Text>
               ) : (
                 <Stack gap="xs">
                   <Group gap="xs">
                     <Text size="sm">
-                      Última rodada finalizada:{' '}
+                      Last finished round:{' '}
                       <Text span ff="monospace" size="sm">
                         {revealed.roundId.slice(0, 8)}…
                       </Text>
@@ -899,17 +1005,17 @@ export function GameScreen({
                     {proof?.status === 'checking' && <Loader size="xs" />}
                     {proof?.status === 'failed' && (
                       <Badge color="yellow" variant="light">
-                        não foi possível verificar
+                        verification failed
                       </Badge>
                     )}
                   </Group>
                   {proof?.status === 'done' && proof.result !== null && (
                     <Group gap="xs">
-                      <ProofBadge check={proof.result.commitment} label="Compromisso" />
-                      <ProofBadge check={proof.result.result} label="Resultado" />
+                      <ProofBadge check={proof.result.commitment} label="Commitment" />
+                      <ProofBadge check={proof.result.result} label="Result" />
                       {proof.result.reproducedHundredths !== null && (
                         <Text size="xs" c="dimmed">
-                          recalculado: {formatMultiplier(proof.result.reproducedHundredths)}
+                          recomputed: {formatMultiplier(proof.result.reproducedHundredths)}
                         </Text>
                       )}
                     </Group>
@@ -917,19 +1023,22 @@ export function GameScreen({
                   {proof?.status === 'done' &&
                     proof.result !== null &&
                     (proof.result.commitment === 'mismatch' || proof.result.result === 'mismatch') && (
-                      <Alert color="red" title="Divergência na prova da rodada">
-                        O resultado recalculado não confere com o exibido. Guarde o roundId e evite
-                        apostar até entender a diferença.
+                      <Alert color="red" title="Round proof mismatch">
+                        The recomputed result does not match what was displayed. Save the round id
+                        and avoid betting until the difference is understood.
+                        <Code block mt="xs" style={{ wordBreak: 'break-all' }}>
+                          {revealed.roundId}
+                        </Code>
                       </Alert>
                     )}
                   {revealed.serverSeedHash === null && (
                     <Text size="xs" c="dimmed">
-                      O compromisso desta rodada não foi capturado nesta sessão; só o resultado pôde
-                      ser recalculado.
+                      This round commitment was not captured in this session; only the result could
+                      be recomputed.
                     </Text>
                   )}
                   <div>
-                    <Text size="sm">Seed revelado:</Text>
+                    <Text size="sm">Revealed seed:</Text>
                     <Code block style={{ wordBreak: 'break-all' }}>
                       {revealed.serverSeed}
                     </Code>
@@ -940,7 +1049,7 @@ export function GameScreen({
                       variant="default"
                       onClick={() => setProofAttempt((count) => count + 1)}
                     >
-                      Verificar novamente
+                      Verify again
                     </Button>
                   </Group>
                 </Stack>
@@ -949,17 +1058,17 @@ export function GameScreen({
           </Accordion.Panel>
         </Accordion.Item>
         <Accordion.Item value="diagnostics">
-          <Accordion.Control>Diagnóstico da conexão</Accordion.Control>
+          <Accordion.Control>Connection diagnostics</Accordion.Control>
           <Accordion.Panel>
             <Stack gap="xs">
               <Text size="xs" c="dimmed">
-                Rodada {roundId ?? '—'} · seq {snapshot?.seq ?? '—'} · eventos retidos{' '}
+                Round {roundId ?? '—'} · seq {snapshot?.seq ?? '—'} · eventos retidos{' '}
                 {stream.events.length}/{MAX_RETAINED_EVENTS}
               </Text>
               <Divider />
               <Code block mah={200} style={{ overflow: 'auto' }}>
                 {stream.events.length === 0
-                  ? 'nenhum evento recebido'
+                  ? 'no events received'
                   : stream.events
                       .map((event) => `#${event.seq} ${event.type} ${event.roundId}`)
                       .join('\n')}

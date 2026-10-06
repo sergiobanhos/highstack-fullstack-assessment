@@ -57,26 +57,26 @@ export interface WalletScreenProps {
 }
 
 const DIRECTION_LABELS: Record<LedgerEntry['direction'], string> = {
-  credit: 'Crédito',
-  debit: 'Débito',
+  credit: 'Credit',
+  debit: 'Debit',
 };
 
 const SOURCE_LABELS: Record<string, string> = {
-  engine: 'Engine (aposta/cashout)',
-  test: 'Top-up de teste',
-  payout: 'Saque simulado',
-  reconciliation: 'Reconciliação',
+  engine: 'Engine (bet/cashout)',
+  test: 'Test top-up',
+  payout: 'Simulated payout',
+  reconciliation: 'Reconciliation',
 };
 
 const PAYOUT_STATUS_LABELS: Record<Payout['status'], string> = {
-  processing: 'Processando',
-  done: 'Concluído',
+  processing: 'Processing',
+  done: 'Done',
 };
 
 function formatTimestamp(value: string): string {
   const milliseconds = Date.parse(value);
   if (!Number.isFinite(milliseconds)) return value;
-  return new Intl.DateTimeFormat('pt-BR', {
+  return new Intl.DateTimeFormat('en-US', {
     dateStyle: 'short',
     timeStyle: 'short',
   }).format(milliseconds);
@@ -86,40 +86,40 @@ function describeTopUpError(error: unknown): string {
   if (error instanceof OperatorApiError) {
     switch (error.code) {
       case 'INVALID_AMOUNT':
-        return 'Valor fora do intervalo suportado pelo operador.';
+        return 'Amount is outside the range supported by the operator.';
       case 'BALANCE_LIMIT':
-        return 'O saldo ultrapassaria o limite suportado pelo operador.';
+        return 'The balance would exceed the operator limit.';
       case 'IDEMPOTENCY_CONFLICT':
-        return 'Esta solicitação conflita com um top-up anterior. Atualize a carteira antes de tentar de novo.';
+        return 'This request conflicts with an earlier top-up. Refresh the wallet before trying again.';
       case 'SERVICE_UNAVAILABLE':
-        return 'O serviço financeiro está indisponível no momento.';
+        return 'The financial service is currently unavailable.';
       default:
-        if (error.status === 404) return 'O top-up de teste não está habilitado neste operador.';
+        if (error.status === 404) return 'Test top-up is not enabled on this operator.';
         return error.message;
     }
   }
-  return 'Não foi possível falar com o operador. Verifique a conexão.';
+  return 'Could not reach the operator. Check your connection.';
 }
 
 function describePayoutError(error: unknown): string {
   if (error instanceof OperatorApiError) {
     switch (error.code) {
       case 'INSUFFICIENT_FUNDS':
-        return 'Saldo insuficiente para esse saque.';
+        return 'Insufficient balance for this payout.';
       case 'INVALID_AMOUNT':
-        return 'Valor fora do intervalo suportado pelo operador.';
+        return 'Amount is outside the range supported by the operator.';
       case 'BALANCE_LIMIT':
-        return 'O valor excede o limite suportado pelo operador.';
+        return 'The amount exceeds the operator limit.';
       case 'IDEMPOTENCY_CONFLICT':
-        return 'Esta solicitação conflita com um saque anterior. Atualize o histórico antes de tentar de novo.';
+        return 'This request conflicts with an earlier payout. Refresh the history before trying again.';
       case 'SERVICE_UNAVAILABLE':
-        return 'O serviço financeiro está indisponível no momento.';
+        return 'The financial service is currently unavailable.';
       default:
-        if (error.status === 404) return 'O saque local não está habilitado neste operador.';
+        if (error.status === 404) return 'Local payout is not enabled on this operator.';
         return error.message;
     }
   }
-  return 'Não foi possível falar com o operador. Verifique a conexão.';
+  return 'Could not reach the operator. Check your connection.';
 }
 
 export function WalletScreen({
@@ -180,7 +180,7 @@ export function WalletScreen({
           return;
         }
         setLedgerError(
-          error instanceof OperatorApiError ? error.message : 'Não foi possível carregar o histórico.',
+          error instanceof OperatorApiError ? error.message : 'Could not load the history.',
         );
       } finally {
         setLedgerBusy(false);
@@ -215,7 +215,7 @@ export function WalletScreen({
         }
         setPayoutAvailability({
           status: 'error',
-          message: error instanceof OperatorApiError ? error.message : 'Não foi possível carregar os saques.',
+          message: error instanceof OperatorApiError ? error.message : 'Could not load payouts.',
         });
       }
     },
@@ -278,8 +278,8 @@ export function WalletScreen({
       await loadLedger('reset', null);
       notifications.show({
         color: 'teal',
-        title: 'Saldo adicionado',
-        message: `${formatCents(command.amountCents)} creditados (operação de teste local).`,
+        title: 'Balance added',
+        message: `${formatCents(command.amountCents)} credited (local test operation).`,
       });
     } catch (error) {
       if (isUnauthenticated(error)) {
@@ -296,7 +296,7 @@ export function WalletScreen({
       // Timeout, unparseable body, or operator failure: the key is kept, because
       // the credit may have been committed. Retrying replays the same operation.
       setTopUpError(
-        'Não foi possível confirmar a operação. Ela continua pendente; tente novamente antes de criar outra.',
+        'Could not confirm the operation. It is still pending; retry before creating another.',
       );
     } finally {
       setTopUpBusy(false);
@@ -336,8 +336,8 @@ export function WalletScreen({
       await refreshBalance();
       notifications.show({
         color: 'teal',
-        title: 'Saque solicitado',
-        message: `${formatCents(payout.amountCents)} em processamento (simulação local).`,
+        title: 'Payout requested',
+        message: `${formatCents(payout.amountCents)} processing (local simulation).`,
       });
     } catch (error) {
       if (isUnauthenticated(error)) {
@@ -353,7 +353,7 @@ export function WalletScreen({
         return;
       }
       setPayoutError(
-        'Não foi possível confirmar a solicitação. Ela continua pendente; tente novamente antes de criar outra.',
+        'Could not confirm the request. It is still pending; retry before creating another.',
       );
     } finally {
       setPayoutBusy(false);
@@ -371,7 +371,7 @@ export function WalletScreen({
       return;
     }
     if (balanceCents !== null && parsed.value > balanceCents) {
-      setPayoutError('O valor excede o saldo disponível exibido.');
+      setPayoutError('The amount exceeds the displayed available balance.');
       return;
     }
     const command: PendingAmountCommand = {
@@ -389,28 +389,28 @@ export function WalletScreen({
         <Group justify="space-between" align="center" wrap="wrap">
           <div>
             <Text size="sm" c="dimmed">
-              Saldo disponível
+              Available balance
             </Text>
             <Title order={2}>{balanceCents === null ? '—' : formatCents(balanceCents)}</Title>
           </div>
           <Stack gap={4} align="flex-end">
-            <Badge variant="light">Ambiente local — saldo de teste</Badge>
+            <Badge variant="light">Local environment — test balance</Badge>
             <Button size="xs" variant="default" onClick={() => void refreshBalance()}>
-              Atualizar saldo
+              Refresh balance
             </Button>
           </Stack>
         </Group>
       </Paper>
 
       <Paper withBorder p="md" radius="md">
-        <Title order={4}>Adicionar saldo (top-up de teste)</Title>
+        <Title order={4}>Add balance (test top-up)</Title>
         <Text size="sm" c="dimmed" mt={4}>
-          Operação local de teste com chave idempotente: tentar de novo não credita duas vezes.
+          Local test operation with an idempotency key: retrying does not credit twice.
         </Text>
         {pendingTopUp !== null && (
-          <Alert color="yellow" mt="sm" title="Top-up pendente de confirmação">
-            {formatCents(pendingTopUp.amountCents)} — a resposta anterior não chegou. Tente novamente
-            para confirmar; a mesma chave será reutilizada.
+          <Alert color="yellow" mt="sm" title="Top-up awaiting confirmation">
+            {formatCents(pendingTopUp.amountCents)} — the previous response never arrived. Try again
+            to confirm; the same key will be reused.
           </Alert>
         )}
         {topUpError !== null && (
@@ -420,7 +420,7 @@ export function WalletScreen({
         )}
         <Group align="flex-end" mt="sm" wrap="wrap">
           <TextInput
-            label="Valor (USD)"
+            label="Amount (USD)"
             placeholder="50.00"
             inputMode="decimal"
             w={160}
@@ -429,23 +429,23 @@ export function WalletScreen({
             onChange={(event) => setTopUpAmount(event.currentTarget.value)}
           />
           <Button onClick={() => void submitTopUp()} loading={topUpBusy}>
-            {pendingTopUp !== null ? 'Tentar novamente' : 'Adicionar saldo'}
+            {pendingTopUp !== null ? 'Try again' : 'Add balance'}
           </Button>
         </Group>
       </Paper>
 
       <Tabs defaultValue="ledger" keepMounted={false}>
         <Tabs.List>
-          <Tabs.Tab value="ledger">Movimentações</Tabs.Tab>
-          <Tabs.Tab value="payouts">Saques</Tabs.Tab>
+          <Tabs.Tab value="ledger">Transactions</Tabs.Tab>
+          <Tabs.Tab value="payouts">Payouts</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="ledger" pt="md">
           <Paper withBorder p="md" radius="md">
             <Group justify="space-between">
-              <Title order={4}>Histórico da carteira</Title>
+              <Title order={4}>Wallet history</Title>
               <Button size="xs" variant="default" onClick={() => void loadLedger('reset', null)}>
-                Atualizar
+                Refresh
               </Button>
             </Group>
             {ledgerError !== null && (
@@ -456,10 +456,10 @@ export function WalletScreen({
             <Table mt="sm" striped withTableBorder>
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th>Quando</Table.Th>
-                  <Table.Th>Operação</Table.Th>
-                  <Table.Th>Valor</Table.Th>
-                  <Table.Th>Saldo após</Table.Th>
+                  <Table.Th>When</Table.Th>
+                  <Table.Th>Operation</Table.Th>
+                  <Table.Th>Amount</Table.Th>
+                  <Table.Th>Balance after</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -469,7 +469,7 @@ export function WalletScreen({
                       <Group gap="xs">
                         <Loader size="xs" />
                         <Text size="sm" c="dimmed">
-                          Carregando…
+                          Loading…
                         </Text>
                       </Group>
                     </Table.Td>
@@ -478,7 +478,7 @@ export function WalletScreen({
                   <Table.Tr>
                     <Table.Td colSpan={4}>
                       <Text size="sm" c="dimmed">
-                        Nenhuma movimentação ainda.
+                        No transactions yet.
                       </Text>
                     </Table.Td>
                   </Table.Tr>
@@ -501,7 +501,7 @@ export function WalletScreen({
             </Table>
             {ledgerCursor !== null && (
               <Button mt="sm" size="xs" variant="light" loading={ledgerBusy} onClick={() => void loadLedger('more', ledgerCursor)}>
-                Carregar mais
+                Load more
               </Button>
             )}
           </Paper>
@@ -509,32 +509,32 @@ export function WalletScreen({
 
         <Tabs.Panel value="payouts" pt="md">
           <Paper withBorder p="md" radius="md">
-            <Title order={4}>Saque simulado</Title>
+            <Title order={4}>Simulated payout</Title>
             <Text size="sm" c="dimmed" mt={4}>
-              Saque local de teste. A solicitação é registrada pelo operador e não usa dinheiro real.
+              Local test payout. The request is recorded by the operator and does not use real money.
             </Text>
 
             {payoutAvailability.status === 'checking' && (
               <Group gap="xs" mt="sm">
                 <Loader size="xs" />
                 <Text size="sm" c="dimmed">
-                  Verificando disponibilidade do saque local…
+                  Checking local payout availability…
                 </Text>
               </Group>
             )}
 
             {payoutAvailability.status === 'disabled' && (
-              <Alert color="gray" mt="sm" title="Saque local indisponível">
-                Este operador está com a simulação de saque desabilitada.
+              <Alert color="gray" mt="sm" title="Local payout unavailable">
+                This operator has payout simulation disabled.
               </Alert>
             )}
 
             {payoutAvailability.status === 'error' && (
-              <Alert color="red" mt="sm" title="Não foi possível carregar os saques">
+              <Alert color="red" mt="sm" title="Could not load payouts">
                 <Group justify="space-between">
                   <Text size="sm">{payoutAvailability.message}</Text>
                   <Button size="xs" variant="light" onClick={() => void loadPayouts('reset', null)}>
-                    Tentar novamente
+                    Try again
                   </Button>
                 </Group>
               </Alert>
@@ -543,9 +543,9 @@ export function WalletScreen({
             {payoutAvailability.status === 'ready' && (
               <>
                 {pendingPayout !== null && (
-                  <Alert color="yellow" mt="sm" title="Saque pendente de confirmação">
-                    {formatCents(pendingPayout.amountCents)} — a resposta anterior não chegou. Tente
-                    novamente para confirmar; a mesma chave será reutilizada.
+                  <Alert color="yellow" mt="sm" title="Payout awaiting confirmation">
+                    {formatCents(pendingPayout.amountCents)} — the previous response never arrived.
+                    Try again to confirm; the same key will be reused.
                   </Alert>
                 )}
                 {payoutError !== null && (
@@ -555,7 +555,7 @@ export function WalletScreen({
                 )}
                 <Group align="flex-end" mt="sm" wrap="wrap">
                   <TextInput
-                    label="Valor (USD)"
+                    label="Amount (USD)"
                     placeholder="25.00"
                     inputMode="decimal"
                     w={160}
@@ -564,18 +564,18 @@ export function WalletScreen({
                     onChange={(event) => setPayoutAmount(event.currentTarget.value)}
                   />
                   <Button onClick={() => void submitPayout()} loading={payoutBusy}>
-                    {pendingPayout !== null ? 'Tentar novamente' : 'Solicitar saque'}
+                    {pendingPayout !== null ? 'Try again' : 'Request payout'}
                   </Button>
                 </Group>
 
                 <Table mt="md" striped withTableBorder>
                   <Table.Thead>
                     <Table.Tr>
-                      <Table.Th>Solicitado</Table.Th>
-                      <Table.Th>Referência</Table.Th>
-                      <Table.Th>Valor</Table.Th>
+                      <Table.Th>Requested</Table.Th>
+                      <Table.Th>Reference</Table.Th>
+                      <Table.Th>Amount</Table.Th>
                       <Table.Th>Status</Table.Th>
-                      <Table.Th>Concluído</Table.Th>
+                      <Table.Th>Completed</Table.Th>
                       <Table.Th />
                     </Table.Tr>
                   </Table.Thead>
@@ -584,7 +584,7 @@ export function WalletScreen({
                       <Table.Tr>
                         <Table.Td colSpan={6}>
                           <Text size="sm" c="dimmed">
-                            {payouts === null ? 'Carregando…' : 'Nenhum saque solicitado ainda.'}
+                            {payouts === null ? 'Loading…' : 'No payouts requested yet.'}
                           </Text>
                         </Table.Td>
                       </Table.Tr>
@@ -601,7 +601,7 @@ export function WalletScreen({
                           <Table.Td>
                             {payout.missing === true ? (
                               <Badge variant="light" color="red">
-                                Não encontrado
+                                Not found
                               </Badge>
                             ) : (
                               <>
@@ -613,7 +613,7 @@ export function WalletScreen({
                                 </Badge>
                                 {payout.simulated && (
                                   <Text size="xs" c="dimmed">
-                                    simulação local
+                                    local simulation
                                   </Text>
                                 )}
                               </>
@@ -632,7 +632,7 @@ export function WalletScreen({
                                   void loadPayouts('reset', null);
                                 }}
                               >
-                                Atualizar
+                                Refresh
                               </Button>
                             )}
                           </Table.Td>
@@ -643,7 +643,7 @@ export function WalletScreen({
                 </Table>
                 {payoutCursor !== null && (
                   <Button mt="sm" size="xs" variant="light" onClick={() => void loadPayouts('more', payoutCursor)}>
-                    Carregar mais
+                    Load more
                   </Button>
                 )}
               </>

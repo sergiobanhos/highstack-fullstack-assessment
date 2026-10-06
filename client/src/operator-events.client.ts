@@ -207,8 +207,13 @@ function revealedFromEvent(
   return { roundId: event.roundId, serverSeed, serverSeedHash: commitmentOfRound, crashPoint };
 }
 
-/** A snapshot taken after the crash already carries the revealed seed. */
+/**
+ * A snapshot taken after the crash already carries the revealed seed. The
+ * crashed-state gate is defense in depth: the operator never sends a seed for
+ * an open round, and a proof must never be assembled from one that does.
+ */
 function revealedFromSnapshot(snapshot: ClientRoundState): RevealedRound | null {
+  if (snapshot.state !== 'crashed') return null;
   if (snapshot.serverSeed === null || snapshot.crashPoint === null || snapshot.roundId === null) {
     return null;
   }

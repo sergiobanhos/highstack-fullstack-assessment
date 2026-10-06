@@ -80,8 +80,9 @@
 - [x] Review and approve payout requirements in `.ai/sdd/specs/005-payout/`
 - [x] Register F05 local payout in `.ai/sdd/PLAN.md`
 - [x] Review and approve F05 design in `.ai/sdd/specs/005-payout/`
+- [x] Review and approve F05 tasks in `.ai/sdd/specs/005-payout/`
 - [x] Create F07 requirements draft for bet results after round crash and stream recovery
 - [x] Approve F07 requirements in `.ai/sdd/specs/007-round-bet-reconciliation/`
 - [x] Create F07 design draft and non-binding tasks draft
 - [x] Approve F07 design
-- [x] Review and approve F05 tasks in `.ai/sdd/specs/005-payout/`
+- [x] Approve F07 tasks before implementation

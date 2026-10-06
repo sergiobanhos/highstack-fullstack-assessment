@@ -157,11 +157,11 @@ export function isTerminalRefusal(error: unknown): boolean {
 }
 
 function fallbackMessage(status: number): string {
-  if (status === 401) return 'Sua sessão expirou. Entre novamente.';
-  if (status === 404) return 'O recurso pedido não existe no operador.';
-  if (status === 429) return 'Muitas tentativas em pouco tempo. Aguarde e tente novamente.';
-  if (status >= 500) return 'O operador está indisponível no momento.';
-  return `A solicitação falhou (HTTP ${status}).`;
+  if (status === 401) return 'Your session expired. Please sign in again.';
+  if (status === 404) return 'The requested resource does not exist on the operator.';
+  if (status === 429) return 'Too many attempts in a short time. Wait and try again.';
+  if (status >= 500) return 'The operator is currently unavailable.';
+  return `The request failed (HTTP ${status}).`;
 }
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
@@ -180,7 +180,7 @@ function errorFor(status: number, payload: unknown): OperatorApiError {
 }
 
 const invalidResponse = (): OperatorApiError =>
-  new OperatorApiError('invalid-response', null, null, 'O operador respondeu em um formato inesperado.');
+  new OperatorApiError('invalid-response', null, null, 'The operator responded in an unexpected format.');
 
 // ---------------------------------------------------------------------------
 // Wire schemas
@@ -343,7 +343,7 @@ async function send(fetchImpl: FetchLike, path: string, options: SendOptions = {
       'network',
       null,
       null,
-      'Não foi possível falar com o operador. Verifique a conexão e tente novamente.',
+      'Could not reach the operator. Check your connection and try again.',
     );
   }
 

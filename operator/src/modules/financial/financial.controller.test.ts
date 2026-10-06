@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { loadConfig, type Logger } from '../../config';
 import { createDatabase } from '../../db';
 import { financialOperations, payouts, walletLedgerEntries, wallets } from './financial.schema';
-import { createFinancialModule } from './financial.module';
+import { createFinancialModule, type CashoutCreditListener } from './financial.module';
 import { FinancialServiceError, type FinancialService } from './financial.service';
 import { registerFinancialController } from './financial.controller';
 import { UnauthenticatedError, type AuthModule, type AuthenticatedPlayer } from '../auth/auth.module';
@@ -615,6 +615,95 @@ describe('financial webhook controller error mapping', () => {
         method: 'POST', url: '/payouts',
         headers: { 'idempotency-key': randomUUID() }, payload: { amount: 100 },
       });
+      expect(response.statusCode).toBe(503);
+      expect(responseJson(response)).toEqual({
+        error: { code: 'SERVICE_UNAVAILABLE', message: 'Financial service is unavailable' },
+      });
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+describe('cashout credit listener', () => {
+  function harness(onCashoutCredited?: CashoutCreditListener) {
+    const app = Fastify({ logger: false });
+    const logger: Logger = { debug() {}, info() {}, warn() {}, error() {} };
+    const service = {
+      debit: async () => ({ outcome: 'applied', replayed: false, balanceCents: 1_000n }),
+      creditCashoutOnce: async () => ({ outcome: 'applied', replayed: false, balanceCents: 1_050n }),
+    } as unknown as FinancialService;
+    registerFinancialController({
+      app,
+      service,
+      webhookSecret,
+      walletTestTopupEnabled: false,
+      payoutMockEnabled: false,
+      onCashoutCredited,
+      requireUser: async () => { throw new UnauthenticatedError(); },
+      logger,
+    });
+    return app;
+  }
+
+  const webhookBody = () => ({
+    txId: randomUUID(),
+    playerId: randomUUID(),
+    amount: 1_050,
+    betId: randomUUID(),
+    roundId: randomUUID(),
+  });
+
+  test('records the applied credit on the bet', async () => {
+    const recorded: Array<{ betId: string; payoutCents: number }> = [];
+    const app = harness(async (credit) => {
+      recorded.push({ betId: credit.betId, payoutCents: credit.payoutCents });
+    });
+    await app.ready();
+    try {
+      const request = webhookBody();
+      const rawBody = JSON.stringify(request);
+      const response = await app.inject({
+        method: 'POST', url: '/wallet/credit', headers: signedHeaders(rawBody), payload: rawBody,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(recorded).toEqual([{ betId: request.betId, payoutCents: request.amount }]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  test('a debit webhook never records a cashout', async () => {
+    const recorded: unknown[] = [];
+    const app = harness(async (credit) => {
+      recorded.push(credit);
+    });
+    await app.ready();
+    try {
+      const rawBody = JSON.stringify(webhookBody());
+      const response = await app.inject({
+        method: 'POST', url: '/wallet/debit', headers: signedHeaders(rawBody), payload: rawBody,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(recorded).toHaveLength(0);
+    } finally {
+      await app.close();
+    }
+  });
+
+  test('answers 503 so the engine retries the idempotent webhook', async () => {
+    const app = harness(async () => {
+      throw new Error('game module unavailable');
+    });
+    await app.ready();
+    try {
+      const rawBody = JSON.stringify(webhookBody());
+      const response = await app.inject({
+        method: 'POST', url: '/wallet/credit', headers: signedHeaders(rawBody), payload: rawBody,
+      });
+
       expect(response.statusCode).toBe(503);
       expect(responseJson(response)).toEqual({
         error: { code: 'SERVICE_UNAVAILABLE', message: 'Financial service is unavailable' },

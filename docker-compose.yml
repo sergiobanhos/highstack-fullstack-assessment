@@ -18,12 +18,22 @@ services:
     restart: "no"
     environment:
       DATABASE_URL: postgres://operator:operator@postgres:5432/operator
+    # Same reason as the operator service: pending migrations are applied from
+    # the working tree instead of requiring an image rebuild.
+    volumes:
+      - ./operator/src:/app/src
+      - ./operator/drizzle:/app/drizzle
+      - ./operator/tsconfig.json:/app/tsconfig.json
     depends_on:
       postgres:
         condition: service_healthy
 
   operator:
     build: ./operator
+    # Bun watches the mounted sources and restarts the service on change, so
+    # local development does not need an image rebuild. Dependencies still live
+    # in the image: changing package.json needs `docker compose build operator`.
+    command: ["bun", "run", "--watch", "src/server.ts"]
     ports:
       # Keep the local operator surface on loopback; production exposure is configured separately.
       - "127.0.0.1:3000:3000"
@@ -40,6 +50,10 @@ services:
       APP_ENV: local
       WALLET_TEST_TOPUP_ENABLED: "true"
       PAYOUT_MOCK_ENABLED: "true"
+    volumes:
+      - ./operator/src:/app/src
+      - ./operator/drizzle:/app/drizzle
+      - ./operator/tsconfig.json:/app/tsconfig.json
     depends_on:
       engine:
         condition: service_started
@@ -54,6 +68,15 @@ services:
       - "127.0.0.1:5173:5173"
     environment:
       OPERATOR_URL: http://operator:3000
+    # Vite serves straight from the mounted sources, so UI changes are live
+    # without rebuilding the image (HMR inside the container; reload the page
+    # if the file watcher does not pick a change up). Dependencies stay in the
+    # image: changing package.json still needs `docker compose build client`.
+    volumes:
+      - ./client/src:/app/src
+      - ./client/index.html:/app/index.html
+      - ./client/vite.config.ts:/app/vite.config.ts
+      - ./client/tsconfig.json:/app/tsconfig.json
     depends_on:
       - operator
 

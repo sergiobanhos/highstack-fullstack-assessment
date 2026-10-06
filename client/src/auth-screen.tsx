@@ -34,36 +34,36 @@ function validate(values: { name: string; email: string; password: string }, mod
   const errors: Partial<Record<'name' | 'email' | 'password', string>> = {};
   if (mode === 'register') {
     const name = values.name.trim();
-    if (name.length === 0) errors.name = 'Informe seu nome.';
-    else if (name.length > MAX_NAME_LENGTH) errors.name = `Use no máximo ${MAX_NAME_LENGTH} caracteres.`;
+    if (name.length === 0) errors.name = 'Enter your name.';
+    else if (name.length > MAX_NAME_LENGTH) errors.name = `Use at most ${MAX_NAME_LENGTH} characters.`;
   }
   const email = values.email.trim();
-  if (email.length === 0) errors.email = 'Informe seu email.';
-  else if (email.length > MAX_EMAIL_LENGTH) errors.email = `Use no máximo ${MAX_EMAIL_LENGTH} caracteres.`;
-  else if (!EMAIL_PATTERN.test(email)) errors.email = 'Informe um email válido.';
+  if (email.length === 0) errors.email = 'Enter your email.';
+  else if (email.length > MAX_EMAIL_LENGTH) errors.email = `Use at most ${MAX_EMAIL_LENGTH} characters.`;
+  else if (!EMAIL_PATTERN.test(email)) errors.email = 'Enter a valid email.';
 
   if (values.password.length < MIN_PASSWORD_LENGTH) {
-    errors.password = `A senha precisa de pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`;
+    errors.password = `The password needs at least ${MIN_PASSWORD_LENGTH} characters.`;
   } else if (values.password.length > MAX_PASSWORD_LENGTH) {
-    errors.password = `Use no máximo ${MAX_PASSWORD_LENGTH} caracteres.`;
+    errors.password = `Use at most ${MAX_PASSWORD_LENGTH} characters.`;
   }
   return errors;
 }
 
 function describeFailure(error: unknown): string {
   if (error instanceof OperatorApiError) {
-    if (error.code === 'EMAIL_IN_USE') return 'Este email já está cadastrado. Use "Entrar".';
-    if (error.code === 'INVALID_CREDENTIALS') return 'Email ou senha incorretos.';
+    if (error.code === 'EMAIL_IN_USE') return 'This email is already registered. Use "Sign in".';
+    if (error.code === 'INVALID_CREDENTIALS') return 'Incorrect email or password.';
     if (error.code === 'RATE_LIMITED' || error.status === 429) {
-      return 'Muitas tentativas em pouco tempo. Aguarde e tente novamente.';
+      return 'Too many attempts in a short time. Wait and try again.';
     }
     if (error.code === 'SERVICE_UNAVAILABLE' || error.status === 503) {
-      return 'O serviço de autenticação está indisponível. Tente novamente em instantes.';
+      return 'The authentication service is unavailable. Try again in a moment.';
     }
-    if (error.kind === 'network') return 'Não foi possível falar com o operador. Verifique a conexão.';
+    if (error.kind === 'network') return 'Could not reach the operator. Check your connection.';
     return error.message;
   }
-  return 'Não foi possível concluir a operação. Tente novamente.';
+  return 'The operation could not be completed. Try again.';
 }
 
 export function AuthScreen({
@@ -96,7 +96,7 @@ export function AuthScreen({
           // The account exists even though the automatic sign-in failed.
           setMode('login');
           form.setFieldValue('password', '');
-          setFormError(`Sua conta foi criada. Entre com a senha para continuar. (${describeFailure(loginError)})`);
+          setFormError(`Your account was created. Sign in with your password to continue. (${describeFailure(loginError)})`);
           return;
         }
       }
@@ -122,7 +122,7 @@ export function AuthScreen({
           <div>
             <Title order={2}>Crashsim</Title>
             <Text size="sm" c="dimmed">
-              Entre com sua conta para jogar e movimentar sua carteira.
+              Sign in to play and move your balance.
             </Text>
           </div>
 
@@ -131,19 +131,19 @@ export function AuthScreen({
             value={mode}
             onChange={(value) => switchMode(value as AuthMode)}
             data={[
-              { label: 'Entrar', value: 'login' },
-              { label: 'Criar conta', value: 'register' },
+              { label: 'Sign in', value: 'login' },
+              { label: 'Create account', value: 'register' },
             ]}
           />
 
           {notice !== null && (
-            <Alert color="blue" withCloseButton onClose={onNoticeDismissed} title="Aviso">
+            <Alert color="blue" withCloseButton onClose={onNoticeDismissed} title="Notice">
               {notice}
             </Alert>
           )}
 
           {formError !== null && (
-            <Alert color="red" title="Não foi possível continuar">
+            <Alert color="red" title="Could not continue">
               {formError}
             </Alert>
           )}
@@ -152,8 +152,8 @@ export function AuthScreen({
             <Stack gap="sm">
               {mode === 'register' && (
                 <TextInput
-                  label="Nome"
-                  placeholder="Como devemos chamar você"
+                  label="Name"
+                  placeholder="What should we call you?"
                   autoComplete="name"
                   required
                   {...form.getInputProps('name')}
@@ -161,7 +161,7 @@ export function AuthScreen({
               )}
               <TextInput
                 label="Email"
-                placeholder="voce@exemplo.com"
+                placeholder="you@example.com"
                 type="email"
                 inputMode="email"
                 autoComplete="email"
@@ -169,20 +169,20 @@ export function AuthScreen({
                 {...form.getInputProps('email')}
               />
               <PasswordInput
-                label="Senha"
-                description={mode === 'register' ? `Pelo menos ${MIN_PASSWORD_LENGTH} caracteres.` : undefined}
+                label="Password"
+                description={mode === 'register' ? `At least ${MIN_PASSWORD_LENGTH} characters.` : undefined}
                 autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
                 required
                 {...form.getInputProps('password')}
               />
               <Button type="submit" loading={submitting} fullWidth mt="xs">
-                {mode === 'register' ? 'Criar conta e entrar' : 'Entrar'}
+                {mode === 'register' ? 'Create account and sign in' : 'Sign in'}
               </Button>
             </Stack>
           </form>
 
           <Text size="xs" c="dimmed">
-            Ambiente local de desenvolvimento. Saldo, top-up e saque são operações de teste.
+            Local development environment. Balance, top-up and payout are test operations.
           </Text>
         </Stack>
       </Paper>

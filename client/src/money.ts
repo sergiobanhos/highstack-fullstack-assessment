@@ -30,27 +30,27 @@ export function parseUsdToCents(
   options: { maxCents?: number } = {},
 ): ParseResult<number> {
   const text = input.trim();
-  if (text.length === 0) return { ok: false, message: 'Informe um valor.' };
+  if (text.length === 0) return { ok: false, message: 'Enter an amount.' };
 
   const match = USD_PATTERN.exec(text);
   if (!match) {
-    return { ok: false, message: 'Use apenas números com até duas casas decimais (ex.: 12.34).' };
+    return { ok: false, message: 'Use numbers with up to two decimal places (e.g. 12.34).' };
   }
 
   const whole = Number(match[1]);
   if (!Number.isSafeInteger(whole)) {
-    return { ok: false, message: 'Valor fora do intervalo suportado.' };
+    return { ok: false, message: 'Amount is outside the supported range.' };
   }
 
   const cents = whole * 100 + twoDigitFraction(match[2]);
   if (!Number.isSafeInteger(cents)) {
-    return { ok: false, message: 'Valor fora do intervalo suportado.' };
+    return { ok: false, message: 'Amount is outside the supported range.' };
   }
   if (cents < 1) {
-    return { ok: false, message: 'O valor deve ser maior que zero.' };
+    return { ok: false, message: 'The amount must be greater than zero.' };
   }
   if (options.maxCents !== undefined && cents > options.maxCents) {
-    return { ok: false, message: `O valor máximo é ${formatCents(options.maxCents)}.` };
+    return { ok: false, message: `The maximum is ${formatCents(options.maxCents)}.` };
   }
   return { ok: true, value: cents };
 }
@@ -66,22 +66,22 @@ export function parseMultiplierToHundredths(
   const min = options.minHundredths ?? MIN_AUTO_CASHOUT_HUNDREDTHS;
   const max = options.maxHundredths ?? MAX_AUTO_CASHOUT_HUNDREDTHS;
   const text = input.trim();
-  if (text.length === 0) return { ok: false, message: 'Informe um multiplicador como 1.50.' };
+  if (text.length === 0) return { ok: false, message: 'Enter a multiplier such as 1.50.' };
 
   const match = MULTIPLIER_PATTERN.exec(text);
   if (!match) {
-    return { ok: false, message: 'Use apenas números com até duas casas decimais (ex.: 1.50).' };
+    return { ok: false, message: 'Use numbers with up to two decimal places (e.g. 1.50).' };
   }
 
   const whole = Number(match[1]);
   const hundredths = whole * 100 + twoDigitFraction(match[2]);
   if (!Number.isSafeInteger(hundredths)) {
-    return { ok: false, message: 'Multiplicador fora do intervalo suportado.' };
+    return { ok: false, message: 'Multiplier is outside the supported range.' };
   }
   if (hundredths < min || hundredths > max) {
     return {
       ok: false,
-      message: `O multiplicador deve ficar entre ${formatMultiplier(min)} e ${formatMultiplier(max)}.`,
+      message: `The multiplier must be between ${formatMultiplier(min)} and ${formatMultiplier(max)}.`,
     };
   }
   return { ok: true, value: hundredths };

@@ -93,7 +93,7 @@ export function App(): React.JSX.Element {
         if (isUnauthenticated(error)) {
           // The stored credential is no longer valid; discard it and ask again.
           clearStoredToken();
-          setBoot({ phase: 'unauthenticated', notice: 'Sua sessão expirou. Entre novamente.' });
+          setBoot({ phase: 'unauthenticated', notice: 'Your session expired. Please sign in again.' });
           return;
         }
         // The credential may still be valid: keep it and offer a retry.
@@ -102,7 +102,7 @@ export function App(): React.JSX.Element {
           message:
             error instanceof OperatorApiError
               ? error.message
-              : 'Não foi possível falar com o operador.',
+              : 'Could not reach the operator.',
         });
       }
     })();
@@ -133,7 +133,7 @@ export function App(): React.JSX.Element {
         <Stack align="center" gap="xs">
           <Loader />
           <Text size="sm" c="dimmed">
-            Carregando sua sessão…
+            Loading your session…
           </Text>
         </Stack>
       </Center>
@@ -143,13 +143,13 @@ export function App(): React.JSX.Element {
   if (boot.phase === 'unavailable') {
     return (
       <Center mih="100dvh" p="md">
-        <Alert color="red" title="Operador indisponível" maw={480}>
+        <Alert color="red" title="Operator unavailable" maw={480}>
           <Stack gap="sm">
             <Text size="sm">
-              {boot.message} Sua sessão salva foi mantida; tente novamente quando o operador voltar.
+              {boot.message} Your saved session was kept; try again when the operator is back.
             </Text>
             <Button size="xs" onClick={() => setBootAttempt((count) => count + 1)}>
-              Tentar novamente
+              Try again
             </Button>
           </Stack>
         </Alert>
@@ -187,7 +187,7 @@ function PlayerApp({ api, session, onSessionEnded }: PlayerAppProps): React.JSX.
   const [loggingOut, setLoggingOut] = useState(false);
 
   const handleUnauthorized = useCallback((): void => {
-    onSessionEnded('Sua sessão expirou. Entre novamente.');
+    onSessionEnded('Your session expired. Please sign in again.');
   }, [onSessionEnded]);
 
   const refreshWallet = useCallback(async (): Promise<void> => {
@@ -210,7 +210,7 @@ function PlayerApp({ api, session, onSessionEnded }: PlayerAppProps): React.JSX.
       await api.logout(session.token);
     } catch {
       notice =
-        'Sua sessão foi encerrada neste navegador, mas não foi possível confirmar o logout no operador.';
+        'You were signed out in this browser, but the operator could not confirm the logout.';
     } finally {
       setLoggingOut(false);
       onSessionEnded(notice);
@@ -224,24 +224,24 @@ function PlayerApp({ api, session, onSessionEnded }: PlayerAppProps): React.JSX.
           <Group gap="xs" wrap="nowrap">
             <Text fw={700}>Crashsim</Text>
             <Badge variant="light" visibleFrom="sm">
-              operador local
+              local operator
             </Badge>
           </Group>
           <Group gap="sm" wrap="nowrap">
             <Tabs value={view} onChange={(value) => setView(value === 'wallet' ? 'wallet' : 'game')}>
               <Tabs.List>
-                <Tabs.Tab value="game">Jogo</Tabs.Tab>
-                <Tabs.Tab value="wallet">Carteira</Tabs.Tab>
+                <Tabs.Tab value="game">Game</Tabs.Tab>
+                <Tabs.Tab value="wallet">Wallet</Tabs.Tab>
               </Tabs.List>
             </Tabs>
-            <Badge size="lg" variant="light" color="teal" title="Saldo disponível (USD)">
+            <Badge size="lg" variant="light" color="teal" title="Available balance (USD)">
               {balanceCents === null ? '—' : formatCents(balanceCents)}
             </Badge>
             <Text size="sm" visibleFrom="md">
               {session.user.name}
             </Text>
             <Button size="xs" variant="default" loading={loggingOut} onClick={() => void logout()}>
-              Sair
+              Sign out
             </Button>
           </Group>
         </Group>

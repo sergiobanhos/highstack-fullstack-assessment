@@ -44,7 +44,7 @@ function createHarness(options: {
 } = {}) {
   const calls: Record<string, unknown[]> = {
     createSession: [], placeBet: [], cashout: [], listBets: [], getCommand: [], getBet: [],
-    reconcileBetsForRound: [], reconcileClosedBets: [],
+    reconcileBetsForRound: [], reconcileClosedBets: [], recordCashoutCredit: [],
   };
   const logs: Array<{ message: string; fields?: Record<string, unknown> }> = [];
   const logger: Pick<Logger, 'warn'> = {
@@ -88,6 +88,11 @@ function createHarness(options: {
     async reconcileClosedBets(input) {
       calls.reconcileClosedBets!.push(input);
       if (options.service?.reconcileClosedBets) return options.service.reconcileClosedBets(input);
+    },
+    async recordCashoutCredit(input) {
+      calls.recordCashoutCredit!.push(input);
+      if (options.service?.recordCashoutCredit) return options.service.recordCashoutCredit(input);
+      return 'applied';
     },
   };
   const requireUser: AuthModule['requireUser'] = async () => {
