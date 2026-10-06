@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AppShell, Badge, Button, Center, Container, Group, Loader, Tabs, Text } from '@mantine/core';
 import type { OperatorApi } from '../lib/operator/operator-api';
-import type { Session } from './App';
+import type { PlayerSession } from '../features/auth/model/session';
 import { formatCents } from '../lib/money/money';
 import { useAuthCommands } from '../features/auth/hooks/use-auth-commands';
 import { usePlayerWallet } from '../features/wallet/hooks/use-wallet-data';
@@ -13,13 +13,13 @@ const WalletScreen = lazy(() => import('../pages/wallet-page').then((module) => 
 
 type PlayerView = 'game' | 'wallet';
 
-interface PlayerAppProps {
+interface PlayerShellProps {
   api: OperatorApi;
-  session: Session;
+  session: PlayerSession;
   onSessionEnded(notice: string | null): void;
 }
 
-export function PlayerShell({ api, session, onSessionEnded }: PlayerAppProps): React.JSX.Element {
+export function PlayerShell({ api, session, onSessionEnded }: PlayerShellProps): React.JSX.Element {
   const [view, setView] = useState<PlayerView>('game');
   const queryClient = useQueryClient();
 

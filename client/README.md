@@ -9,6 +9,7 @@ React client for the local Crashsim operator. The browser calls only the operato
 - `src/features/auth/` owns session and auth mutations.
 - `src/features/game/` owns game queries, the SSE stream, bet/cashout reconciliation, fairness verification, and game-specific components.
 - `src/features/wallet/` owns wallet queries, payout polling, idempotent pending commands, and wallet components.
+- Page orchestration lives in `use-app-session`, `use-auth-form`, `use-game-page-model`, and `use-wallet-page-model`; the page files compose those models into UI.
 - `src/lib/operator/` is the typed HTTP boundary. It validates responses and maps failures to `OperatorApiError`.
 - `src/lib/query/` centralizes the React Query client, cache keys, and player query context. Tokens are not query keys.
 - `src/lib/money/` contains integer-cent parsing, formatting, and payout calculations.
