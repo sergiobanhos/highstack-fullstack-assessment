@@ -11,9 +11,14 @@ body {
   min-height: 100vh;
   margin: 0;
   color: var(--hs-text);
-  background:
-    radial-gradient(ellipse at 50% -20%, rgb(0 230 178 / 10%), transparent 48%),
-    linear-gradient(150deg, #081714 0%, var(--hs-bg) 52%, #071411 100%);
+  background-color: var(--hs-bg);
+  background-image:
+    linear-gradient(180deg, rgb(2 10 8 / 26%), rgb(2 10 8 / 44%)),
+    url('/assets/highstack-background.png'),
+    radial-gradient(ellipse at 50% -20%, rgb(0 230 178 / 10%), transparent 48%);
+  background-position: center;
+  background-size: cover;
+  background-attachment: fixed;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 16px;
   line-height: 1.5;
@@ -98,6 +103,67 @@ a,
   --mantine-z-index: var(--hs-z-toast);
 }
 
+.hs-header__brand {
+  flex: 0 0 auto;
+}
+
+.hs-header__brand img {
+  display: block;
+  width: clamp(112px, 12vw, 172px);
+  height: auto;
+}
+
+.hs-header__divider {
+  width: 1px;
+  height: 28px;
+  background: var(--hs-border-strong);
+}
+
+.hs-header__product {
+  color: var(--hs-text-secondary);
+}
+
+.hs-header__actions {
+  min-width: 0;
+}
+
+.hs-nav .mantine-Tabs-tab {
+  min-height: 52px;
+  padding-inline: clamp(0.65rem, 1.4vw, 1.25rem);
+  color: var(--hs-text-secondary);
+  font-weight: 600;
+}
+
+.hs-nav .mantine-Tabs-tab[data-active] {
+  border-color: var(--hs-accent);
+  color: var(--hs-text);
+}
+
+.hs-balance {
+  min-height: 42px;
+  padding-inline: 0.85rem;
+  border: 1px solid var(--hs-border);
+  background: rgb(0 230 178 / 8%);
+  font-variant-numeric: tabular-nums;
+}
+
+.hs-balance__content svg,
+.hs-account-trigger svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.hs-account-trigger {
+  border-color: var(--hs-border);
+  background: linear-gradient(145deg, #20332f, #101c1a);
+  color: var(--hs-text-secondary);
+}
+
 @media (max-width: 48em) {
   .hs-app {
     background-attachment: scroll;
@@ -105,6 +171,41 @@ a,
 
   .hs-page {
     padding-block: 1rem 2rem;
+  }
+
+  .hs-header__brand {
+    gap: 0.5rem;
+  }
+
+  .hs-header__brand img {
+    width: clamp(96px, 23vw, 132px);
+  }
+
+  .hs-header__product,
+  .hs-header__divider,
+  .hs-header__actions {
+    gap: 0.35rem;
+  }
+
+  .hs-nav .mantine-Tabs-tab {
+    min-height: 44px;
+    padding-inline: 0.55rem;
+    font-size: 0.8rem;
+  }
+
+  .hs-balance {
+    min-height: 38px;
+    padding-inline: 0.45rem;
+    font-size: 0.72rem;
+  }
+
+  .hs-balance__content {
+    gap: 0.3rem;
+  }
+
+  .hs-account-trigger {
+    width: 40px;
+    height: 40px;
   }
 }
 

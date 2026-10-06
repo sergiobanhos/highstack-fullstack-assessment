@@ -1,12 +1,13 @@
 import { lazy, Suspense, useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { AppShell, Badge, Button, Center, Container, Group, Loader, Tabs, Text } from '@mantine/core';
+import { ActionIcon, AppShell, Badge, Center, Container, Group, Loader, Menu, Tabs, Text } from '@mantine/core';
 import type { OperatorApi } from '../lib/operator/operator-api';
 import type { PlayerSession } from '../features/auth/model/session';
 import { formatCents } from '../lib/money/money';
 import { useAuthCommands } from '../features/auth/hooks/use-auth-commands';
 import { usePlayerWallet } from '../features/wallet/hooks/use-wallet-data';
 import { queryKeys } from '../lib/query/query-keys';
+import { BrandIcon, BrandLogo } from '../components/ui';
 
 const GameScreen = lazy(() => import('../pages/game-page').then((module) => ({ default: module.GameScreen })));
 const WalletScreen = lazy(() => import('../pages/wallet-page').then((module) => ({ default: module.WalletScreen })));
@@ -53,36 +54,49 @@ export function PlayerShell({ api, session, onSessionEnded }: PlayerShellProps):
   };
 
   return (
-    <AppShell header={{ height: 64 }} padding="md">
+    <AppShell className="hs-app" header={{ height: 76 }} padding="md">
       <AppShell.Header>
-        <Group h="100%" px="md" justify="space-between" wrap="nowrap">
-          <Group gap="xs" wrap="nowrap">
-            <Text fw={700}>Crashsim</Text>
-            <Badge variant="light" visibleFrom="sm">
-              local operator
-            </Badge>
+        <Group className="hs-header" h="100%" px={{ base: 'sm', sm: 'md', lg: 'xl' }} justify="space-between" wrap="nowrap">
+          <Group className="hs-header__brand" gap="md" wrap="nowrap">
+            <BrandLogo compact />
+            <span className="hs-header__divider" aria-hidden="true" />
+            <Text fw={650} className="hs-header__product">Crash</Text>
           </Group>
-          <Group gap="sm" wrap="nowrap">
-            <Tabs value={view} onChange={(value) => setView(value === 'wallet' ? 'wallet' : 'game')}>
+          <Group className="hs-header__actions" gap="sm" wrap="nowrap">
+            <Tabs className="hs-nav" value={view} onChange={(value) => setView(value === 'wallet' ? 'wallet' : 'game')}>
               <Tabs.List>
                 <Tabs.Tab value="game">Game</Tabs.Tab>
                 <Tabs.Tab value="wallet">Wallet</Tabs.Tab>
               </Tabs.List>
             </Tabs>
-            <Badge size="lg" variant="light" color="teal" title="Available balance (USD)">
-              {balanceCents === null ? '—' : formatCents(balanceCents)}
+            <Badge className="hs-balance" size="lg" variant="light" color="emerald" title="Available balance (USD)">
+              <Group className="hs-balance__content" gap={8} wrap="nowrap">
+                <BrandIcon name="wallet" />
+                <span>{balanceCents === null ? '—' : formatCents(balanceCents)}</span>
+              </Group>
             </Badge>
-            <Text size="sm" visibleFrom="md">
-              {session.user.name}
-            </Text>
-            <Button size="xs" variant="default" loading={authCommands.logout.isPending} onClick={() => void logout()}>
-              Sign out
-            </Button>
+            <Menu position="bottom-end" shadow="md" withinPortal>
+              <Menu.Target>
+                <ActionIcon className="hs-account-trigger" variant="default" radius="xl" size={44} aria-label="Account menu">
+                  <BrandIcon name="person" size={20} />
+                </ActionIcon>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Label>{session.user.name}</Menu.Label>
+                <Menu.Item
+                  leftSection={<BrandIcon name="logout" />}
+                  disabled={authCommands.logout.isPending}
+                  onClick={() => void logout()}
+                >
+                  {authCommands.logout.isPending ? 'Signing out…' : 'Sign out'}
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
           </Group>
         </Group>
       </AppShell.Header>
       <AppShell.Main>
-        <Container size="lg">
+        <Container className="hs-page" size="xl" px={{ base: 'xs', sm: 'md' }}>
           <Suspense fallback={<Center mih="30vh"><Loader size="sm" /></Center>}>{view === 'game' ? (
             <GameScreen
               api={api}
